@@ -1,0 +1,12 @@
+[package]
+name = "fabrique"
+version = "0.1.0"
+edition = "2024"
+description = "Laravel/Eloquent-like factories for Rust structs"
+license = "MIT"
+repository = "https://github.com/robinstraub/fabrique"
+homepage = "https://github.com/robinstraub/fabrique"
+documentation = "https://docs.rs/fabrique"
+
+[dependencies]
+fabrique-derive = { path = "../fabrique-derive", version = "0.1.0" }
