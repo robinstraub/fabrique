@@ -1,5 +1,8 @@
 # Fabrique
 
+[![CI](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml/badge.svg)](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/robinstraub/fabrique/graph/badge.svg?token=5zZr9fVZyz)](https://codecov.io/gh/robinstraub/fabrique)
+
 Laravel/Eloquent-like factories for Rust structs.
 
 ## Usage
