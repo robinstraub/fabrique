@@ -3,7 +3,12 @@
 [![CI](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml/badge.svg)](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/robinstraub/fabrique/graph/badge.svg?token=5zZr9fVZyz)](https://codecov.io/gh/robinstraub/fabrique)
 
-Laravel/Eloquent-like factories for Rust structs.
+Factory pattern library with support for relations, enabling clean bootstrapping of complex object graphs.
+
+## Features
+
+- **Factory Relations**: Link factories together to manage dependencies between objects
+- **Derive Macro**: Automatic factory generation with `#[derive(Factory)]`
 
 ## Usage
 
@@ -63,3 +68,4 @@ This approach eliminates the complexity of manually managing object creation ord
 ## License
 
 MIT
+
