@@ -3,7 +3,8 @@
 [![CI](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml/badge.svg)](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/robinstraub/fabrique/graph/badge.svg?token=5zZr9fVZyz)](https://codecov.io/gh/robinstraub/fabrique)
 
-Factory pattern library with support for relations, enabling clean bootstrapping of complex object graphs.
+Factory pattern library with support for relations, enabling clean bootstrapping
+of complex object graphs.
 
 ## Features
 
@@ -63,9 +64,9 @@ let anvil = Anvil::factory()
     });
 ```
 
-This approach eliminates the complexity of manually managing object creation order and dependencies in your test setup and data seeding scenarios.
+This approach eliminates the complexity of manually managing object creation
+order and dependencies in your test setup and data seeding scenarios.
 
 ## License
 
-MIT
-
+MIT License

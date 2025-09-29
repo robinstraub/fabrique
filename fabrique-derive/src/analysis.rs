@@ -321,7 +321,7 @@ mod tests {
         let field = &factory.fields().unwrap()[0];
 
         // Act the relation instantiation
-        let result = Relation::new(&field, syn::parse_str("\"u32\"").unwrap());
+        let result = Relation::new(field, syn::parse_str("\"u32\"").unwrap());
 
         // Assert the result
         assert!(result.is_ok());
@@ -339,7 +339,7 @@ mod tests {
 
         // Act the relation instantiation
         let literal = LitStr::new("Not A Valid Type", field.span());
-        let result = Relation::new(&field, literal);
+        let result = Relation::new(field, literal);
 
         // Assert the result
         assert!(result.is_err());
