@@ -6,7 +6,9 @@ use crate::analysis::{FactoryAnalysis, FactoryAnalysisOutput};
 
 /// Code generator for factory struct implementations.
 pub struct FactoryCodegen {
+    /// Analysis output containing fields and relations
     analysis: FactoryAnalysisOutput,
+    /// Original derive input for span information
     input: DeriveInput,
 }
 
@@ -26,6 +28,10 @@ impl FactoryCodegen {
         let factory_ident = self.generate_factory_ident();
         let factory_fields = self.generate_factory_fields();
         let factory_method_new = self.generate_factory_method_new();
+        let factory_method_fields = self.generate_factory_method_fields();
+        let factory_methods_for_relation = self.generate_factory_methods_for_relation();
+        let factory_relation_fields = self.generate_factory_relation_fields();
+
         quote! {
             impl #base_struct_ident {
                 pub fn factory() -> #factory_ident {
@@ -35,11 +41,15 @@ impl FactoryCodegen {
 
             pub struct #factory_ident {
                 #(#factory_fields,)*
-
+                #(#factory_relation_fields,)*
             }
 
             impl #factory_ident {
                 #factory_method_new
+
+                #(#factory_method_fields)*
+
+                #(#factory_methods_for_relation)*
             }
         }
     }
@@ -54,6 +64,18 @@ impl FactoryCodegen {
             let ty = &field.ty;
             quote! {
                 #name: std::option::Option<#ty>
+            }
+        })
+    }
+
+    /// Generates factory relation fields for linked factory dependencies.
+    fn generate_factory_relation_fields(&self) -> impl Iterator<Item = TokenStream> {
+        self.analysis.relations.iter().map(|relation| {
+            let ident = &relation.ident;
+            let ty = &relation.ty;
+            quote! {
+                #ident: std::option::Option<Box<dyn FnOnce(#ty) -> #ty + Send>>
+
             }
         })
     }
@@ -73,13 +95,55 @@ impl FactoryCodegen {
             }
         });
 
+        let initialized_relation_fields = self.analysis.relations.iter().map(|relation| {
+            let name = &relation.ident;
+            quote! {
+                #name: None
+            }
+        });
+
         quote! {
             pub fn new() -> Self {
                 Self {
                     #(#initialized_fields,)*
+                    #(#initialized_relation_fields,)*
                 }
             }
         }
+    }
+
+    fn generate_factory_method_fields(&self) -> impl Iterator<Item = TokenStream> {
+        self.analysis.fields.clone().into_iter().map(|field| {
+            let name = &field.ident;
+            let ty = &field.ty;
+
+            quote! {
+                pub fn #name(mut self, #name: #ty) -> Self {
+                    self.#name = Some(#name);
+                    self
+                }
+            }
+        })
+    }
+
+    /// Generates the `for_[relation]` methods for the factory struct.
+    ///
+    /// These methods allow buffering the creation of related factory instances,
+    /// which are then executed when building the final object.
+    fn generate_factory_methods_for_relation(&self) -> impl Iterator<Item = TokenStream> {
+        self.analysis.relations.iter().map(|relation| {
+            let ty = &relation.ty;
+            let method_name = Ident::new(&format!("for_{}", &relation.name), relation.ident.span());
+            let field_ident = &relation.ident;
+            quote! {
+                pub fn #method_name<F>(mut self, callback: F) -> Self
+                where F: FnOnce(#ty) -> #ty + Send + 'static
+                {
+                    self.#field_ident = Some(Box::new(callback));
+                    self
+                }
+            }
+        })
     }
 }
 
@@ -94,6 +158,8 @@ mod tests {
         // Arrange the codegen
         let codegen = FactoryCodegen::from(parse_quote! {
             struct Anvil {
+                #[factory(relation = "HammerFactory")]
+                hammer_id: u32,
                 hardness: u32,
                 weight: u32,
             }
@@ -112,19 +178,44 @@ mod tests {
                     }
                 }
                 pub struct AnvilFactory {
+                    hammer_id: std::option::Option<u32>,
                     hardness: std::option::Option<u32>,
                     weight: std::option::Option<u32>,
 
+                    hammer_factory: std::option::Option<Box<dyn FnOnce(HammerFactory) -> HammerFactory + Send>>,
                 }
 
                 impl AnvilFactory {
                     pub fn new() -> Self {
                         Self {
+                            hammer_id: None,
                             hardness: None,
                             weight: None,
+                            hammer_factory: None,
                         }
                     }
 
+                    pub fn hammer_id(mut self, hammer_id: u32) -> Self {
+                        self.hammer_id = Some(hammer_id);
+                        self
+                    }
+
+                    pub fn hardness(mut self, hardness: u32) -> Self {
+                        self.hardness = Some(hardness);
+                        self
+                    }
+
+                    pub fn weight(mut self, weight: u32) -> Self {
+                        self.weight = Some(weight);
+                        self
+                    }
+
+                    pub fn for_hammer<F>(mut self, callback: F) -> Self
+                    where F: FnOnce(HammerFactory) -> HammerFactory + Send + 'static
+                    {
+                        self.hammer_factory = Some(Box::new(callback));
+                        self
+                    }
                 }
             }
             .to_string()
@@ -147,6 +238,28 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! { weight: std::option::Option<u32> }.to_string()
+        );
+    }
+
+    #[test]
+    fn test_generate_factory_relation_fields() {
+        // Arrange the codegen
+        let codegen = FactoryCodegen::from(parse_quote! {
+            struct Dynamite {
+                #[factory(relation = "ExplosiveFactory")]
+                explosive_id: String,
+            }
+        });
+
+        // Act the call to the codegen fields method
+        let generated: Vec<TokenStream> = codegen.generate_factory_relation_fields().collect();
+
+        // Assert the result
+        assert_eq!(
+            generated[0].to_string(),
+            quote! {
+                explosive_factory: std::option::Option<Box<dyn FnOnce(ExplosiveFactory) -> ExplosiveFactory + Send>>
+            }.to_string()
         );
     }
 
@@ -186,6 +299,60 @@ mod tests {
                         hardness: None,
                         weight: None,
                     }
+                }
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn test_generate_factory_method_fields() {
+        // Arrange the codegen
+        let factory = FactoryCodegen::from(parse_quote! {
+            struct Anvil {
+                hardness: u32,
+                weight: u32,
+            }
+        });
+
+        // Act the call to the generate_factory_method_fields method
+        let generated: Vec<TokenStream> = factory.generate_factory_method_fields().collect();
+
+        // Assert the result
+        assert_eq!(
+            generated[0].to_string(),
+            quote! {
+                pub fn hardness(mut self, hardness: u32) -> Self {
+                    self.hardness = Some(hardness);
+                    self
+                }
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn test_generate_factory_methods_for_relation() {
+        // Arrange the codegen
+        let factory = FactoryCodegen::from(parse_quote! {
+            struct Dynamite {
+                #[factory(relation = "ExplosiveFactory")]
+                explosive_id: String,
+            }
+        });
+
+        // Act the call to the generate_factory_method_fields method
+        let generated: Vec<TokenStream> = factory.generate_factory_methods_for_relation().collect();
+
+        // Assert the result
+        assert_eq!(
+            generated[0].to_string(),
+            quote! {
+                pub fn for_explosive<F>(mut self, callback: F) -> Self
+                where F: FnOnce(ExplosiveFactory) -> ExplosiveFactory + Send + 'static
+                {
+                    self.explosive_factory = Some(Box::new(callback));
+                    self
                 }
             }
             .to_string()
