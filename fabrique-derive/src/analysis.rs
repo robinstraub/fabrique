@@ -61,20 +61,19 @@ impl FactoryAnalysis {
             .iter()
             .filter_map(|field| {
                 for attr in &field.attrs {
-                    if attr.path().is_ident("factory") {
-                        if let Ok(Meta::NameValue(name_value)) = attr.parse_args::<Meta>() {
-                            if name_value.path.is_ident("relation") {
-                                if let Expr::Lit(ExprLit {
-                                    lit: Lit::Str(lit_str),
-                                    ..
-                                }) = name_value.value
-                                {
-                                    return Some(Relation::new(field, lit_str));
-                                } else {
-                                    let value = name_value.value.to_token_stream().to_string();
-                                    return Some(Err(Error::UnparsableLiteral(value)));
-                                }
-                            }
+                    if attr.path().is_ident("factory")
+                        && let Ok(Meta::NameValue(name_value)) = attr.parse_args::<Meta>()
+                        && name_value.path.is_ident("relation")
+                    {
+                        if let Expr::Lit(ExprLit {
+                            lit: Lit::Str(lit_str),
+                            ..
+                        }) = name_value.value
+                        {
+                            return Some(Relation::new(field, lit_str));
+                        } else {
+                            let value = name_value.value.to_token_stream().to_string();
+                            return Some(Err(Error::UnparsableLiteral(value)));
                         }
                     }
                 }
