@@ -1,11 +1,9 @@
 # Fabrique
 
-Factory pattern library with support for relations, enabling clean bootstrapping of complex object graphs.
+[![CI](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml/badge.svg)](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/robinstraub/fabrique/graph/badge.svg?token=5zZr9fVZyz)](https://codecov.io/gh/robinstraub/fabrique)
 
-## Features
-
-- **Factory Relations**: Link factories together to manage dependencies between objects
-- **Derive Macro**: Automatic factory generation with `#[derive(Factory)]`
+Laravel/Eloquent-like factories for Rust structs.
 
 ## Usage
 
