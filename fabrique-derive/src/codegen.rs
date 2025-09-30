@@ -27,6 +27,7 @@ impl FactoryCodegen {
         let base_struct_ident = &self.analysis.base_struct_ident;
         let factory_ident = self.generate_factory_ident();
         let factory_fields = self.generate_factory_fields();
+        let factory_method_create = self.generate_factory_method_create();
         let factory_method_new = self.generate_factory_method_new();
         let factory_method_fields = self.generate_factory_method_fields();
         let factory_methods_for_relation = self.generate_factory_methods_for_relation();
@@ -46,6 +47,8 @@ impl FactoryCodegen {
 
             impl #factory_ident {
                 #factory_method_new
+
+                #factory_method_create
 
                 #(#factory_method_fields)*
 
@@ -84,6 +87,53 @@ impl FactoryCodegen {
     fn generate_factory_ident(&self) -> Ident {
         let factory_name = format!("{}Factory", &self.input.ident);
         Ident::new(&factory_name, self.input.ident.span())
+    }
+
+    /// Generates the `create()` method for the factory struct.
+    ///
+    /// This method handles both relation creation and object persistence:
+    /// 1. Creates any related objects first (via factory relations)
+    /// 2. Creates the main object with all field values
+    /// 3. Persists the object using the Persistable trait
+    fn generate_factory_method_create(&self) -> TokenStream {
+        // Generate relation creation code - related objects are created first
+        // to establish the dependency graph before creating the main object
+        let relations_create = self.analysis.relations.iter().map(|relation| {
+            let field = &relation.field.ident;
+            let ident = &relation.ident;
+            let ty = &relation.ty;
+
+            quote! {
+                if let Some(callback) = self.#ident {
+                    let instance = callback(#ty::new()).create(connection).await?;
+                    self.#field = Some(instance.id);
+                }
+            }
+        });
+
+        // Generate struct field initialization - use provided values or defaults
+        let struct_ident = &self.analysis.base_struct_ident;
+        let struct_fields = self.analysis.fields.iter().map(|field| {
+            let name = &field.ident;
+            let ty = &field.ty;
+
+            quote! {
+                #name: self.#name.unwrap_or(<#ty as Default>::default())
+            }
+        });
+
+        quote! {
+            pub async fn create(mut self, connection: &<#struct_ident as fabrique::Persistable>::Connection) -> Result<#struct_ident, <#struct_ident as fabrique::Persistable>::Error>
+            {
+                #(#relations_create)*
+
+                let instance = #struct_ident {
+                    #(#struct_fields,)*
+                };
+
+                instance.create(connection).await
+            }
+        }
     }
 
     /// Generates the `new()` method for the factory struct.
@@ -195,6 +245,20 @@ mod tests {
                         }
                     }
 
+                    pub async fn create(mut self, connection: &<Anvil as fabrique::Persistable>::Connection) -> Result<Anvil, <Anvil as fabrique::Persistable>::Error> {
+                        if let Some(callback) = self.hammer_factory {
+                            let instance = callback(HammerFactory::new()).create(connection).await?;
+                            self.hammer_id = Some(instance.id);
+                        }
+
+                        let instance = Anvil {
+                            hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
+                            hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
+                            weight: self.weight.unwrap_or(<u32 as Default>::default()),
+                        };
+                        instance.create(connection).await
+                    }
+
                     pub fn hammer_id(mut self, hammer_id: u32) -> Self {
                         self.hammer_id = Some(hammer_id);
                         self
@@ -275,6 +339,43 @@ mod tests {
 
         // Assert the result
         assert_eq!(&generated, "AnvilFactory");
+    }
+
+    #[test]
+    fn test_generate_factory_method_create() {
+        // Arrange the codegen
+        let factory = FactoryCodegen::from(parse_quote! {
+            struct Anvil {
+                #[factory(relation = "HammerFactory")]
+                hammer_id: u32,
+                hardness: u32,
+                weight: u32,
+            }
+        });
+
+        // Act the call to the factory ident method
+        let generated = factory.generate_factory_method_create();
+
+        // Assert the result
+        assert_eq!(
+            generated.to_string(),
+            quote! {
+                pub async fn create(mut self, connection: &<Anvil as fabrique::Persistable>::Connection) -> Result<Anvil, <Anvil as fabrique::Persistable>::Error> {
+                    if let Some(callback) = self.hammer_factory {
+                        let instance = callback(HammerFactory::new()).create(connection).await?;
+                        self.hammer_id = Some(instance.id);
+                    }
+
+                    let instance = Anvil {
+                        hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
+                        hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
+                        weight: self.weight.unwrap_or(<u32 as Default>::default()),
+                    };
+                    instance.create(connection).await
+                }
+            }
+            .to_string()
+        );
     }
 
     #[test]

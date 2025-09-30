@@ -3,13 +3,15 @@
 [![CI](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml/badge.svg)](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/robinstraub/fabrique/graph/badge.svg?token=5zZr9fVZyz)](https://codecov.io/gh/robinstraub/fabrique)
 
-Factory pattern library with support for relations, enabling clean bootstrapping
-of complex object graphs.
+Factory pattern library with support for relations and persistence, enabling clean bootstrapping
+of complex object graphs with database integration.
 
 ## Features
 
 - **Factory Relations**: Link factories together to manage dependencies between objects
 - **Derive Macro**: Automatic factory generation with `#[derive(Factory)]`
+- **Database Persistence**: Integrate with databases through the `Persistable` trait
+- **Async Support**: Full async/await support for database operations
 
 ## Usage
 
@@ -38,19 +40,21 @@ let anvil = Anvil::factory()
 
 ### Factory Relations
 
-The real power comes from linking factories together:
+Link factories together to manage complex object dependencies:
 
 ```rust
 use fabrique::Factory;
 
 #[derive(Factory)]
 struct Hammer {
+    id: u32,
     weight: u32,
     handle_length: u32,
 }
 
 #[derive(Factory)]
 struct Anvil {
+    id: u32,
     weight: u32,
     #[factory(relation = "HammerFactory")]
     hammer_id: u32,
@@ -62,6 +66,39 @@ let anvil = Anvil::factory()
     .for_hammer(|hammer_factory| {
         hammer_factory.weight(5).handle_length(30)
     });
+```
+
+### Database Persistence
+
+Integrate factories with your database using the `Persistable` trait:
+
+```rust
+use fabrique::{Factory, Persistable};
+
+#[derive(Factory)]
+struct Anvil {
+    id: u32,
+    weight: u32,
+    #[factory(relation = "HammerFactory")]
+    hammer_id: u32,
+}
+
+impl Persistable for Anvil {
+    type Connection = DatabaseConnection;
+    type Error = DatabaseError;
+
+    async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
+        // Your database insertion logic here
+        database::insert_anvil(connection, self).await
+    }
+}
+
+// Create and persist to database
+let anvil = Anvil::factory()
+    .weight(100)
+    .for_hammer(|hammer| hammer.weight(5))
+    .create(&db_connection)
+    .await?;
 ```
 
 This approach eliminates the complexity of manually managing object creation
