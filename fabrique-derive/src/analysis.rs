@@ -97,6 +97,7 @@ pub struct FactoryAnalysisOutput {
 /// Represents a factory relation extracted from struct field attributes.
 #[derive(Debug)]
 pub struct Relation {
+    pub field: Field,
     /// The identifier for the factory field (e.g., `anvil_factory`)
     pub ident: Ident,
     /// The type of the related factory (e.g., `AnvilFactory`)
@@ -111,9 +112,11 @@ impl Relation {
     /// Automatically derives the relation name by stripping the `_id` suffix
     /// from the field name if present.
     pub fn new(field: &Field, ty: LitStr) -> Result<Self, Error> {
+        let field = field.clone();
+
         let field_name = field
-            .clone()
             .ident
+            .as_ref()
             .ok_or(Error::UnsupportedDataStructureTupleStruct)?
             .to_string();
 
@@ -126,7 +129,12 @@ impl Relation {
 
         let ty = syn::parse_str(&ty.value()).map_err(|_| Error::UnparsableType(ty.value()))?;
 
-        Ok(Self { ident, name, ty })
+        Ok(Self {
+            field,
+            ident,
+            name,
+            ty,
+        })
     }
 }
 

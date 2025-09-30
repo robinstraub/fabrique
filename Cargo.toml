@@ -1,5 +1,5 @@
 [workspace]
 
-members = ["fabrique-derive", "fabrique"]
+members = ["fabrique-derive", "fabrique", "fabrique-core"]
 
 resolver = "3"
