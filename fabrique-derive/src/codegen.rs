@@ -102,11 +102,16 @@ impl FactoryCodegen {
             let field = &relation.field.ident;
             let ident = &relation.ident;
             let ty = &relation.ty;
+            let extracted = if let Some(ref extract_field) = relation.extract {
+                quote! { instance.#extract_field }
+            } else {
+                quote! { instance }
+            };
 
             quote! {
                 if let Some(callback) = self.#ident {
                     let instance = callback(#ty::new()).create(connection).await?;
-                    self.#field = Some(instance.id);
+                    self.#field = Some(#extracted);
                 }
             }
         });
@@ -209,7 +214,7 @@ mod tests {
         let codegen = FactoryCodegen::from(parse_quote! {
             struct Anvil {
                 #[factory(relation = "HammerFactory")]
-                hammer_id: u32,
+                hammer: Hammer,
                 hardness: u32,
                 weight: u32,
             }
@@ -228,7 +233,7 @@ mod tests {
                     }
                 }
                 pub struct AnvilFactory {
-                    hammer_id: std::option::Option<u32>,
+                    hammer: std::option::Option<Hammer>,
                     hardness: std::option::Option<u32>,
                     weight: std::option::Option<u32>,
 
@@ -238,7 +243,7 @@ mod tests {
                 impl AnvilFactory {
                     pub fn new() -> Self {
                         Self {
-                            hammer_id: None,
+                            hammer: None,
                             hardness: None,
                             weight: None,
                             hammer_factory: None,
@@ -248,19 +253,19 @@ mod tests {
                     pub async fn create(mut self, connection: &<Anvil as fabrique::Persistable>::Connection) -> Result<Anvil, <Anvil as fabrique::Persistable>::Error> {
                         if let Some(callback) = self.hammer_factory {
                             let instance = callback(HammerFactory::new()).create(connection).await?;
-                            self.hammer_id = Some(instance.id);
+                            self.hammer = Some(instance);
                         }
 
                         let instance = Anvil {
-                            hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
+                            hammer: self.hammer.unwrap_or(<Hammer as Default>::default()),
                             hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
                             weight: self.weight.unwrap_or(<u32 as Default>::default()),
                         };
                         instance.create(connection).await
                     }
 
-                    pub fn hammer_id(mut self, hammer_id: u32) -> Self {
-                        self.hammer_id = Some(hammer_id);
+                    pub fn hammer(mut self, hammer: Hammer) -> Self {
+                        self.hammer = Some(hammer);
                         self
                     }
 
@@ -311,7 +316,7 @@ mod tests {
         let codegen = FactoryCodegen::from(parse_quote! {
             struct Dynamite {
                 #[factory(relation = "ExplosiveFactory")]
-                explosive_id: String,
+                explosive: Explosive,
             }
         });
 
@@ -347,6 +352,43 @@ mod tests {
         let factory = FactoryCodegen::from(parse_quote! {
             struct Anvil {
                 #[factory(relation = "HammerFactory")]
+                hammer: Hammer,
+                hardness: u32,
+                weight: u32,
+            }
+        });
+
+        // Act the call to the factory ident method
+        let generated = factory.generate_factory_method_create();
+
+        // Assert the result
+        assert_eq!(
+            generated.to_string(),
+            quote! {
+                pub async fn create(mut self, connection: &<Anvil as fabrique::Persistable>::Connection) -> Result<Anvil, <Anvil as fabrique::Persistable>::Error> {
+                    if let Some(callback) = self.hammer_factory {
+                        let instance = callback(HammerFactory::new()).create(connection).await?;
+                        self.hammer = Some(instance);
+                    }
+
+                    let instance = Anvil {
+                        hammer: self.hammer.unwrap_or(<Hammer as Default>::default()),
+                        hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
+                        weight: self.weight.unwrap_or(<u32 as Default>::default()),
+                    };
+                    instance.create(connection).await
+                }
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn test_generate_factory_method_create_with_extracted_field() {
+        // Arrange the codegen
+        let factory = FactoryCodegen::from(parse_quote! {
+            struct Anvil {
+                #[factory(relation = "HammerFactory", extract = "id")]
                 hammer_id: u32,
                 hardness: u32,
                 weight: u32,
@@ -438,7 +480,7 @@ mod tests {
         let factory = FactoryCodegen::from(parse_quote! {
             struct Dynamite {
                 #[factory(relation = "ExplosiveFactory")]
-                explosive_id: String,
+                explosive: Explosive,
             }
         });
 

@@ -4,7 +4,7 @@ use fabrique::{Factory, Persistable};
 struct Anvil {
     id: u32,
 
-    #[factory(relation = "HammerFactory")]
+    #[factory(relation = "HammerFactory", extract = "id")]
     hammer_id: u32,
     hardness: u32,
     weight: u32,
