@@ -78,34 +78,18 @@ impl FactoryAnalysis {
                 continue;
             }
 
-            match attr.meta {
-                Meta::NameValue(ref name_value) => {
-                    if let Some(relation) =
-                        Self::extract_meta_value_literal(name_value, "relation")?
-                    {
-                        return Ok(Some(Relation::new(
-                            field,
-                            FactoryRelationArgs {
-                                ty: relation,
-                                extract: None,
-                            },
-                        )?));
-                    }
-                }
-                Meta::List(ref list) => {
-                    let args = list
-                        .parse_args_with(Punctuated::<MetaNameValue, Token![,]>::parse_terminated)
-                        .ok();
+            if let Meta::List(ref list) = attr.meta {
+                let args = list
+                    .parse_args_with(Punctuated::<MetaNameValue, Token![,]>::parse_terminated)
+                    .ok();
+
+                if let Some(args) = args {
+                    let args = Self::parse_relation_args(args)?;
 
                     if let Some(args) = args {
-                        let args = Self::parse_relation_args(args)?;
-
-                        if let Some(args) = args {
-                            return Ok(Some(Relation::new(field, args)?));
-                        }
+                        return Ok(Some(Relation::new(field, args)?));
                     }
                 }
-                _ => {}
             }
         }
         Ok(None)
