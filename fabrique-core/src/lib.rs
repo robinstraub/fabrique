@@ -35,8 +35,8 @@ pub trait Persistable: Sized {
     ///
     /// This method should handle the actual database insertion or persistence logic
     /// and return the created object with any auto-generated fields (like IDs) populated.
-    fn create(
+    fn create<'a>(
         self,
-        connection: &Self::Connection,
-    ) -> impl Future<Output = Result<Self, Self::Error>>;
+        connection: &'a Self::Connection,
+    ) -> impl Future<Output = Result<Self, Self::Error>> + 'a;
 }
