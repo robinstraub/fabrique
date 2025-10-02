@@ -6,7 +6,7 @@ struct Anvil {
     #[fabrique(primary_key)]
     id: u32,
 
-    #[fabrique(relation = "Hammer")]
+    #[fabrique(relation = "Hammer", referenced_key = "id")]
     hammer_id: u32,
     hardness: u32,
     weight: u32,

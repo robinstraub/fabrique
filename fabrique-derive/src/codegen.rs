@@ -213,7 +213,7 @@ mod tests {
         // Arrange the codegen
         let codegen = FactoryCodegen::from(parse_quote! {
             struct Anvil {
-                #[fabrique(relation = "Hammer")]
+                #[fabrique(relation = "Hammer", referenced_key = "id")]
                 hammer_id: u32,
                 hardness: u32,
                 weight: u32,
@@ -317,7 +317,7 @@ mod tests {
         // Arrange the codegen
         let codegen = FactoryCodegen::from(parse_quote! {
             struct Dynamite {
-                #[fabrique(relation = "Explosive")]
+                #[fabrique(relation = "Explosive", referenced_key = "id")]
                 explosive_id: String,
             }
         })
@@ -355,7 +355,7 @@ mod tests {
         // Arrange the codegen
         let factory = FactoryCodegen::from(parse_quote! {
             struct Anvil {
-                #[fabrique(relation = "Hammer")]
+                #[fabrique(relation = "Hammer", referenced_key = "id")]
                 hammer_id: u32,
                 hardness: u32,
                 weight: u32,
@@ -449,7 +449,7 @@ mod tests {
         // Arrange the codegen
         let factory = FactoryCodegen::from(parse_quote! {
             struct Dynamite {
-                #[fabrique(relation = "Explosive")]
+                #[fabrique(relation = "Explosive", referenced_key = "id")]
                 explosive_id: String,
             }
         })

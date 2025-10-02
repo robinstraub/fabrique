@@ -1,8 +1,5 @@
-use quote::ToTokens;
-use syn::{
-    Data, DataStruct, DeriveInput, Expr, ExprAssign, ExprLit, Field, Fields, FieldsNamed, Ident,
-    Lit, LitBool, Meta, MetaNameValue, Token, punctuated::Punctuated, spanned::Spanned,
-};
+use darling::FromField;
+use syn::{Data, DataStruct, DeriveInput, Field, Fields, FieldsNamed, Ident, spanned::Spanned};
 
 use crate::error::Error;
 
@@ -13,159 +10,17 @@ pub struct FactoryAnalysis {
     input: DeriveInput,
 }
 
-#[derive(Default, Debug)]
+#[derive(FromField, Debug, Default, Clone)]
+#[darling(attributes(fabrique))]
 pub struct FabriqueFieldAttributes {
+    #[darling(default)]
     primary_key: bool,
+
+    #[darling(default)]
     relation: Option<Ident>,
+
+    #[darling(default)]
     referenced_key: Option<Ident>,
-}
-
-impl FabriqueFieldAttributes {
-    pub fn from_field(field: &Field) -> Result<FabriqueFieldAttributes, Error> {
-        let mut result = Self::default();
-
-        for attribute in field
-            .attrs
-            .iter()
-            .filter(|attr| attr.path().is_ident("fabrique"))
-        {
-            match attribute.meta {
-                Meta::NameValue(ref name_value) => {
-                    result.parse_name_value(name_value)?;
-                }
-                Meta::List(ref list) => {
-                    match list.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated) {
-                        Ok(exprs) => {
-                            for expr in exprs {
-                                match expr {
-                                    Expr::Assign(ExprAssign {
-                                        left,
-                                        eq_token,
-                                        right,
-                                        ..
-                                    }) => match *left {
-                                        Expr::Path(ref path) => {
-                                            result.parse_name_value(&MetaNameValue {
-                                                path: path.path.clone(),
-                                                eq_token,
-                                                value: *right,
-                                            })?;
-                                        }
-                                        _ => {
-                                            return Err(Error::UnparsableAttribute(
-                                                attribute.to_token_stream().to_string(),
-                                            ));
-                                        }
-                                    },
-                                    Expr::Path(ref path) => {
-                                        result.parse_name_value(&MetaNameValue {
-                                            path: path.path.clone(),
-                                            eq_token: Token![=](path.span()),
-                                            value: Expr::Lit(ExprLit {
-                                                lit: Lit::Bool(LitBool {
-                                                    value: true,
-                                                    span: path.span(),
-                                                }),
-                                                attrs: vec![],
-                                            }),
-                                        })?;
-                                    }
-                                    _ => {
-                                        return Err(Error::UnparsableAttribute(
-                                            attribute.to_token_stream().to_string(),
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-                        Err(_) => {
-                            return Err(Error::UnparsableAttribute(
-                                attribute.to_token_stream().to_string(),
-                            ));
-                        }
-                    }
-                }
-                Meta::Path(ref path) => {
-                    println!("{path:?}");
-                    return Err(Error::UnparsableAttribute(
-                        attribute.to_token_stream().to_string(),
-                    ));
-                }
-            }
-        }
-
-        Ok(result)
-    }
-
-    fn parse_name_value(&mut self, name_value: &MetaNameValue) -> Result<(), Error> {
-        if name_value.path.is_ident("primary_key") {
-            match name_value.value {
-                Expr::Lit(ExprLit {
-                    lit: Lit::Bool(LitBool { value: true, .. }),
-                    ..
-                }) => self.primary_key = true,
-
-                Expr::Lit(ExprLit {
-                    lit: Lit::Str(ref str),
-                    ..
-                }) => {
-                    if let Ok(primary_key) = str.value().parse::<bool>() {
-                        self.primary_key = primary_key;
-                    } else {
-                        return Err(Error::UnparsableLiteral(str.value()));
-                    }
-                }
-                _ => {
-                    return Err(Error::UnparsableLiteral(
-                        name_value.value.to_token_stream().to_string(),
-                    ));
-                }
-            }
-        } else if name_value.path.is_ident("relation") {
-            match name_value.value {
-                Expr::Lit(ExprLit {
-                    lit: Lit::Str(ref str),
-                    ..
-                }) => {
-                    let mut ident = syn::parse_str::<Ident>(&str.value())
-                        .map_err(|_| Error::UnparsableType(str.value()))?;
-                    ident.set_span(str.span());
-                    self.relation = Some(ident);
-                }
-                Expr::Path(ref path) => self.relation = path.path.get_ident().cloned(),
-                _ => {
-                    return Err(Error::UnparsableType(
-                        name_value.value.to_token_stream().to_string(),
-                    ));
-                }
-            }
-        } else if name_value.path.is_ident("referenced_key") {
-            match name_value.value {
-                Expr::Lit(ExprLit {
-                    lit: Lit::Str(ref str),
-                    ..
-                }) => {
-                    self.referenced_key = Some(Ident::new(&str.value(), str.span()));
-                }
-                Expr::Path(ref path) => self.referenced_key = path.path.get_ident().cloned(),
-                _ => {
-                    return Err(Error::UnparsableType(
-                        name_value.value.to_token_stream().to_string(),
-                    ));
-                }
-            }
-        } else {
-            return Err(Error::UnknownAttribute(
-                name_value
-                    .path
-                    .get_ident()
-                    .map(|ident| ident.to_string())
-                    .unwrap_or("".to_string()),
-            ));
-        }
-
-        Ok(())
-    }
 }
 
 impl FactoryAnalysis {
@@ -264,7 +119,7 @@ pub struct Relation {
 impl Relation {
     /// Creates a new relation from a field and its factory type.
     ///
-    /// Automatically derives the relation name by stripping the `_id` suffix
+    /// Automatically derives the relation name by stripping the `referenced_key` suffix
     /// from the field name if present.
     pub fn new(field: &Field, attributes: FabriqueFieldAttributes) -> Result<Option<Self>, Error> {
         if attributes.relation.is_none() {
@@ -283,9 +138,6 @@ impl Relation {
 
         let referenced_key = attributes
             .referenced_key
-            .or(field_name
-                .rsplit_once("_")
-                .map(|(_, suffix)| Ident::new(suffix, field.span())))
             .ok_or(Error::MissingReferencedKey(field_name.clone()))?;
 
         let name = field_name
@@ -317,7 +169,7 @@ mod tests {
                 #[fabrique(primary_key)]
                 id: u32,
                 weight: u32,
-                #[fabrique(relation = "Hammer")]
+                #[fabrique(relation = "Hammer", referenced_key = "id")]
                 hammer_id: u32,
             }
         });
@@ -385,10 +237,7 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Error::UnknownAttribute("unknown".to_owned())
-        );
+        assert!(matches!(result.unwrap_err(), Error::Darling(_)));
     }
 
     #[test]
@@ -406,10 +255,7 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Error::UnparsableType("true".to_owned())
-        );
+        assert!(matches!(result.unwrap_err(), Error::Darling(_)));
     }
 
     #[test]
@@ -432,7 +278,7 @@ mod tests {
         // Arrange the analysis
         let analysis = FactoryAnalysis::from(parse_quote! {
             struct Anvil {
-                #[fabrique(relation = "Hammer")]
+                #[fabrique(relation = "Hammer", referenced_key = "id")]
                 hammer_id: u32,
             }
         });
@@ -451,7 +297,7 @@ mod tests {
         let analysis = FactoryAnalysis::from(parse_quote! {
             struct Anvil {
                 #[fabrique(relation = "Hammer")]
-                hammer: u32,
+                hammer_id: u32,
             }
         });
 
@@ -460,10 +306,10 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert_eq!(
+        assert!(matches!(
             result.unwrap_err(),
-            Error::MissingReferencedKey("hammer".to_owned())
-        );
+            Error::MissingReferencedKey(rel) if rel == "hammer_id"
+        ));
     }
 
     #[test]
@@ -471,7 +317,7 @@ mod tests {
         // Arrange the analysis
         let analysis = FactoryAnalysis::from(parse_quote! {
             struct Anvil {
-                #[fabrique(relation = "Hammer")]
+                #[fabrique(relation = "Hammer", referenced_key = "id")]
                 hammer_id: u32,
             }
         });
@@ -580,7 +426,7 @@ mod tests {
     fn test_field_attribute_parsing_fails_explicitly_on_invalid_referenced_type() {
         // Arrange the field
         let field = parse_quote! {
-            #[fabrique(relation = "Not A Valid Type")]
+            #[fabrique(relation = "Not A Valid Type", referenced_key = "id")]
             hammer_id: u32
         };
 
@@ -589,10 +435,6 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Error::UnparsableType("Not A Valid Type".to_owned())
-        );
     }
 
     #[test]
@@ -614,10 +456,10 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert_eq!(
+        assert!(matches!(
             result.unwrap_err(),
             Error::UnsupportedDataStructureTupleStruct,
-        );
+        ));
     }
 
     #[test]
@@ -632,7 +474,10 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), Error::UnsupportedDataStructureEnum);
+        assert!(matches!(
+            result.unwrap_err(),
+            Error::UnsupportedDataStructureEnum
+        ));
     }
 
     #[test]
@@ -647,10 +492,10 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert_eq!(
+        assert!(matches!(
             result.unwrap_err(),
             Error::UnsupportedDataStructureTupleStruct,
-        );
+        ));
     }
 
     #[test]
@@ -665,10 +510,10 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert_eq!(
+        assert!(matches!(
             result.unwrap_err(),
             Error::UnsupportedDataStructureUnitStruct,
-        );
+        ));
     }
 
     #[test]
@@ -683,6 +528,9 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), Error::UnsupportedDataStructureUnion);
+        assert!(matches!(
+            result.unwrap_err(),
+            Error::UnsupportedDataStructureUnion
+        ));
     }
 }
