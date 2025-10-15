@@ -183,43 +183,52 @@ mod tests {
         assert_eq!(result.base_struct_ident.to_string(), "Anvil");
         assert_eq!(result.fields.len(), 3);
 
-        assert!(result.fields.iter().any(|field| {
-            if field.field.ident.as_ref().unwrap() != "id" {
-                return false;
-            }
+        assert!(
+            result
+                .fields
+                .iter()
+                .find(|field| field.field.ident.as_ref().unwrap() == "id")
+                .map(|field| {
+                    assert!(field.primary_key);
+                    assert!(field.relation.is_none());
 
-            assert!(field.primary_key);
-            assert!(field.relation.is_none());
+                    true
+                })
+                .unwrap_or(false)
+        );
 
-            true
-        }));
+        assert!(
+            result
+                .fields
+                .iter()
+                .find(|field| field.field.ident.as_ref().unwrap() == "weight")
+                .map(|field| {
+                    assert!(!field.primary_key);
+                    assert!(field.relation.is_none());
 
-        assert!(result.fields.iter().any(|field| {
-            if field.field.ident.as_ref().unwrap() != "weight" {
-                return false;
-            }
+                    true
+                })
+                .unwrap_or(false)
+        );
 
-            assert!(!field.primary_key);
-            assert!(field.relation.is_none());
+        assert!(
+            result
+                .fields
+                .iter()
+                .find(|field| field.field.ident.as_ref().unwrap() == "hammer_id")
+                .map(|field| {
+                    assert!(!field.primary_key);
+                    assert!(field.relation.is_some());
+                    let relation = field.relation.as_ref().unwrap();
+                    assert_eq!(relation.factory_field.to_string(), "hammer_factory");
+                    assert_eq!(relation.referenced_type.to_string(), "Hammer");
+                    assert_eq!(relation.referenced_key.to_string(), "id");
+                    assert_eq!(relation.name, "hammer");
 
-            true
-        }));
-
-        assert!(result.fields.iter().any(|field| {
-            if field.field.ident.as_ref().unwrap() != "hammer_id" {
-                return false;
-            }
-
-            assert!(!field.primary_key);
-            assert!(field.relation.is_some());
-            let relation = field.relation.as_ref().unwrap();
-            assert_eq!(relation.factory_field.to_string(), "hammer_factory");
-            assert_eq!(relation.referenced_type.to_string(), "Hammer");
-            assert_eq!(relation.referenced_key.to_string(), "id");
-            assert_eq!(relation.name, "hammer");
-
-            true
-        }));
+                    true
+                })
+                .unwrap_or(false)
+        );
     }
 
     #[test]
@@ -328,18 +337,20 @@ mod tests {
         // Assert the result
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.iter().any(|field| {
-            if field.field.ident.as_ref().unwrap() != "hammer_id" {
-                return false;
-            }
+        assert!(
+            result
+                .iter()
+                .find(|field| field.field.ident.as_ref().unwrap() == "hammer_id")
+                .map(|field| {
+                    assert!(field.relation.is_some());
+                    let relation = field.relation.as_ref().unwrap();
+                    assert_eq!(relation.referenced_key.to_string(), "id");
+                    assert_eq!(relation.name, "hammer");
 
-            assert!(field.relation.is_some());
-            let relation = field.relation.as_ref().unwrap();
-            assert_eq!(relation.referenced_key.to_string(), "id");
-            assert_eq!(relation.name, "hammer");
-
-            true
-        }));
+                    true
+                })
+                .unwrap_or(false)
+        );
     }
 
     #[test]
@@ -358,18 +369,20 @@ mod tests {
         // Assert the result
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.iter().any(|field| {
-            if field.field.ident.as_ref().unwrap() != "hammer" {
-                return false;
-            }
+        assert!(
+            result
+                .iter()
+                .find(|field| field.field.ident.as_ref().unwrap() == "hammer")
+                .map(|field| {
+                    assert!(field.relation.is_some());
+                    let relation = field.relation.as_ref().unwrap();
+                    assert_eq!(relation.referenced_key.to_string(), "id");
+                    assert_eq!(relation.name, "hammer");
 
-            assert!(field.relation.is_some());
-            let relation = field.relation.as_ref().unwrap();
-            assert_eq!(relation.referenced_key.to_string(), "id");
-            assert_eq!(relation.name, "hammer");
-
-            true
-        }));
+                    true
+                })
+                .unwrap_or(false)
+        );
     }
 
     #[test]

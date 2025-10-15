@@ -18,3 +18,6 @@ quote = "1.0"
 syn = { version = "2.0", features = ["extra-traits"] }
 thiserror = "2.0"
 darling = "0.21.3"
+
+[dev-dependencies]
+trybuild = "1.0"

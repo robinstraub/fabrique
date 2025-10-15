@@ -1,0 +1,5 @@
+error: Factory can only be derived from named structs, tuple struct given
+ --> tests/ui/derive_on_tuple_struct.rs:4:1
+  |
+4 | struct Anvil(u32, u32);
+  | ^^^^^^^^^^^^^^^^^^^^^^^

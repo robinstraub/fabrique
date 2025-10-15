@@ -1,0 +1,8 @@
+error: Unknown field: `unknown_attribute`. Available values: `primary_key`, `referenced_key`, `relation`
+ --> tests/ui/invalid_attribute_name.rs:4:1
+  |
+4 | / struct Anvil {
+5 | |     #[fabrique(unknown_attribute = true)]
+6 | |     weight: u32,
+7 | | }
+  | |_^
