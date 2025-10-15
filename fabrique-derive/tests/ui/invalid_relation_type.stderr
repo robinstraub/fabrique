@@ -1,9 +1,5 @@
 error: Unknown value: `Not A Valid Type` at relation
  --> tests/ui/invalid_relation_type.rs:4:1
   |
-4 | / struct Anvil {
-5 | |     #[fabrique(relation = "Not A Valid Type", referenced_key = "id")]
-6 | |     hammer_id: u32,
-7 | |     weight: u32,
-8 | | }
-  | |_^
+4 | struct Anvil {
+  | ^^^^^^

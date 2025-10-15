@@ -2,4 +2,4 @@ error: Factory can only be derived from named structs, unit struct given
  --> tests/ui/derive_on_unit_struct.rs:4:1
   |
 4 | struct Anvil;
-  | ^^^^^^^^^^^^^
+  | ^^^^^^

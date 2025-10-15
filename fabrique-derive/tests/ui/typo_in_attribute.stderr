@@ -1,9 +1,5 @@
 error: Unknown field: `primery_key`. Did you mean `primary_key`?
  --> tests/ui/typo_in_attribute.rs:4:1
   |
-4 | / struct Anvil {
-5 | |     #[fabrique(primery_key)]
-6 | |     id: u32,
-7 | |     weight: u32,
-8 | | }
-  | |_^
+4 | struct Anvil {
+  | ^^^^^^

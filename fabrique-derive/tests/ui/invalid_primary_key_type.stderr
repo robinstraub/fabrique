@@ -1,9 +1,5 @@
 error: Unknown value: `invalid` at primary_key
  --> tests/ui/invalid_primary_key_type.rs:4:1
   |
-4 | / struct Anvil {
-5 | |     #[fabrique(primary_key = "invalid")]
-6 | |     id: u32,
-7 | |     weight: u32,
-8 | | }
-  | |_^
+4 | struct Anvil {
+  | ^^^^^^

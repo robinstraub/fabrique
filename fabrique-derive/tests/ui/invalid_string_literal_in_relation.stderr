@@ -1,9 +1,5 @@
 error: Unknown value: `` at relation
  --> tests/ui/invalid_string_literal_in_relation.rs:4:1
   |
-4 | / struct Anvil {
-5 | |     #[fabrique(relation = "", referenced_key = "id")]
-6 | |     hammer_id: u32,
-7 | |     weight: u32,
-8 | | }
-  | |_^
+4 | struct Anvil {
+  | ^^^^^^
