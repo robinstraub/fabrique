@@ -8,7 +8,8 @@ of complex object graphs with database integration.
 
 ## Features
 
-- **Factory Relations**: Link factories together to manage dependencies between objects
+- **Primary Key Support**: Mark fields as primary keys with `#[fabrique(primary_key)]`
+- **Factory Relations**: Link factories together with explicit referenced keys using `#[fabrique(relation = "Type", referenced_key = "field")]`
 - **Derive Macro**: Automatic factory generation with `#[derive(Factory)]`
 - **Database Persistence**: Integrate with databases through the `Persistable` trait
 - **Async Support**: Full async/await support for database operations
@@ -47,6 +48,7 @@ use fabrique::Factory;
 
 #[derive(Factory)]
 struct Hammer {
+    #[fabrique(primary_key)]
     id: u32,
     weight: u32,
     handle_length: u32,
@@ -54,9 +56,10 @@ struct Hammer {
 
 #[derive(Factory)]
 struct Anvil {
+    #[fabrique(primary_key)]
     id: u32,
     weight: u32,
-    #[factory(relation = "HammerFactory")]
+    #[fabrique(relation = "Hammer", referenced_key = "id")]
     hammer_id: u32,
 }
 
@@ -77,9 +80,10 @@ use fabrique::{Factory, Persistable};
 
 #[derive(Factory)]
 struct Anvil {
+    #[fabrique(primary_key)]
     id: u32,
     weight: u32,
-    #[factory(relation = "HammerFactory")]
+    #[fabrique(relation = "Hammer", referenced_key = "id")]
     hammer_id: u32,
 }
 

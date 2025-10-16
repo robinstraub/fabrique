@@ -1,0 +1,5 @@
+error: Unknown value: `` at relation
+ --> tests/ui/invalid_string_literal_in_relation.rs:4:1
+  |
+4 | struct Anvil {
+  | ^^^^^^
