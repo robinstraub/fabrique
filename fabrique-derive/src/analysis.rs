@@ -214,6 +214,26 @@ mod tests {
     }
 
     #[test]
+    fn test_analysis_fails_explicitly_on_invalid_struct() {
+        // Arrange the analysis
+        let input = parse_quote! { enum Anvil {} };
+        let analysis = Analysis::from(&input);
+
+        // Assert the result
+        assert!(analysis.is_err());
+    }
+
+    #[test]
+    fn test_analysis_fails_explicitly_on_invalid_fields() {
+        // Arrange the analysis
+        let input = parse_quote! { struct Anvil(u32, u32); };
+        let analysis = Analysis::from(&input);
+
+        // Assert the result
+        assert!(analysis.is_err());
+    }
+
+    #[test]
     fn test_validate_with_default_table_name() {
         // Arrange the analysis without a custom table name
         let input = parse_quote! {

@@ -79,7 +79,6 @@ impl FactoryCodegen {
 
             quote! {
                 #ident: std::option::Option<Box<dyn FnOnce(#ty) -> #ty + Send>>
-
             }
         })
     }
@@ -203,6 +202,17 @@ impl FactoryCodegen {
 mod tests {
     use super::*;
     use syn::parse_quote;
+
+    #[test]
+    fn test_factory_codegen_from_fails_on_invalid_input() {
+        // Arrange an enum (which is not supported)
+        let result = FactoryCodegen::from(parse_quote! {
+            enum Anvil {}
+        });
+
+        // Assert that it returns an error
+        assert!(result.is_err());
+    }
 
     #[test]
     fn test_generate_factory() {

@@ -143,4 +143,16 @@ mod tests {
             .to_string()
         )
     }
+
+    #[test]
+    fn test_codegen_fail_explicitly() {
+        // Arrange the codegen
+        let input = parse_quote! { enum Anvil {} };
+
+        // Act the call to the codegen
+        let result = PersistableCodegen::from(&input);
+
+        // Assert the result
+        assert!(result.is_err());
+    }
 }

@@ -6,7 +6,7 @@
 
 use crate::factory::FactoryCodegen;
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, spanned::Spanned, DeriveInput, Error};
+use syn::{DeriveInput, Error, parse_macro_input, spanned::Spanned};
 
 mod analysis;
 mod error;
@@ -57,53 +57,4 @@ pub fn derive_persistable(input: TokenStream) -> TokenStream {
         .and_then(|codegen| codegen.generate())
         .unwrap_or_else(|err| syn::Error::from(err).into_compile_error())
         .into()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_make_derive() {}
-
-    #[cfg(feature = "sqlx")]
-    mod persistable_tests {
-        use super::*;
-
-        #[test]
-        fn test_derive_persistable_generates_valid_code() {
-            // Arrange the derive input
-            let input: DeriveInput = syn::parse_quote! {
-                struct Hammer {
-                    id: i64,
-                    weight: f64,
-                }
-            };
-
-            // Act - generate the persistable implementation via codegen
-            let result = crate::persistable::PersistableCodegen::from(&input)
-                .and_then(|codegen| codegen.generate());
-
-            // Assert that it contains the expected implementation
-            assert!(result.is_ok());
-            let output_str = result.unwrap().to_string();
-            assert!(output_str.contains("impl fabrique :: Persistable for Hammer"));
-            assert!(output_str.contains("async fn create"));
-            assert!(output_str.contains("async fn all"));
-        }
-
-        #[test]
-        fn test_derive_persistable_handles_invalid_struct() {
-            // Arrange the derive input for an enum
-            let input: DeriveInput = syn::parse_quote! {
-                enum Hammer {}
-            };
-
-            // Act - generate the persistable implementation via codegen
-            let result = crate::persistable::PersistableCodegen::from(&input);
-
-            // Assert that it returns an error
-            assert!(result.is_err());
-        }
-    }
 }

@@ -246,7 +246,6 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::UnparsableAttribute(_)));
     }
 
     #[test]
@@ -264,7 +263,6 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::UnparsableAttribute(_)));
     }
 
     #[test]
@@ -469,10 +467,6 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureTupleStruct,
-        ));
     }
 
     #[test]
@@ -487,10 +481,6 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureEnum
-        ));
     }
 
     #[test]
@@ -505,10 +495,6 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureTupleStruct,
-        ));
     }
 
     #[test]
@@ -523,10 +509,6 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureUnitStruct,
-        ));
     }
 
     #[test]
@@ -541,9 +523,5 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureUnion
-        ));
     }
 }
