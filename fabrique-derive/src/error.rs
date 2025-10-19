@@ -30,3 +30,47 @@ impl From<Error> for syn::Error {
         syn::Error::new(Span::call_site(), value.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_converts_to_syn_error() {
+        // Arrange an error
+        let error = Error::UnsupportedDataStructureEnum;
+
+        // Act - convert to syn::Error
+        let syn_error: syn::Error = error.into();
+
+        // Assert the error message
+        assert_eq!(
+            syn_error.to_string(),
+            "Factory can only be derived from named structs, enum given"
+        );
+    }
+
+    #[test]
+    fn test_unparsable_literal_error_converts_to_syn_error() {
+        // Arrange an error
+        let error = Error::UnparsableLiteral("true".to_string());
+
+        // Act - convert to syn::Error
+        let syn_error: syn::Error = error.into();
+
+        // Assert the error message contains the value
+        assert!(syn_error.to_string().contains("true"));
+    }
+
+    #[test]
+    fn test_unparsable_type_error_converts_to_syn_error() {
+        // Arrange an error
+        let error = Error::UnparsableType("Not A Type".to_string());
+
+        // Act - convert to syn::Error
+        let syn_error: syn::Error = error.into();
+
+        // Assert the error message contains the type
+        assert!(syn_error.to_string().contains("Not A Type"));
+    }
+}

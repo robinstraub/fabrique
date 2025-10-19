@@ -19,7 +19,7 @@ impl Persistable for Anvil {
         Ok(self)
     }
 
-    async fn all(self, _connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
+    async fn all(_connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
         Ok(vec![])
     }
 }
@@ -39,7 +39,7 @@ impl Persistable for Hammer {
         Ok(self)
     }
 
-    async fn all(self, _connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
+    async fn all(_connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
         Ok(vec![])
     }
 }
@@ -61,6 +61,36 @@ mod tests {
             Anvil {
                 hammer_id: 100,
                 ..Default::default()
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_factory_calls_all_method() {
+        // Act - call the all method
+        let result = Anvil::all(&()).await;
+
+        // Assert the result
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), vec![]);
+    }
+
+    #[tokio::test]
+    async fn test_hammer_factory_with_multiple_fields() {
+        // Arrange - create a hammer with specific values
+        let result = Hammer::factory()
+            .id(42)
+            .weight(500)
+            .create(&())
+            .await;
+
+        // Assert the result
+        assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            Hammer {
+                id: 42,
+                weight: 500,
             }
         );
     }

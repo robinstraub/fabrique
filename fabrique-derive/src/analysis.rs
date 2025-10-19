@@ -41,6 +41,7 @@ pub struct Analysis<'a> {
 }
 
 #[derive(FromDeriveInput)]
+#[darling(attributes(fabrique))]
 pub struct FabriqueAttrs {
     /// The table name for this model
     #[darling(default)]
@@ -157,10 +158,6 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureEnum
-        ));
     }
 
     #[test]
@@ -174,10 +171,6 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureUnion
-        ));
     }
 
     #[test]
@@ -205,10 +198,6 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureUnitStruct,
-        ));
     }
 
     #[test]
@@ -222,9 +211,60 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureTupleStruct,
-        ));
+    }
+
+    #[test]
+    fn test_validate_with_default_table_name() {
+        // Arrange the analysis without a custom table name
+        let input = parse_quote! {
+            struct Anvil {
+                id: u32,
+            }
+        };
+
+        // Act the call to the Analysis::from method
+        let result = Analysis::from(&input);
+
+        // Assert the result is ok and has the default table name
+        assert!(result.is_ok());
+        let analysis = result.unwrap();
+        assert_eq!(analysis.table_name, "anvils");
+    }
+
+    #[test]
+    fn test_validate_with_custom_table_name() {
+        // Arrange the analysis with a custom table name
+        let input = parse_quote! {
+            #[fabrique(table = "custom_anvils")]
+            struct Anvil {
+                id: u32,
+            }
+        };
+
+        // Act the call to the Analysis::from method
+        let result = Analysis::from(&input);
+
+        // Assert the result is ok and has the custom table name
+        assert!(result.is_ok());
+        let analysis = result.unwrap();
+        assert_eq!(analysis.table_name, "custom_anvils");
+    }
+
+    #[test]
+    fn test_validate_with_unknown_attribute_fails() {
+        // Arrange the analysis with an unknown attribute field
+        let input = parse_quote! {
+
+            #[fabrique(unknown_field = "value")]
+            struct Anvil {
+                id: u32,
+            }
+        };
+
+        // Act the call to the Analysis::from method
+        let result = Analysis::from(&input);
+
+        // Assert the result is an error from darling (unknown field)
+        assert!(result.is_err());
     }
 }

@@ -15,7 +15,10 @@ default = []
 sqlx = ["fabrique-derive/sqlx"]
 
 [dev-dependencies]
+fabrique = { path = ".", features = ["sqlx"] }
 tokio = { version = "1.0", features = ["rt", "macros"] }
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio", "uuid"] }
+uuid = "1"
 
 [dependencies]
 fabrique-core = { path = "../fabrique-core", version = "0.1.0" }

@@ -19,11 +19,14 @@ impl<'a> PersistableCodegen<'a> {
 
     pub fn generate(self) -> Result<TokenStream, Error> {
         let base_struct_ident = &self.analysis.ident;
-        let fn_all = self.generate_fn_all()?;
-        let fn_create = self.generate_fn_create()?;
+        let fn_all = self.generate_fn_all();
+        let fn_create = self.generate_fn_create();
 
         let generated = quote! {
             impl fabrique::Persistable for #base_struct_ident {
+                type Connection = sqlx::Pool<sqlx::Postgres>;
+                type Error = sqlx::Error;
+
                 #fn_create
                 #fn_all
             }
@@ -33,7 +36,7 @@ impl<'a> PersistableCodegen<'a> {
     }
 
     /// Generates the `all()` associated function.
-    fn generate_fn_all(&self) -> Result<TokenStream, Error> {
+    fn generate_fn_all(&self) -> TokenStream {
         // Compute the sql column names for the query
         let column_names = self
             .analysis
@@ -46,24 +49,20 @@ impl<'a> PersistableCodegen<'a> {
 
         let query = format!("SELECT {} FROM {}", column_names, self.analysis.table_name);
 
-        let generated = quote! {
+        quote! {
             async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
                 sqlx::query_as!(Self, #query).fetch_all(connection).await
             }
-        };
-
-        Ok(generated)
+        }
     }
 
     /// Generates the `create()` method.
-    fn generate_fn_create(&self) -> Result<TokenStream, Error> {
-        let generated = quote! {
+    fn generate_fn_create(&self) -> TokenStream {
+        quote! {
             async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
                 todo!()
             }
-        };
-
-        Ok(generated)
+        }
     }
 }
 
@@ -87,6 +86,9 @@ mod tests {
             result.unwrap().to_string(),
             quote! {
                 impl fabrique::Persistable for Anvil {
+                    type Connection = sqlx::Pool<sqlx::Postgres>;
+                    type Error = sqlx::Error;
+
                     async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
                         todo!()
                     }
@@ -110,9 +112,8 @@ mod tests {
         let result = codegen.generate_fn_all();
 
         // Assert the result
-        assert!(result.is_ok());
         assert_eq!(
-            result.unwrap().to_string(),
+            result.to_string(),
             quote! {
                 async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
                     sqlx::query_as!(Self, "SELECT id FROM anvils").fetch_all(connection).await
@@ -132,9 +133,8 @@ mod tests {
         let result = codegen.generate_fn_create();
 
         // Assert the result
-        assert!(result.is_ok());
         assert_eq!(
-            result.unwrap().to_string(),
+            result.to_string(),
             quote! {
                 async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
                     todo!()
