@@ -4,13 +4,16 @@
 //! factory structs for your data types. Each field in the original struct becomes
 //! an `Option<T>` field in the factory, allowing selective value setting.
 
-use crate::codegen::FactoryCodegen;
+use crate::{factory::FactoryCodegen, persistable::PersistableCodegen};
 use proc_macro::TokenStream;
 use syn::{DeriveInput, parse_macro_input};
 
 mod analysis;
-mod codegen;
 mod error;
+mod factory;
+
+#[cfg(feature = "sqlx")]
+mod persistable;
 
 /// Derives a factory struct for the annotated data type.
 ///
@@ -35,9 +38,19 @@ mod error;
 /// - `new() -> Self` - Creates a new factory instance with all fields set to `None`
 /// - `create(connection) -> Result<Struct, Error>` - Creates and persists the object if it implements `Persistable`
 #[proc_macro_derive(Factory, attributes(factory))]
-pub fn derive(input: TokenStream) -> TokenStream {
+pub fn derive_factory(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     FactoryCodegen::from(input).generate_factory().into()
+}
+
+#[cfg(feature = "sqlx")]
+#[proc_macro_derive(Persistable, attributes(fabrique))]
+pub fn derive_persistable(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    PersistableCodegen::from(&input)
+        .and_then(|codegen| codegen.generate())
+        .unwrap_or_else(|err| syn::Error::from(err).into_compile_error())
+        .into()
 }
 
 #[cfg(test)]

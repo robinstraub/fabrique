@@ -18,6 +18,10 @@ impl Persistable for Anvil {
     async fn create(self, _connection: &Self::Connection) -> Result<Self, Self::Error> {
         Ok(self)
     }
+
+    async fn all(self, _connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
+        Ok(vec![])
+    }
 }
 
 #[derive(Debug, Default, Eq, Factory, PartialEq)]
@@ -33,6 +37,10 @@ impl Persistable for Hammer {
 
     async fn create(self, _connection: &Self::Connection) -> Result<Self, Self::Error> {
         Ok(self)
+    }
+
+    async fn all(self, _connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
+        Ok(vec![])
     }
 }
 

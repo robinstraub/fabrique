@@ -11,9 +11,17 @@ documentation = "https://docs.rs/fabrique-derive"
 [lib]
 proc-macro = true
 
+[features]
+default = []
+
+# Generate Persistable trait implementations using SQLx
+sqlx = ["dep:sqlx"]
+
 [dependencies]
+darling = "0.21"
 fabrique-core = { path = "../fabrique-core", version = "0.1.0" }
 proc-macro2 = "1.0"
 quote = "1.0"
+sqlx = { version = "0.8", optional = true }
 syn = { version = "2.0", features = ["extra-traits"] }
 thiserror = "2.0"

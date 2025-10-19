@@ -1,8 +1,7 @@
+use crate::factory::analysis::{FactoryAnalysis, FactoryAnalysisOutput};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Ident};
-
-use crate::analysis::{FactoryAnalysis, FactoryAnalysisOutput};
 
 /// Code generator for factory struct implementations.
 pub struct FactoryCodegen {
@@ -199,9 +198,8 @@ impl FactoryCodegen {
 
 #[cfg(test)]
 mod tests {
-    use syn::parse_quote;
-
     use super::*;
+    use syn::parse_quote;
 
     #[test]
     fn test_generate_factory() {
