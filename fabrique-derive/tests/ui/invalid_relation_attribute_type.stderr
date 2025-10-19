@@ -1,0 +1,5 @@
+error: Unexpected type `bool` at relation
+ --> tests/ui/invalid_relation_attribute_type.rs:4:1
+  |
+4 | struct Anvil {
+  | ^^^^^^

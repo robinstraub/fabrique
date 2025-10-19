@@ -254,7 +254,6 @@ mod tests {
     fn test_validate_with_unknown_attribute_fails() {
         // Arrange the analysis with an unknown attribute field
         let input = parse_quote! {
-
             #[fabrique(unknown_field = "value")]
             struct Anvil {
                 id: u32,

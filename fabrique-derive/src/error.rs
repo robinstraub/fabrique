@@ -23,6 +23,12 @@ pub enum Error {
 
     #[error("Factory can only be derived from named structs, unit struct given")]
     UnsupportedDataStructureUnitStruct,
+
+    #[error("Missing `referenced_key` attribute for relation {0}")]
+    MissingReferencedKey(String),
+
+    #[error("{0}")]
+    Darling(#[from] darling::Error),
 }
 
 impl From<Error> for syn::Error {

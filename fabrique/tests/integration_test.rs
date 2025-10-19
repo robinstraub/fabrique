@@ -1,10 +1,12 @@
 use fabrique::{Factory, Persistable};
 
+// Darling ?
 #[derive(Debug, Default, Eq, Factory, PartialEq)]
 struct Anvil {
+    #[fabrique(primary_key)]
     id: u32,
 
-    #[factory(relation = "HammerFactory")]
+    #[fabrique(relation = "Hammer", referenced_key = "id")]
     hammer_id: u32,
     hardness: u32,
     weight: u32,
@@ -26,6 +28,7 @@ impl Persistable for Anvil {
 
 #[derive(Debug, Default, Eq, Factory, PartialEq)]
 struct Hammer {
+    #[fabrique(primary_key)]
     id: u32,
     weight: u32,
 }

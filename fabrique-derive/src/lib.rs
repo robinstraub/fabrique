@@ -6,7 +6,7 @@
 
 use crate::factory::FactoryCodegen;
 use proc_macro::TokenStream;
-use syn::{DeriveInput, parse_macro_input};
+use syn::{parse_macro_input, spanned::Spanned, DeriveInput, Error};
 
 mod analysis;
 mod error;
@@ -37,10 +37,16 @@ mod persistable;
 /// Additionally generates:
 /// - `new() -> Self` - Creates a new factory instance with all fields set to `None`
 /// - `create(connection) -> Result<Struct, Error>` - Creates and persists the object if it implements `Persistable`
-#[proc_macro_derive(Factory, attributes(factory))]
+#[proc_macro_derive(Factory, attributes(factory, fabrique))]
 pub fn derive_factory(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    FactoryCodegen::from(input).generate_factory().into()
+    let span = input.span();
+    match FactoryCodegen::from(input) {
+        Ok(codegen) => codegen,
+        Err(e) => return Error::new(span, e).into_compile_error().into(),
+    }
+    .generate_factory()
+    .into()
 }
 
 #[cfg(feature = "sqlx")]
