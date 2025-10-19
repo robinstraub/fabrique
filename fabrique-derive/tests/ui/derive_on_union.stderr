@@ -1,0 +1,5 @@
+error: Factory can only be derived from named structs, union given
+ --> tests/ui/derive_on_union.rs:4:1
+  |
+4 | union Anvil {
+  | ^^^^^

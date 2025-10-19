@@ -1,0 +1,5 @@
+error: Factory can only be derived from named structs, enum given
+ --> tests/ui/derive_on_enum.rs:4:1
+  |
+4 | enum Anvil {
+  | ^^^^

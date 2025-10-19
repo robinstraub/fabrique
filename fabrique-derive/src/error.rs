@@ -1,11 +1,6 @@
 /// Errors that can occur during factory derivation.
-#[derive(Debug, Eq, thiserror::Error, PartialEq)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Expected a literal str, got {0:?}")]
-    UnparsableLiteral(String),
-    #[error("Could not parse literal to an ident: {0}")]
-    UnparsableType(String),
-
     #[error("Factory can only be derived from named structs, enum given")]
     UnsupportedDataStructureEnum,
 
@@ -17,4 +12,10 @@ pub enum Error {
 
     #[error("Factory can only be derived from named structs, unit struct given")]
     UnsupportedDataStructureUnitStruct,
+
+    #[error("Missing `referenced_key` attribute for relation {0}")]
+    MissingReferencedKey(String),
+
+    #[error("{0}")]
+    Darling(#[from] darling::Error),
 }

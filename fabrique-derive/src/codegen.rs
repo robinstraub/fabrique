@@ -2,7 +2,10 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Ident};
 
-use crate::analysis::{FactoryAnalysis, FactoryAnalysisOutput};
+use crate::{
+    analysis::{FactoryAnalysis, FactoryAnalysisOutput},
+    error::Error,
+};
 
 /// Code generator for factory struct implementations.
 pub struct FactoryCodegen {
@@ -14,18 +17,18 @@ pub struct FactoryCodegen {
 
 impl FactoryCodegen {
     /// Creates a code generator from the given derive input.
-    pub fn from(input: DeriveInput) -> Self {
-        let output = FactoryAnalysis::from(input.clone()).analyze().unwrap();
-        Self {
+    pub fn from(input: DeriveInput) -> Result<Self, Error> {
+        let output = FactoryAnalysis::from(input.clone()).analyze()?;
+        Ok(Self {
             analysis: output,
             input,
-        }
+        })
     }
 
     /// Generates the complete factory implementation as a token stream.
     pub fn generate_factory(self) -> TokenStream {
         let base_struct_ident = &self.analysis.base_struct_ident;
-        let factory_ident = self.generate_factory_ident();
+        let factory_ident = Self::generate_factory_ident(&self.input.ident);
         let factory_fields = self.generate_factory_fields();
         let factory_method_create = self.generate_factory_method_create();
         let factory_method_new = self.generate_factory_method_new();
@@ -63,8 +66,8 @@ impl FactoryCodegen {
     /// or let the factory generate defaults when building the final struct.
     fn generate_factory_fields(&self) -> impl Iterator<Item = TokenStream> {
         self.analysis.fields.clone().into_iter().map(|field| {
-            let name = &field.ident;
-            let ty = &field.ty;
+            let name = &field.field.ident;
+            let ty = &field.field.ty;
             quote! {
                 #name: std::option::Option<#ty>
             }
@@ -73,9 +76,10 @@ impl FactoryCodegen {
 
     /// Generates factory relation fields for linked factory dependencies.
     fn generate_factory_relation_fields(&self) -> impl Iterator<Item = TokenStream> {
-        self.analysis.relations.iter().map(|relation| {
-            let ident = &relation.ident;
-            let ty = &relation.ty;
+        self.analysis.relations().map(|(_, relation)| {
+            let ident = &relation.factory_field;
+            let ty = Self::generate_factory_ident(&relation.referenced_type);
+
             quote! {
                 #ident: std::option::Option<Box<dyn FnOnce(#ty) -> #ty + Send>>
 
@@ -84,9 +88,9 @@ impl FactoryCodegen {
     }
 
     /// Generates the factory identifier with "Factory" suffix.
-    fn generate_factory_ident(&self) -> Ident {
-        let factory_name = format!("{}Factory", &self.input.ident);
-        Ident::new(&factory_name, self.input.ident.span())
+    fn generate_factory_ident(ident: &Ident) -> Ident {
+        let factory_name = format!("{}Factory", ident);
+        Ident::new(&factory_name, ident.span())
     }
 
     /// Generates the `create()` method for the factory struct.
@@ -98,15 +102,16 @@ impl FactoryCodegen {
     fn generate_factory_method_create(&self) -> TokenStream {
         // Generate relation creation code - related objects are created first
         // to establish the dependency graph before creating the main object
-        let relations_create = self.analysis.relations.iter().map(|relation| {
-            let field = &relation.field.ident;
-            let ident = &relation.ident;
-            let ty = &relation.ty;
+        let relations_create = self.analysis.relations().map(|(field, relation)| {
+            let field = &field.ident;
+            let ident = &relation.factory_field;
+            let ty = Self::generate_factory_ident(&relation.referenced_type);
+            let referenced_key = &relation.referenced_key;
 
             quote! {
                 if let Some(callback) = self.#ident {
                     let instance = callback(#ty::new()).create(connection).await?;
-                    self.#field = Some(instance.id);
+                    self.#field = Some(instance.#referenced_key);
                 }
             }
         });
@@ -114,8 +119,8 @@ impl FactoryCodegen {
         // Generate struct field initialization - use provided values or defaults
         let struct_ident = &self.analysis.base_struct_ident;
         let struct_fields = self.analysis.fields.iter().map(|field| {
-            let name = &field.ident;
-            let ty = &field.ty;
+            let name = &field.field.ident;
+            let ty = &field.field.ty;
 
             quote! {
                 #name: self.#name.unwrap_or(<#ty as Default>::default())
@@ -139,14 +144,14 @@ impl FactoryCodegen {
     /// Generates the `new()` method for the factory struct.
     fn generate_factory_method_new(&self) -> TokenStream {
         let initialized_fields = self.analysis.fields.clone().into_iter().map(|field| {
-            let name = &field.ident;
+            let name = &field.field.ident;
             quote! {
                 #name: None
             }
         });
 
-        let initialized_relation_fields = self.analysis.relations.iter().map(|relation| {
-            let name = &relation.ident;
+        let initialized_relation_fields = self.analysis.relations().map(|(_, relation)| {
+            let name = &relation.factory_field;
             quote! {
                 #name: None
             }
@@ -164,8 +169,8 @@ impl FactoryCodegen {
 
     fn generate_factory_method_fields(&self) -> impl Iterator<Item = TokenStream> {
         self.analysis.fields.clone().into_iter().map(|field| {
-            let name = &field.ident;
-            let ty = &field.ty;
+            let name = &field.field.ident;
+            let ty = &field.field.ty;
 
             quote! {
                 pub fn #name(mut self, #name: #ty) -> Self {
@@ -181,10 +186,10 @@ impl FactoryCodegen {
     /// These methods allow buffering the creation of related factory instances,
     /// which are then executed when building the final object.
     fn generate_factory_methods_for_relation(&self) -> impl Iterator<Item = TokenStream> {
-        self.analysis.relations.iter().map(|relation| {
-            let ty = &relation.ty;
-            let method_name = Ident::new(&format!("for_{}", &relation.name), relation.ident.span());
-            let field_ident = &relation.ident;
+        self.analysis.relations().map(|(_, relation)| {
+            let ty = Self::generate_factory_ident(&relation.referenced_type);
+            let method_name = Ident::new(&format!("for_{}", &relation.name), ty.span());
+            let field_ident = &relation.factory_field;
             quote! {
                 pub fn #method_name<F>(mut self, callback: F) -> Self
                 where F: FnOnce(#ty) -> #ty + Send + 'static
@@ -208,12 +213,13 @@ mod tests {
         // Arrange the codegen
         let codegen = FactoryCodegen::from(parse_quote! {
             struct Anvil {
-                #[factory(relation = "HammerFactory")]
+                #[fabrique(relation = "Hammer", referenced_key = "id")]
                 hammer_id: u32,
                 hardness: u32,
                 weight: u32,
             }
-        });
+        })
+        .unwrap();
 
         // Act the call to the factory ident method
         let generated = codegen.generate_factory();
@@ -293,7 +299,8 @@ mod tests {
             struct Anvil {
                 weight: u32,
             }
-        });
+        })
+        .unwrap();
 
         // Act the call to the codegen fields method
         let generated: Vec<TokenStream> = codegen.generate_factory_fields().collect();
@@ -310,10 +317,11 @@ mod tests {
         // Arrange the codegen
         let codegen = FactoryCodegen::from(parse_quote! {
             struct Dynamite {
-                #[factory(relation = "ExplosiveFactory")]
+                #[fabrique(relation = "Explosive", referenced_key = "id")]
                 explosive_id: String,
             }
-        });
+        })
+        .unwrap();
 
         // Act the call to the codegen fields method
         let generated: Vec<TokenStream> = codegen.generate_factory_relation_fields().collect();
@@ -332,10 +340,11 @@ mod tests {
         // Arrange the codegen
         let factory = FactoryCodegen::from(parse_quote! {
             struct Anvil {}
-        });
+        })
+        .unwrap();
 
         // Act the call to the factory ident method
-        let generated = factory.generate_factory_ident();
+        let generated = FactoryCodegen::generate_factory_ident(&factory.input.ident);
 
         // Assert the result
         assert_eq!(&generated, "AnvilFactory");
@@ -346,12 +355,13 @@ mod tests {
         // Arrange the codegen
         let factory = FactoryCodegen::from(parse_quote! {
             struct Anvil {
-                #[factory(relation = "HammerFactory")]
+                #[fabrique(relation = "Hammer", referenced_key = "id")]
                 hammer_id: u32,
                 hardness: u32,
                 weight: u32,
             }
-        });
+        })
+        .unwrap();
 
         // Act the call to the factory ident method
         let generated = factory.generate_factory_method_create();
@@ -386,7 +396,8 @@ mod tests {
                 hardness: u32,
                 weight: u32,
             }
-        });
+        })
+        .unwrap();
 
         // Act the call to the factory ident method
         let generated = factory.generate_factory_method_new();
@@ -414,7 +425,8 @@ mod tests {
                 hardness: u32,
                 weight: u32,
             }
-        });
+        })
+        .unwrap();
 
         // Act the call to the generate_factory_method_fields method
         let generated: Vec<TokenStream> = factory.generate_factory_method_fields().collect();
@@ -437,10 +449,11 @@ mod tests {
         // Arrange the codegen
         let factory = FactoryCodegen::from(parse_quote! {
             struct Dynamite {
-                #[factory(relation = "ExplosiveFactory")]
+                #[fabrique(relation = "Explosive", referenced_key = "id")]
                 explosive_id: String,
             }
-        });
+        })
+        .unwrap();
 
         // Act the call to the generate_factory_method_fields method
         let generated: Vec<TokenStream> = factory.generate_factory_methods_for_relation().collect();
