@@ -1,12 +1,8 @@
+use crate::error::Error;
 use crate::factory::analysis::{FactoryAnalysis, FactoryAnalysisOutput};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Ident};
-
-use crate::{
-    analysis::{FactoryAnalysis, FactoryAnalysisOutput},
-    error::Error,
-};
 
 /// Code generator for factory struct implementations.
 pub struct FactoryCodegen {
