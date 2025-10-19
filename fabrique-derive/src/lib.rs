@@ -4,7 +4,7 @@
 //! factory structs for your data types. Each field in the original struct becomes
 //! an `Option<T>` field in the factory, allowing selective value setting.
 
-use crate::{factory::FactoryCodegen, persistable::PersistableCodegen};
+use crate::factory::FactoryCodegen;
 use proc_macro::TokenStream;
 use syn::{DeriveInput, parse_macro_input};
 
@@ -47,7 +47,7 @@ pub fn derive_factory(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Persistable, attributes(fabrique))]
 pub fn derive_persistable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    PersistableCodegen::from(&input)
+    crate::persistable::PersistableCodegen::from(&input)
         .and_then(|codegen| codegen.generate())
         .unwrap_or_else(|err| syn::Error::from(err).into_compile_error())
         .into()

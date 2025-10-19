@@ -32,9 +32,11 @@ pub struct Analysis<'a> {
     pub fields: &'a Punctuated<Field, Comma>,
 
     /// Identifier of the analyzed struct.
+    #[allow(dead_code)]
     pub ident: &'a Ident,
 
     /// The table name for this model.
+    #[allow(dead_code)]
     pub table_name: String,
 }
 
