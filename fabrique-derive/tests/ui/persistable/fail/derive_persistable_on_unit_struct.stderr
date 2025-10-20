@@ -1,0 +1,7 @@
+error: Factory can only be derived from named structs, unit struct given
+ --> tests/ui/persistable/derive_persistable_on_unit_struct.rs:3:10
+  |
+3 | #[derive(Persistable)]
+  |          ^^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `Persistable` (in Nightly builds, run with -Z macro-backtrace for more info)

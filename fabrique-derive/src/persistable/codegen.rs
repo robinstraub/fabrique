@@ -23,7 +23,7 @@ impl<'a> PersistableCodegen<'a> {
         let fn_create = self.generate_fn_create();
 
         let generated = quote! {
-            impl fabrique::Persistable for #base_struct_ident {
+            impl ::fabrique::Persistable for #base_struct_ident {
                 type Connection = sqlx::Pool<sqlx::Postgres>;
                 type Error = sqlx::Error;
 
@@ -85,7 +85,7 @@ mod tests {
         assert_eq!(
             result.unwrap().to_string(),
             quote! {
-                impl fabrique::Persistable for Anvil {
+                impl ::fabrique::Persistable for Anvil {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
 

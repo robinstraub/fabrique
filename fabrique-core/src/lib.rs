@@ -49,7 +49,5 @@ pub trait Persistable: Sized {
     ///
     /// This method should handle querying the persistence layer for all records
     /// and return them as a vector of model instances.
-    fn all(
-        connection: &Self::Connection,
-    ) -> impl Future<Output = Result<Vec<Self>, Self::Error>>;
+    fn all(connection: &Self::Connection) -> impl Future<Output = Result<Vec<Self>, Self::Error>>;
 }
