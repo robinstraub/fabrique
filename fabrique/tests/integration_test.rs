@@ -81,11 +81,7 @@ mod tests {
     #[tokio::test]
     async fn test_hammer_factory_with_multiple_fields() {
         // Arrange - create a hammer with specific values
-        let result = Hammer::factory()
-            .id(42)
-            .weight(500)
-            .create(&())
-            .await;
+        let result = Hammer::factory().id(42).weight(500).create(&()).await;
 
         // Assert the result
         assert!(result.is_ok());

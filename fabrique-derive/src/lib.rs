@@ -1,8 +1,8 @@
-//! Procedural macro for generating factory structs.
+//! Procedural macros for generating factory and persistence code.
 //!
-//! This crate provides the `#[derive(Factory)]` macro to automatically generate
-//! factory structs for your data types. Each field in the original struct becomes
-//! an `Option<T>` field in the factory, allowing selective value setting.
+//! This crate provides two derive macros:
+//! - `#[derive(Factory)]` - Generates factory structs with optional fields for flexible object creation
+//! - `#[derive(Persistable)]` - Generates persistence implementations for data storage
 
 use crate::factory::FactoryCodegen;
 use proc_macro::TokenStream;
@@ -13,6 +13,7 @@ mod error;
 mod factory;
 mod persistable;
 
+/// Derives a `Persistable` implementation for the annotated struct.
 #[proc_macro_derive(Persistable, attributes(fabrique))]
 pub fn derive_persistable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -23,6 +24,7 @@ pub fn derive_persistable(input: TokenStream) -> TokenStream {
         .into()
 }
 
+/// Derives a factory struct for the annotated type.
 #[proc_macro_derive(Factory, attributes(factory, fabrique))]
 pub fn derive_factory(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
