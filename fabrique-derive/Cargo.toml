@@ -11,11 +11,6 @@ documentation = "https://docs.rs/fabrique-derive"
 [lib]
 proc-macro = true
 
-[features]
-default = []
-
-# Generate Persistable trait implementations using SQLx
-sqlx = ["dep:sqlx"]
 
 [dependencies]
 darling = "0.21"
@@ -26,11 +21,11 @@ sqlx = { version = "0.8", features = [
   "postgres",
   "runtime-tokio-rustls",
   "uuid",
-], optional = true }
+] }
 syn = { version = "2.0", features = ["extra-traits"] }
 thiserror = "2.0"
 
 [dev-dependencies]
-fabrique = { path = "../fabrique", features = ["sqlx"] }
+fabrique = { path = "../fabrique" }
 trybuild = "1.0"
 uuid = "1"
