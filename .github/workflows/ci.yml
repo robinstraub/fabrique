@@ -29,6 +29,7 @@ jobs:
           - 5432:5432
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      SQLX_OFFLINE: true
 
     steps:
       - uses: actions/checkout@v5
