@@ -1,11 +1,8 @@
+use crate::error::Error;
+use crate::factory::analysis::{FactoryAnalysis, FactoryAnalysisOutput};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Ident};
-
-use crate::{
-    analysis::{FactoryAnalysis, FactoryAnalysisOutput},
-    error::Error,
-};
 
 /// Code generator for factory struct implementations.
 pub struct FactoryCodegen {
@@ -82,7 +79,6 @@ impl FactoryCodegen {
 
             quote! {
                 #ident: std::option::Option<Box<dyn FnOnce(#ty) -> #ty + Send>>
-
             }
         })
     }
@@ -204,9 +200,19 @@ impl FactoryCodegen {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use syn::parse_quote;
 
-    use super::*;
+    #[test]
+    fn test_factory_codegen_from_fails_on_invalid_input() {
+        // Arrange an enum (which is not supported)
+        let result = FactoryCodegen::from(parse_quote! {
+            enum Anvil {}
+        });
+
+        // Assert that it returns an error
+        assert!(result.is_err());
+    }
 
     #[test]
     fn test_generate_factory() {

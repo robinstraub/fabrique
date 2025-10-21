@@ -1,158 +1,131 @@
-use darling::FromField;
-use syn::{Data, DataStruct, DeriveInput, Field, Fields, FieldsNamed, Ident, spanned::Spanned};
-
 use crate::error::Error;
+use darling::FromDeriveInput;
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
+use syn::{Data, DataStruct, DeriveInput, Field, Fields, FieldsNamed, Ident};
 
-/// Analyzes a derive input to extract factory-related information.
-///
-/// Only supports structs with named fields.
-pub struct FactoryAnalysis {
-    input: DeriveInput,
+/// Initial builder state for derive input analysis.
+pub struct AnalysisBuilder<'a> {
+    input: &'a DeriveInput,
 }
 
-#[derive(FromField, Debug, Default, Clone)]
+/// Analysis state containing validated struct data.
+#[derive(Debug)]
+pub struct ValidatedStruct<'a> {
+    pub ident: &'a Ident,
+    pub input: &'a DeriveInput,
+    data: &'a DataStruct,
+}
+
+/// Analysis state containing validated named fields.
+#[derive(Debug)]
+pub struct ParsedFields<'a> {
+    fields: &'a Punctuated<Field, Comma>,
+    ident: &'a Ident,
+    input: &'a DeriveInput,
+}
+
+/// Completed analysis containing parsed input and validated metadata.
+#[derive(Debug)]
+pub struct Analysis<'a> {
+    /// Named fields of the analyzed struct.
+    pub fields: &'a Punctuated<Field, Comma>,
+
+    /// Identifier of the analyzed struct.
+    #[allow(dead_code)]
+    pub ident: &'a Ident,
+
+    /// The table name for this model.
+    #[allow(dead_code)]
+    pub table_name: String,
+}
+
+#[derive(FromDeriveInput)]
 #[darling(attributes(fabrique))]
-pub struct FabriqueFieldAttributes {
+pub struct FabriqueAttrs {
+    /// The table name for this model
     #[darling(default)]
-    primary_key: bool,
-
-    #[darling(default)]
-    relation: Option<Ident>,
-
-    #[darling(default)]
-    referenced_key: Option<Ident>,
+    pub table: Option<String>,
 }
 
-impl FactoryAnalysis {
-    /// Creates a new analysis from a derive input.
-    pub fn from(input: DeriveInput) -> Self {
+impl<'a> AnalysisBuilder<'a> {
+    /// Constructs a new analysis builder from the given derive input.
+    pub fn new(input: &'a DeriveInput) -> Self {
         Self { input }
     }
 
-    /// Performs the analysis and returns the output.
-    pub fn analyze(self) -> Result<FactoryAnalysisOutput, Error> {
-        Ok(FactoryAnalysisOutput {
-            base_struct_ident: self.input.ident.clone(),
-            fields: self.fields()?,
-        })
-    }
-
-    /// Returns the fields of a named struct.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error for enums, unions, unit structs, or tuple structs.
-    fn fields(&self) -> Result<Vec<FactoryFieldAnalysisOutput>, Error> {
-        let fields = match &self.input.data {
-            Data::Struct(DataStruct {
-                fields: Fields::Named(FieldsNamed { named, .. }),
-                ..
-            }) => Ok(named),
-            Data::Struct(DataStruct {
-                fields: Fields::Unit,
-                ..
-            }) => Err(Error::UnsupportedDataStructureUnitStruct),
-            Data::Struct(DataStruct {
-                fields: Fields::Unnamed(_),
-                ..
-            }) => Err(Error::UnsupportedDataStructureTupleStruct),
+    /// Validates that the input is a struct and transitions to the next state.
+    pub fn parse_struct(self) -> Result<ValidatedStruct<'a>, Error> {
+        let data = match &self.input.data {
+            Data::Struct(data) => Ok(data),
             Data::Enum(_) => Err(Error::UnsupportedDataStructureEnum),
             Data::Union(_) => Err(Error::UnsupportedDataStructureUnion),
         }?;
 
-        fields
-            .into_iter()
-            .map(|field| -> Result<FactoryFieldAnalysisOutput, Error> {
-                let attributes = FabriqueFieldAttributes::from_field(field)?;
-
-                Ok(FactoryFieldAnalysisOutput {
-                    field: field.clone(),
-                    primary_key: attributes.primary_key,
-                    relation: Relation::new(field, attributes)?,
-                })
-            })
-            .collect::<Result<Vec<FactoryFieldAnalysisOutput>, Error>>()
+        Ok(ValidatedStruct::new(self.input, data))
     }
 }
 
-/// Output of factory analysis containing extracted fields and relations.
-#[derive(Debug)]
-pub struct FactoryAnalysisOutput {
-    /// The identifier of the original struct
-    pub base_struct_ident: Ident,
-    /// All named fields from the struct
-    pub fields: Vec<FactoryFieldAnalysisOutput>,
-}
+impl<'a> ValidatedStruct<'a> {
+    /// Constructs a new ValidatedStruct struct.
+    pub fn new(input: &'a DeriveInput, data: &'a DataStruct) -> Self {
+        let ident = &input.ident;
+        Self { ident, input, data }
+    }
 
-impl FactoryAnalysisOutput {
-    pub fn relations(&self) -> impl Iterator<Item = (&Field, &Relation)> {
-        self.fields.iter().filter_map(|field| {
-            field
-                .relation
-                .as_ref()
-                .map(|relation| (&field.field, relation))
-        })
+    /// Validates that input struct is composed of named fields and transistions to the next state.
+    pub fn parse_fields(self) -> Result<ParsedFields<'a>, Error> {
+        let fields = match &self.data.fields {
+            Fields::Named(FieldsNamed { named, .. }) => Ok(named),
+            Fields::Unit => Err(Error::UnsupportedDataStructureUnitStruct),
+            Fields::Unnamed(_) => Err(Error::UnsupportedDataStructureTupleStruct),
+        }?;
+
+        Ok(ParsedFields::new(self, fields))
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct FactoryFieldAnalysisOutput {
-    pub field: Field,
-    #[allow(dead_code)]
-    pub primary_key: bool,
-    pub relation: Option<Relation>,
-}
-
-/// Represents a factory relation extracted from struct field attributes.
-#[derive(Debug, Clone)]
-pub struct Relation {
-    /// The identifier for the factory field (e.g., `anvil_factory`)
-    pub factory_field: Ident,
-    /// The type of the referenced object (e.g., `Anvil`)
-    pub referenced_type: Ident,
-    /// The field of the referenced object referenced by this relation (e.g. `id`)
-    pub referenced_key: Ident,
-    /// The base name of the relation (e.g., `anvil`)
-    pub name: String,
-}
-
-impl Relation {
-    /// Creates a new relation from a field and its factory type.
-    ///
-    /// Automatically derives the relation name by stripping the `referenced_key` suffix
-    /// from the field name if present.
-    pub fn new(field: &Field, attributes: FabriqueFieldAttributes) -> Result<Option<Self>, Error> {
-        if attributes.relation.is_none() {
-            return Ok(None);
+impl<'a> ParsedFields<'a> {
+    /// Constructs a new ParsedFields struct.
+    pub fn new(prev: ValidatedStruct<'a>, fields: &'a Punctuated<Field, Comma>) -> Self {
+        Self {
+            ident: prev.ident,
+            input: prev.input,
+            fields,
         }
+    }
 
-        let referenced_type = attributes.relation.unwrap();
+    /// Transistions to the next state.
+    pub fn validate(self) -> Result<Analysis<'a>, Error> {
+        let table_name = FabriqueAttrs::from_derive_input(self.input)
+            .map_err(Error::UnparsableAttribute)?
+            .table
+            .unwrap_or_else(|| format!("{}s", self.ident.to_string().to_lowercase()));
 
-        let field = field.clone();
+        let analysis = Analysis::new(self.fields, self.ident, table_name);
 
-        let field_name = field
-            .ident
-            .as_ref()
-            .ok_or(Error::UnsupportedDataStructureTupleStruct)?
-            .to_string();
+        Ok(analysis)
+    }
+}
 
-        let referenced_key = attributes
-            .referenced_key
-            .ok_or(Error::MissingReferencedKey(field_name.clone()))?;
+impl<'a> Analysis<'a> {
+    /// Constructs a new analysis.
+    pub fn new(fields: &'a Punctuated<Field, Comma>, ident: &'a Ident, table_name: String) -> Self {
+        Self {
+            fields,
+            ident,
+            table_name,
+        }
+    }
 
-        let name = field_name
-            .strip_suffix(&format!("_{}", referenced_key))
-            .unwrap_or(&field_name)
-            .to_owned();
+    /// Performs complete analysis of the derive input.
+    pub fn from(input: &'a DeriveInput) -> Result<Self, Error> {
+        let analysis = AnalysisBuilder::new(input)
+            .parse_struct()?
+            .parse_fields()?
+            .validate()?;
 
-        let ident = Ident::new(&format!("{}_factory", &name), field.span());
-
-        Ok(Some(Self {
-            factory_field: ident,
-            referenced_type,
-            referenced_key,
-            name,
-        }))
+        Ok(analysis)
     }
 }
 
@@ -162,388 +135,155 @@ mod tests {
     use syn::parse_quote;
 
     #[test]
-    fn test_analyze() {
+    fn test_parsing_a_struct_works() {
         // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
+        let input = parse_quote! { struct Anvil {} };
+        let analysis = AnalysisBuilder::new(&input);
+
+        // Act the call to the fields method
+        let result = analysis.parse_struct();
+
+        // Assert the result
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parsing_an_enum_fails_explicitly() {
+        // Arrange the analysis
+        let input = parse_quote! { enum Anvil {} };
+        let analysis = AnalysisBuilder::new(&input);
+
+        // Act the call to the fields method
+        let result = analysis.parse_struct();
+
+        // Assert the result
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parsing_a_union_fails_explicitly() {
+        // Arrange the analysis
+        let input = parse_quote! { union Anvil {} };
+        let analysis = AnalysisBuilder::new(&input);
+
+        // Act the call to the fields method
+        let result = analysis.parse_struct();
+
+        // Assert the result
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parsing_a_named_struct_works() {
+        // Arrange the analysis
+        let input = parse_quote! { struct Anvil {} };
+        let analysis = AnalysisBuilder::new(&input);
+
+        // Act the call to the fields method
+        let result = analysis.parse_struct().unwrap().parse_fields();
+        println!("analysis: {:?}", &result);
+
+        // Assert the result
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parsing_a_unit_struct_fails_explicitly() {
+        // Arrange the analysis
+        let input = parse_quote! { struct Anvil; };
+        let analysis = AnalysisBuilder::new(&input);
+
+        // Act the call to the fields method
+        let result = analysis.parse_struct().unwrap().parse_fields();
+
+        // Assert the result
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parsing_a_tuple_struct_fails_explicitly() {
+        // Arrange the analysis
+        let input = parse_quote! { struct Anvil(u32, u32); };
+        let analysis = AnalysisBuilder::new(&input);
+
+        // Act the call to the fields method
+        let result = analysis.parse_struct().unwrap().parse_fields();
+
+        // Assert the result
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_analysis_fails_explicitly_on_invalid_struct() {
+        // Arrange the analysis
+        let input = parse_quote! { enum Anvil {} };
+        let analysis = Analysis::from(&input);
+
+        // Assert the result
+        assert!(analysis.is_err());
+    }
+
+    #[test]
+    fn test_analysis_fails_explicitly_on_invalid_fields() {
+        // Arrange the analysis
+        let input = parse_quote! { struct Anvil(u32, u32); };
+        let analysis = Analysis::from(&input);
+
+        // Assert the result
+        assert!(analysis.is_err());
+    }
+
+    #[test]
+    fn test_validate_with_default_table_name() {
+        // Arrange the analysis without a custom table name
+        let input = parse_quote! {
             struct Anvil {
-                #[fabrique(primary_key)]
                 id: u32,
-                weight: u32,
-                #[fabrique(relation = "Hammer", referenced_key = "id")]
-                hammer_id: u32,
             }
-        });
-
-        // Act the call to the analyze method
-        let result = analysis.analyze();
-
-        // Assert the result
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert_eq!(result.base_struct_ident.to_string(), "Anvil");
-        assert_eq!(result.fields.len(), 3);
-
-        assert!(
-            result
-                .fields
-                .iter()
-                .find(|field| field.field.ident.as_ref().unwrap() == "id")
-                .map(|field| {
-                    assert!(field.primary_key);
-                    assert!(field.relation.is_none());
-
-                    true
-                })
-                .unwrap_or(false)
-        );
-
-        assert!(
-            result
-                .fields
-                .iter()
-                .find(|field| field.field.ident.as_ref().unwrap() == "weight")
-                .map(|field| {
-                    assert!(!field.primary_key);
-                    assert!(field.relation.is_none());
-
-                    true
-                })
-                .unwrap_or(false)
-        );
-
-        assert!(
-            result
-                .fields
-                .iter()
-                .find(|field| field.field.ident.as_ref().unwrap() == "hammer_id")
-                .map(|field| {
-                    assert!(!field.primary_key);
-                    assert!(field.relation.is_some());
-                    let relation = field.relation.as_ref().unwrap();
-                    assert_eq!(relation.factory_field.to_string(), "hammer_factory");
-                    assert_eq!(relation.referenced_type.to_string(), "Hammer");
-                    assert_eq!(relation.referenced_key.to_string(), "id");
-                    assert_eq!(relation.name, "hammer");
-
-                    true
-                })
-                .unwrap_or(false)
-        );
-    }
-
-    #[test]
-    fn test_analyze_fails_explicitly_on_unknown_attribute() {
-        // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
-            struct Anvil {
-                #[fabrique(unknown = true)]
-                weight: u32,
-            }
-        });
-
-        // Act the call to the analyze method
-        let result = analysis.analyze();
-
-        // Assert the result
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Darling(_)));
-    }
-
-    #[test]
-    fn test_analyze_fails_explicitly_on_invalid_relation_attribute() {
-        // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
-            struct Anvil {
-                #[fabrique(relation=true)]
-                weight: u32,
-            }
-        });
-
-        // Act the call to the analyze method
-        let result = analysis.analyze();
-
-        // Assert the result
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Darling(_)));
-    }
-
-    #[test]
-    fn test_the_fields_method_handles_no_relations() {
-        // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
-            struct Anvil {}
-        });
-
-        // Act the call to the analyze method
-        let result = analysis.fields();
-
-        // Assert the result
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 0);
-    }
-
-    #[test]
-    fn test_the_fields_method_handles_some_relations() {
-        // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
-            struct Anvil {
-                #[fabrique(relation = "Hammer", referenced_key = "id")]
-                hammer_id: u32,
-            }
-        });
-
-        // Act the call to the analyze method
-        let result = analysis.fields();
-
-        // Assert the result
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 1);
-    }
-
-    #[test]
-    fn test_the_fields_method_fails_explicitely_on_no_referenced_key() {
-        // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
-            struct Anvil {
-                #[fabrique(relation = "Hammer")]
-                hammer_id: u32,
-            }
-        });
-
-        // Act the call to the analyze method
-        let result = analysis.fields();
-
-        // Assert the result
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::MissingReferencedKey(rel) if rel == "hammer_id"
-        ));
-    }
-
-    #[test]
-    fn test_the_fields_handles_implicit_referenced_key() {
-        // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
-            struct Anvil {
-                #[fabrique(relation = "Hammer", referenced_key = "id")]
-                hammer_id: u32,
-            }
-        });
-
-        // Act the call to the analyze method
-        let result = analysis.fields();
-
-        // Assert the result
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(
-            result
-                .iter()
-                .find(|field| field.field.ident.as_ref().unwrap() == "hammer_id")
-                .map(|field| {
-                    assert!(field.relation.is_some());
-                    let relation = field.relation.as_ref().unwrap();
-                    assert_eq!(relation.referenced_key.to_string(), "id");
-                    assert_eq!(relation.name, "hammer");
-
-                    true
-                })
-                .unwrap_or(false)
-        );
-    }
-
-    #[test]
-    fn test_the_fields_handles_explicit_referenced_key() {
-        // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
-            struct Anvil {
-                #[fabrique(relation = "Hammer", referenced_key = "id")]
-                hammer: u32,
-            }
-        });
-
-        // Act the call to the analyze method
-        let result = analysis.fields();
-
-        // Assert the result
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(
-            result
-                .iter()
-                .find(|field| field.field.ident.as_ref().unwrap() == "hammer")
-                .map(|field| {
-                    assert!(field.relation.is_some());
-                    let relation = field.relation.as_ref().unwrap();
-                    assert_eq!(relation.referenced_key.to_string(), "id");
-                    assert_eq!(relation.name, "hammer");
-
-                    true
-                })
-                .unwrap_or(false)
-        );
-    }
-
-    #[test]
-    fn test_the_fields_method_handles_different_annotations() {
-        // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
-            struct Anvil {
-                #[foo]
-                density: u32,
-            }
-        });
-
-        // Act the call to the analyze method
-        let result = analysis.fields();
-
-        // Assert the result
-        assert!(result.is_ok());
-        assert_eq!(
-            result
-                .unwrap()
-                .iter()
-                .filter(|field| field.relation.is_none())
-                .count(),
-            1
-        );
-    }
-
-    #[test]
-    fn test_a_relation_can_be_created() {
-        // Arrange the relation
-        let factory = FactoryAnalysis::from(parse_quote! {
-            struct Anvil {
-                hammer_id: u32,
-            }
-        });
-        let field = &factory.fields().unwrap()[0];
-
-        // Act the relation instantiation
-        let result = Relation::new(
-            &field.field,
-            FabriqueFieldAttributes {
-                relation: Some(Ident::new("Hammer", field.field.span())),
-                referenced_key: Some(Ident::new("id", field.field.span())),
-                ..Default::default()
-            },
-        );
-
-        // Assert the result
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_some());
-    }
-
-    #[test]
-    fn test_field_attribute_parsing_fails_explicitly_on_invalid_referenced_type() {
-        // Arrange the field
-        let field = parse_quote! {
-            #[fabrique(relation = "Not A Valid Type", referenced_key = "id")]
-            hammer_id: u32
         };
 
-        // Act the field parsing
-        let result = FabriqueFieldAttributes::from_field(&field);
+        // Act the call to the Analysis::from method
+        let result = Analysis::from(&input);
 
-        // Assert the result
-        assert!(result.is_err());
+        // Assert the result is ok and has the default table name
+        assert!(result.is_ok());
+        let analysis = result.unwrap();
+        assert_eq!(analysis.table_name, "anvils");
     }
 
     #[test]
-    fn test_a_relation_creation_fails_explicitly_on_unit_field() {
-        // Arrange the relation
-        let field: Field = parse_quote! {
-            u32
+    fn test_validate_with_custom_table_name() {
+        // Arrange the analysis with a custom table name
+        let input = parse_quote! {
+            #[fabrique(table = "custom_anvils")]
+            struct Anvil {
+                id: u32,
+            }
         };
 
-        // Act the relation instantiation
-        let result = Relation::new(
-            &field,
-            FabriqueFieldAttributes {
-                relation: Some(Ident::new("Hammer", field.span())),
-                referenced_key: Some(Ident::new("id", field.span())),
-                ..Default::default()
-            },
-        );
+        // Act the call to the Analysis::from method
+        let result = Analysis::from(&input);
 
-        // Assert the result
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureTupleStruct,
-        ));
+        // Assert the result is ok and has the custom table name
+        assert!(result.is_ok());
+        let analysis = result.unwrap();
+        assert_eq!(analysis.table_name, "custom_anvils");
     }
 
     #[test]
-    fn test_deriving_an_enum_fails_explicitly() {
-        // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
-            enum Anvil {}
-        });
+    fn test_validate_with_unknown_attribute_fails() {
+        // Arrange the analysis with an unknown attribute field
+        let input = parse_quote! {
+            #[fabrique(unknown_field = "value")]
+            struct Anvil {
+                id: u32,
+            }
+        };
 
-        // Act the call to the fields method
-        let result = analysis.fields();
+        // Act the call to the Analysis::from method
+        let result = Analysis::from(&input);
 
-        // Assert the result
+        // Assert the result is an error from darling (unknown field)
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureEnum
-        ));
-    }
-
-    #[test]
-    fn test_deriving_a_tuple_struct_fails_explicitly() {
-        // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
-            struct Anvil(u32, u32);
-        });
-
-        // Act the call to the fields method
-        let result = analysis.fields();
-
-        // Assert the result
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureTupleStruct,
-        ));
-    }
-
-    #[test]
-    fn test_deriving_a_unit_struct_fails_explicitly() {
-        // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
-            struct Anvil;
-        });
-
-        // Act the call to the fields method
-        let result = analysis.fields();
-
-        // Assert the result
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureUnitStruct,
-        ));
-    }
-
-    #[test]
-    fn test_deriving_a_union_fails_explicitly() {
-        // Arrange the analysis
-        let analysis = FactoryAnalysis::from(parse_quote! {
-            union Anvil {}
-        });
-
-        // Act the call to the fields method
-        let result = analysis.fields();
-
-        // Assert the result
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::UnsupportedDataStructureUnion
-        ));
     }
 }

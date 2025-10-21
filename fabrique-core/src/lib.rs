@@ -22,6 +22,11 @@
 ///         println!("saving anvil #{} into database...", &self.id);
 ///         Ok(self)
 ///     }
+///
+///     async fn all(_connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
+///         println!("fetching all anvils from database...");
+///         Ok(vec![])
+///     }
 /// }
 /// ```
 pub trait Persistable: Sized {
@@ -39,4 +44,10 @@ pub trait Persistable: Sized {
         self,
         connection: &Self::Connection,
     ) -> impl Future<Output = Result<Self, Self::Error>>;
+
+    /// Retrieves all instances of this model from the persistence layer
+    ///
+    /// This method should handle querying the persistence layer for all records
+    /// and return them as a vector of model instances.
+    fn all(connection: &Self::Connection) -> impl Future<Output = Result<Vec<Self>, Self::Error>>;
 }

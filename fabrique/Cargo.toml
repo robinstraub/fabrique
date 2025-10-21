@@ -8,9 +8,16 @@ repository = "https://github.com/robinstraub/fabrique"
 homepage = "https://github.com/robinstraub/fabrique"
 documentation = "https://docs.rs/fabrique"
 
-[dev-dependencies]
-tokio = { version = "1.0", features = ["rt", "macros"] }
-
 [dependencies]
 fabrique-core = { path = "../fabrique-core", version = "0.1.0" }
 fabrique-derive = { path = "../fabrique-derive", version = "0.1.0" }
+
+[dev-dependencies]
+fabrique = { path = "." }
+tokio = { version = "1.0", features = ["rt", "macros"] }
+sqlx = { version = "0.8", features = [
+  "postgres",
+  "runtime-tokio-rustls",
+  "uuid",
+] }
+uuid = "1"
