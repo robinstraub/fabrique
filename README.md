@@ -3,16 +3,20 @@
 [![CI](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml/badge.svg)](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/robinstraub/fabrique/graph/badge.svg?token=5zZr9fVZyz)](https://codecov.io/gh/robinstraub/fabrique)
 
-Factory pattern library with support for relations and persistence, enabling clean bootstrapping
-of complex object graphs with database integration.
+A lightweight ORM for Rust inspired by Laravel Eloquent, combining ease of use
+with Rust's safety guarantees. Fabrique provides elegant model definitions,
+relationship management, and built-in factories for testing and seeding.
 
 ## Features
 
+- **Eloquent-Inspired API**: Familiar patterns from Laravel with Rust's type safety
 - **Primary Key Support**: Mark fields as primary keys with `#[fabrique(primary_key)]`
-- **Factory Relations**: Link factories together with explicit referenced keys using `#[fabrique(relation = "Type", referenced_key = "field")]`
+- **Factory Relations**: Link factories together with explicit referenced keys
+using `#[fabrique(relation = "Type", referenced_key = "field")]`
 - **Derive Macro**: Automatic factory generation with `#[derive(Factory)]`
 - **Database Persistence**: Integrate with databases through the `Persistable` trait
 - **Async Support**: Full async/await support for database operations
+- **Testing & Seeding**: Built-in factory pattern for easy test data generation
 
 ## Usage
 
@@ -91,7 +95,8 @@ impl Persistable for Anvil {
     type Connection = DatabaseConnection;
     type Error = DatabaseError;
 
-    async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
+    async fn create(self, connection: &Self::Connection) ->
+      Result<Self, Self::Error> {
         // Your database insertion logic here
         database::insert_anvil(connection, self).await
     }
@@ -105,8 +110,16 @@ let anvil = Anvil::factory()
     .await?;
 ```
 
-This approach eliminates the complexity of manually managing object creation
-order and dependencies in your test setup and data seeding scenarios.
+## Why Fabrique?
+
+Fabrique brings Laravel Eloquent's developer-friendly approach to Rust while
+maintaining type safety and performance. Perfect for:
+
+- **Testing**: Generate complex test data with relationships in seconds
+- **Database Seeding**: Bootstrap your development database with realistic data
+- **Prototyping**: Quickly iterate on data models without boilerplate
+- **Migration from Laravel**: Familiar patterns for developers coming from the
+PHP ecosystem
 
 ## License
 

@@ -2,5 +2,11 @@
 name = "fabrique-core"
 version = "0.1.0"
 edition = "2024"
+description = "Core traits and types for the Fabrique ORM"
+license = "MIT"
+repository = "https://github.com/robinstraub/fabrique"
+homepage = "https://github.com/robinstraub/fabrique"
+documentation = "https://docs.rs/fabrique-core"
+
 
 [dependencies]
