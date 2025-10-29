@@ -25,4 +25,4 @@ Technical details, constraints, and important considerations for implementing th
 
 # Acceptance Criteria
 
-A checklist of specific, measurable conditions that must be met for this issue to be considered complete.Réessayer
+A checklist of specific, measurable conditions that must be met for this issue to be considered complete.
