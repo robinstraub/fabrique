@@ -31,7 +31,7 @@
 /// ```
 pub trait Persistable: Sized {
     /// The connection type used for database operations (e.g., database connection pool)
-    type Connection: Clone;
+    type Connection: Clone + Sync;
 
     /// The error type returned by persistence operations
     type Error;
@@ -43,11 +43,13 @@ pub trait Persistable: Sized {
     fn create(
         self,
         connection: &Self::Connection,
-    ) -> impl Future<Output = Result<Self, Self::Error>>;
+    ) -> impl Future<Output = Result<Self, Self::Error>> + Send;
 
     /// Retrieves all instances of this model from the persistence layer
     ///
     /// This method should handle querying the persistence layer for all records
     /// and return them as a vector of model instances.
-    fn all(connection: &Self::Connection) -> impl Future<Output = Result<Vec<Self>, Self::Error>>;
+    fn all(
+        connection: &Self::Connection,
+    ) -> impl Future<Output = Result<Vec<Self>, Self::Error>> + Send;
 }
