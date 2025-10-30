@@ -1,0 +1,114 @@
+name: Publish to crates.io
+
+on:
+  workflow_dispatch:
+    inputs:
+      crate:
+        description: "Which crate to publish"
+        required: true
+        type: choice
+        options:
+          - all
+          - fabrique-core
+          - fabrique-derive
+          - fabrique
+      dry_run:
+        description: "Perform a dry run (no actual publish)"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Verify we're on main branch (for actual publishes)
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        run: |
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$BRANCH" != "main" ] && [ "$BRANCH" != "master" ]; then
+            echo "Error: Not on main/master branch (currently on $BRANCH)"
+            echo "Real publishes can only be done from main/master branch"
+            exit 1
+          fi
+
+      - name: Check if working directory is clean
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Error: Working directory is not clean"
+            git status
+            exit 1
+          fi
+
+      - name: Publish fabrique-core
+        if: ${{ github.event.inputs.crate == 'all' || github.event.inputs.crate == 'fabrique-core' }}
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "Dry run: fabrique-core"
+            cargo publish -p fabrique-core --dry-run
+          else
+            echo "Publishing fabrique-core"
+            cargo publish -p fabrique-core
+          fi
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io index update
+        if: ${{ github.event.inputs.crate == 'all' && github.event.inputs.dry_run == 'false' }}
+        run: |
+          echo "Waiting 30 seconds for crates.io index to update..."
+          sleep 30
+
+      - name: Publish fabrique-derive
+        if: ${{ github.event.inputs.crate == 'all' || github.event.inputs.crate == 'fabrique-derive' }}
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "Dry run: fabrique-derive"
+            cargo publish -p fabrique-derive --dry-run
+          else
+            echo "Publishing fabrique-derive"
+            cargo publish -p fabrique-derive
+          fi
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io index update
+        if: ${{ github.event.inputs.crate == 'all' && github.event.inputs.dry_run == 'false' }}
+        run: |
+          echo "Waiting 30 seconds for crates.io index to update..."
+          sleep 30
+
+      - name: Publish fabrique
+        if: ${{ github.event.inputs.crate == 'all' || github.event.inputs.crate == 'fabrique' }}
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" == "true" ]; then
+            echo "Dry run: fabrique"
+            cargo publish -p fabrique --dry-run
+          else
+            echo "Publishing fabrique"
+            cargo publish -p fabrique
+          fi
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Create summary
+        if: always()
+        run: |
+          echo "## Publish Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Crate: ${{ github.event.inputs.crate }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Dry run: ${{ github.event.inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: $(git rev-parse --abbrev-ref HEAD)" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: $(git rev-parse --short HEAD)" >> $GITHUB_STEP_SUMMARY
