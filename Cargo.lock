@@ -316,6 +316,7 @@ dependencies = [
  "darling",
  "fabrique",
  "fabrique-core",
+ "fabrique-derive",
  "proc-macro2",
  "quote",
  "sqlx",

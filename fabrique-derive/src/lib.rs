@@ -11,9 +11,12 @@ use syn::{DeriveInput, Error, parse_macro_input, spanned::Spanned};
 mod analysis;
 mod error;
 mod factory;
+
+#[cfg(feature = "sqlx")]
 mod persistable;
 
 /// Derives a `Persistable` implementation for the annotated struct.
+#[cfg(feature = "sqlx")]
 #[proc_macro_derive(Persistable, attributes(fabrique))]
 pub fn derive_persistable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
