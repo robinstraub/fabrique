@@ -308,6 +308,9 @@ dependencies = [
 [[package]]
 name = "fabrique-core"
 version = "0.1.0"
+dependencies = [
+ "sqlx",
+]
 
 [[package]]
 name = "fabrique-derive"

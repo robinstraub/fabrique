@@ -28,10 +28,15 @@ impl<'a> QueryBuilderCodegen<'a> {
     pub fn generate(self) -> Result<TokenStream, Error> {
         let ident = &self.query_builder_ident;
         let struct_query_builder = self.generate_struct_query_builder();
+        let fn_new = self.generate_fn_new();
         let fn_where = self.generate_fn_where();
 
         let generated = quote! {
             #struct_query_builder
+
+            impl #ident {
+                #fn_new
+            }
 
             impl ::fabrique::QueryBuilder for #ident {
                 #fn_where
@@ -46,7 +51,7 @@ impl<'a> QueryBuilderCodegen<'a> {
         quote! {
             fn r#where<T>(mut self, column: ::fabrique::ColumnMarker<T>, operator: &'static str, value: T) -> Self
             where
-                T: for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>
+                T: 'static + for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>
             {
                 if !self.has_where {
                     self.builder.push(" WHERE ");
@@ -82,6 +87,19 @@ impl<'a> QueryBuilderCodegen<'a> {
             }
         }
     }
+
+    /// Generates the `new()` function.
+    fn generate_fn_new(&self) -> TokenStream {
+        quote! {
+            pub fn new() -> Self {
+                let builder = ::sqlx::query_builder::QueryBuilder::new("");
+                Self {
+                    builder,
+                    has_where: false,
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -108,10 +126,20 @@ mod tests {
                     has_where: bool,
                 }
 
+                impl AnvilQueryBuilder {
+                    pub fn new() -> Self {
+                        let builder = ::sqlx::query_builder::QueryBuilder::new("");
+                        Self {
+                            builder,
+                            has_where: false,
+                        }
+                    }
+                }
+
                 impl ::fabrique::QueryBuilder for AnvilQueryBuilder {
                     fn r#where<T>(mut self, column: ::fabrique::ColumnMarker<T>, operator: &'static str, value: T) -> Self
                     where
-                        T: for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>
+                        T: 'static + for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>
                     {
                         if !self.has_where {
                             self.builder.push(" WHERE ");
@@ -149,7 +177,7 @@ mod tests {
             quote! {
                 fn r#where<T>(mut self, column: ::fabrique::ColumnMarker<T>, operator: &'static str, value: T) -> Self
                 where
-                    T: for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>
+                    T: 'static + for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>
                 {
                     if !self.has_where {
                         self.builder.push(" WHERE ");

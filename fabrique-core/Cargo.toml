@@ -10,3 +10,8 @@ documentation = "https://docs.rs/fabrique-core"
 
 
 [dependencies]
+sqlx = { workspace = true, optional = true }
+
+[features]
+default = []
+sqlx = ["dep:sqlx"]
