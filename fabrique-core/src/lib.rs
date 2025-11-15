@@ -27,12 +27,14 @@ pub trait Persistable: Sized {
     type Error;
 
     /// The query builder type for constructing database queries
+    #[cfg(feature = "sqlx")]
     type QueryBuilder: QueryBuilder;
 
     /// Creates a new query builder for this model.
     ///
     /// This method returns a query builder that allows chaining where clauses
     /// to construct type-safe database queries with compile-time column validation.
+    #[cfg(feature = "sqlx")]
     fn query() -> Self::QueryBuilder;
 
     /// Creates and persists this object using the provided connection.
@@ -82,12 +84,12 @@ impl<T> ColumnMarker<T> {
 /// Query builders enable constructing SQL queries with compile-time safety by requiring
 /// column names to be static strings. This prevents dynamic column name injection while
 /// providing a fluent, chainable API for building complex queries.
+#[cfg(feature = "sqlx")]
 pub trait QueryBuilder {
     /// Adds a WHERE clause to the query.
     ///
     /// This method appends a condition to the query using the specified column, operator,
     /// and value. Multiple where clauses can be chained together to build complex queries.
-    #[cfg(feature = "sqlx")]
     fn r#where<T>(self, column: ColumnMarker<T>, operator: &'static str, value: T) -> Self
     where
         T: 'static + for<'q> sqlx::Encode<'q, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>;
