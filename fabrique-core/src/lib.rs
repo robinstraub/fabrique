@@ -9,26 +9,14 @@ use std::marker::PhantomData;
 /// # Example
 ///
 /// ```rust
-/// use fabrique_core::Persistable;
+/// use fabrique::Persistable;
+/// use uuid::Uuid;
 ///
+/// #[derive(Persistable)]
 /// struct Anvil {
-///     id: u32,
-///     weight: u32,
-/// }
-///
-/// impl Persistable for Anvil {
-///     type Connection = ();
-///     type Error = ();
-///
-///     async fn create(self, _connection: &Self::Connection) -> Result<Self, Self::Error> {
-///         println!("saving anvil #{} into database...", &self.id);
-///         Ok(self)
-///     }
-///
-///     async fn all(_connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
-///         println!("fetching all anvils from database...");
-///         Ok(vec![])
-///     }
+///     id: Uuid,
+///     name: String,
+///     weight: i16,
 /// }
 /// ```
 pub trait Persistable: Sized {
@@ -39,7 +27,7 @@ pub trait Persistable: Sized {
     type Error;
 
     /// The query builder type for constructing database queries
-    type QueryBuilder;
+    type QueryBuilder: QueryBuilder;
 
     /// Creates a new query builder for this model.
     ///

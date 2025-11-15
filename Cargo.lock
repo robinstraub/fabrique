@@ -309,7 +309,10 @@ dependencies = [
 name = "fabrique-core"
 version = "0.1.0"
 dependencies = [
+ "fabrique",
+ "fabrique-derive",
  "sqlx",
+ "uuid",
 ]
 
 [[package]]

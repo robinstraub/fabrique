@@ -67,9 +67,41 @@ impl<'a> PersistableCodegen<'a> {
 
     /// Generates the `create()` method.
     fn generate_fn_create(&self) -> TokenStream {
+        // Get field identifiers and names
+        let field_idents: Vec<_> = self
+            .analysis
+            .fields
+            .iter()
+            .filter_map(|field| field.ident.as_ref())
+            .collect();
+
+        let column_names = field_idents
+            .iter()
+            .map(|ident| ident.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        // Generate placeholders ($1, $2, $3, ...)
+        let placeholders = (1..=field_idents.len())
+            .map(|i| format!("${}", i))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let query = format!(
+            "INSERT INTO {} ({}) VALUES ({}) RETURNING {}",
+            self.analysis.table_name, column_names, placeholders, column_names
+        );
+
+        // Generate field bindings (self.field1, self.field2, ...)
+        let field_bindings = field_idents.iter().map(|ident| {
+            quote! { self.#ident }
+        });
+
         quote! {
             async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
-                todo!()
+                sqlx::query_as!(Self, #query, #(#field_bindings),*)
+                    .fetch_one(connection)
+                    .await
             }
         }
     }
@@ -136,7 +168,9 @@ mod tests {
                     type QueryBuilder = AnvilQueryBuilder;
 
                     async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
-                        todo!()
+                        sqlx::query_as!(Self, "INSERT INTO anvils (id) VALUES ($1) RETURNING id", self.id)
+                            .fetch_one(connection)
+                            .await
                     }
 
                     async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
@@ -180,7 +214,7 @@ mod tests {
     #[test]
     fn test_generate_fn_create() {
         // Arrange the codegen
-        let input = parse_quote! { struct Anvil {} };
+        let input = parse_quote! { struct Anvil { id: String } };
         let codegen = PersistableCodegen::from(&input).unwrap();
 
         // Act the call to the generate method
@@ -191,7 +225,9 @@ mod tests {
             result.to_string(),
             quote! {
                 async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
-                    todo!()
+                    sqlx::query_as!(Self, "INSERT INTO anvils (id) VALUES ($1) RETURNING id", self.id)
+                        .fetch_one(connection)
+                        .await
                 }
             }
             .to_string()

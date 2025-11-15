@@ -5,7 +5,7 @@ mod tests {
     use uuid::Uuid;
 
     // Simple struct to test derive macro compilation
-    #[derive(Debug, Factory, Persistable)]
+    #[derive(Debug, Factory, PartialEq, Persistable)]
     #[allow(dead_code)]
     struct Anvil {
         id: Uuid,
@@ -30,5 +30,13 @@ mod tests {
             .await;
 
         assert!(result.is_ok());
+        assert_eq!(
+            result.unwrap(),
+            Anvil {
+                id: Uuid::default(),
+                name: "bipbip obliterator".to_owned(),
+                weight: i16::MAX,
+            }
+        )
     }
 }
