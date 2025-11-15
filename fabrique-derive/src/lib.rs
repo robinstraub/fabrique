@@ -15,16 +15,34 @@ mod factory;
 #[cfg(feature = "sqlx")]
 mod persistable;
 
+#[cfg(feature = "sqlx")]
+mod query_builder;
+
 /// Derives a `Persistable` implementation for the annotated struct.
 #[cfg(feature = "sqlx")]
 #[proc_macro_derive(Persistable, attributes(fabrique))]
 pub fn derive_persistable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let span = input.span();
-    crate::persistable::PersistableCodegen::from(&input)
-        .and_then(|codegen| codegen.generate())
-        .unwrap_or_else(|e| Error::new(span, e).into_compile_error())
-        .into()
+
+    let query_builder_codegen = match crate::query_builder::QueryBuilderCodegen::from(&input) {
+        Ok(codegen) => codegen,
+        Err(e) => return Error::new(span, e).into_compile_error().into(),
+    };
+
+    let persistable = crate::persistable::PersistableCodegen::from(&input)
+        .and_then(|codegen| codegen.generate(&query_builder_codegen))
+        .unwrap_or_else(|e| Error::new(span, e).into_compile_error());
+
+    let query_builder = query_builder_codegen
+        .generate()
+        .unwrap_or_else(|e| Error::new(span, e).into_compile_error());
+
+    quote::quote! {
+        #persistable
+        #query_builder
+    }
+    .into()
 }
 
 /// Derives a factory struct for the annotated type.
