@@ -7,10 +7,11 @@ pub struct PersistableCodegen<'a> {
     /// Analysis output containing fields and relations.
     analysis: &'a Analysis<'a>,
 
-    query_builder: &'a QueryBuilderCodegen,
+    query_builder: &'a QueryBuilderCodegen<'a>,
 }
 
 impl<'a> PersistableCodegen<'a> {
+    /// Creates a new code generator for Persistable trait implementation.
     pub fn new(analysis: &'a Analysis<'a>, query_builder: &'a QueryBuilderCodegen) -> Self {
         Self {
             analysis,
@@ -18,6 +19,12 @@ impl<'a> PersistableCodegen<'a> {
         }
     }
 
+    /// Generates the complete Persistable trait implementation as a token stream.
+    ///
+    /// This method generates:
+    /// - `FromRow` trait implementation for database row mapping
+    /// - `Persistable` trait implementation
+    /// - Column marker constants for type-safe query building
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
         let query_builder_ident = &self.query_builder.query_builder_ident;
@@ -25,8 +32,12 @@ impl<'a> PersistableCodegen<'a> {
         let fn_create = self.generate_fn_create();
         let fn_query = self.generate_fn_query(query_builder_ident);
         let column_constants = self.generate_column_constants();
+        let impl_from_row = self.generate_impl_from_row();
 
         let generated = quote! {
+            #[cfg(feature = "sqlx")]
+            #impl_from_row
+
             impl ::fabrique::Persistable for #base_struct_ident {
                 type Connection = sqlx::Pool<sqlx::Postgres>;
                 type Error = sqlx::Error;
@@ -51,17 +62,7 @@ impl<'a> PersistableCodegen<'a> {
 
     /// Generates the `all()` associated function.
     fn generate_fn_all(&self) -> TokenStream {
-        // Compute the sql column names for the query
-        let column_names = self
-            .analysis
-            .fields
-            .iter()
-            .filter_map(|field| field.ident.as_ref())
-            .map(|ident| ident.to_string())
-            .collect::<Vec<String>>()
-            .join(", ");
-
-        let query = format!("SELECT {} FROM {}", column_names, self.analysis.table_name);
+        let query = &self.analysis.base_select_query;
 
         quote! {
             async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
@@ -144,6 +145,32 @@ impl<'a> PersistableCodegen<'a> {
             }
         }
     }
+
+    /// Generates the `FromRow` trait implementation.
+    fn generate_impl_from_row(&self) -> TokenStream {
+        let base_struct_ident = &self.analysis.ident;
+
+        // Generate field assignments: field_name: row.try_get("field_name")?
+        let field_assignments = self.analysis.fields.iter().map(|field| {
+            let field_ident = field.ident.as_ref().expect("field must have identifier");
+            let column_name = field_ident.to_string();
+
+            quote! {
+                #field_ident: row.try_get(#column_name)?
+            }
+        });
+
+        quote! {
+            impl<'r> ::sqlx::FromRow<'r, ::sqlx::postgres::PgRow> for #base_struct_ident {
+                fn from_row(row: &'r ::sqlx::postgres::PgRow) -> Result<Self, ::sqlx::Error> {
+                    use ::sqlx::Row;
+                    Ok(Self {
+                        #(#field_assignments),*
+                    })
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -167,6 +194,16 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
+                #[cfg(feature = "sqlx")]
+                impl<'r> ::sqlx::FromRow<'r, ::sqlx::postgres::PgRow> for Anvil {
+                    fn from_row(row: &'r ::sqlx::postgres::PgRow) -> Result<Self, ::sqlx::Error> {
+                        use ::sqlx::Row;
+                        Ok(Self {
+                            id: row.try_get("id")?
+                        })
+                    }
+                }
+
                 impl ::fabrique::Persistable for Anvil {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;

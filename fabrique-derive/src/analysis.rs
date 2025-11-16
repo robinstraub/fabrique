@@ -38,8 +38,12 @@ pub struct Analysis<'a> {
     /// The table name for this model.
     #[allow(dead_code)]
     pub table_name: String,
+
+    /// The base SELECT query for this model.
+    pub base_select_query: String,
 }
 
+/// Attributes parsed from `#[fabrique(...)]` struct annotations.
 #[derive(FromDeriveInput)]
 #[darling(attributes(fabrique))]
 pub struct FabriqueAttrs {
@@ -111,10 +115,13 @@ impl<'a> ParsedFields<'a> {
 impl<'a> Analysis<'a> {
     /// Constructs a new analysis.
     pub fn new(fields: &'a Punctuated<Field, Comma>, ident: &'a Ident, table_name: String) -> Self {
+        let base_select_query = Self::compute_base_select_query(fields, &table_name);
+
         Self {
             fields,
             ident,
             table_name,
+            base_select_query,
         }
     }
 
@@ -126,6 +133,18 @@ impl<'a> Analysis<'a> {
             .validate()?;
 
         Ok(analysis)
+    }
+
+    /// Computes the base SELECT query for the given fields and table name.
+    fn compute_base_select_query(fields: &Punctuated<Field, Comma>, table_name: &str) -> String {
+        let column_names = fields
+            .iter()
+            .filter_map(|field| field.ident.as_ref())
+            .map(|ident| ident.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        format!("SELECT {} FROM {}", column_names, table_name)
     }
 }
 

@@ -86,6 +86,15 @@ impl<T> ColumnMarker<T> {
 /// providing a fluent, chainable API for building complex queries.
 #[cfg(feature = "sqlx")]
 pub trait QueryBuilder {
+    /// The model type that this query builder queries
+    type Model;
+
+    /// The database executor type used to run queries
+    type Executor;
+
+    /// The error type returned from query operations
+    type Error;
+
     /// Adds a WHERE clause to the query.
     ///
     /// This method appends a condition to the query using the specified column, operator,
@@ -93,6 +102,15 @@ pub trait QueryBuilder {
     fn r#where<T>(self, column: ColumnMarker<T>, operator: &'static str, value: T) -> Self
     where
         T: 'static + for<'q> sqlx::Encode<'q, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>;
+
+    /// Executes the query and returns all matching rows.
+    ///
+    /// This method finalizes the query and executes it against the database,
+    /// returning a vector of model instances that match the query criteria.
+    fn fetch_all(
+        self,
+        executor: Self::Executor,
+    ) -> impl Future<Output = Result<Vec<Self::Model>, Self::Error>>;
 }
 
 #[cfg(test)]
