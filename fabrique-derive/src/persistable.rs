@@ -117,8 +117,8 @@ impl<'a> PersistableCodegen<'a> {
             .analysis
             .fields
             .iter()
-            .filter_map(|field| {
-                let field_ident = field.ident.as_ref()?;
+            .map(|field| {
+                let field_ident = field.ident.as_ref().expect("field must have identifier");
                 let field_type = &field.ty;
                 let const_name = syn::Ident::new(
                     &field_ident.to_string().to_uppercase(),
@@ -277,5 +277,29 @@ mod tests {
             }
             .to_string()
         )
+    }
+
+    #[test]
+    fn test_generate_column_constants_multiple_fields() {
+        // Arrange the codegen with multiple fields to cover all iterator branches
+        let input = parse_quote! {
+            struct Anvil {
+                id: String,
+                name: String,
+                weight: i32
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
+        let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
+
+        // Act the call to the generate method
+        let result = codegen.generate_column_constants();
+
+        // Assert the result contains all three constants
+        let result_str = result.to_string();
+        assert!(result_str.contains("pub const ID"));
+        assert!(result_str.contains("pub const NAME"));
+        assert!(result_str.contains("pub const WEIGHT"));
     }
 }
