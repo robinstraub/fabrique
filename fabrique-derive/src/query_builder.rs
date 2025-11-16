@@ -61,10 +61,13 @@ impl<'a> QueryBuilderCodegen<'a> {
     /// Generates the `where` method implementation.
     fn generate_fn_where(&self) -> TokenStream {
         quote! {
-            fn r#where<T>(mut self, column: ::fabrique::ColumnMarker<T>, operator: &'static str, value: T) -> Self
+            fn r#where<T, O>(mut self, column: ::fabrique::ColumnMarker<T>, operator: O, value: T) -> Self
             where
-                T: 'static + for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>
+                T: 'static + for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>,
+                O: Into<::fabrique::Operator>
             {
+                let operator: ::fabrique::Operator = operator.into();
+
                 if !self.has_where {
                     self.builder.push(" WHERE ");
                     self.has_where = true;
@@ -74,7 +77,7 @@ impl<'a> QueryBuilderCodegen<'a> {
 
                 self.builder.push(column.name);
                 self.builder.push(" ");
-                self.builder.push(operator);
+                self.builder.push(operator.as_str());
                 self.builder.push(" ");
                 self.builder.push_bind(value);
 
@@ -170,10 +173,13 @@ mod tests {
                     type Executor = ::sqlx::Pool<::sqlx::Postgres>;
                     type Error = ::sqlx::Error;
 
-                    fn r#where<T>(mut self, column: ::fabrique::ColumnMarker<T>, operator: &'static str, value: T) -> Self
+                    fn r#where<T, O>(mut self, column: ::fabrique::ColumnMarker<T>, operator: O, value: T) -> Self
                     where
-                        T: 'static + for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>
+                        T: 'static + for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>,
+                        O: Into<::fabrique::Operator>
                     {
+                        let operator: ::fabrique::Operator = operator.into();
+
                         if !self.has_where {
                             self.builder.push(" WHERE ");
                             self.has_where = true;
@@ -183,7 +189,7 @@ mod tests {
 
                         self.builder.push(column.name);
                         self.builder.push(" ");
-                        self.builder.push(operator);
+                        self.builder.push(operator.as_str());
                         self.builder.push(" ");
                         self.builder.push_bind(value);
 
@@ -219,10 +225,13 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                fn r#where<T>(mut self, column: ::fabrique::ColumnMarker<T>, operator: &'static str, value: T) -> Self
+                fn r#where<T, O>(mut self, column: ::fabrique::ColumnMarker<T>, operator: O, value: T) -> Self
                 where
-                    T: 'static + for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>
+                    T: 'static + for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>,
+                    O: Into<::fabrique::Operator>
                 {
+                    let operator: ::fabrique::Operator = operator.into();
+
                     if !self.has_where {
                         self.builder.push(" WHERE ");
                         self.has_where = true;
@@ -232,7 +241,7 @@ mod tests {
 
                     self.builder.push(column.name);
                     self.builder.push(" ");
-                    self.builder.push(operator);
+                    self.builder.push(operator.as_str());
                     self.builder.push(" ");
                     self.builder.push_bind(value);
 
