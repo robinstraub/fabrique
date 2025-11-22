@@ -10,3 +10,14 @@ documentation = "https://docs.rs/fabrique-core"
 
 
 [dependencies]
+sqlx = { workspace = true, optional = true }
+
+[dev-dependencies]
+fabrique-derive = { path = "../fabrique-derive", features = ["sqlx"] }
+fabrique = { path = "../fabrique", features = ["sqlx"] }
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "uuid"] }
+uuid = "1"
+
+[features]
+default = []
+sqlx = ["dep:sqlx"]

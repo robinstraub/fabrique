@@ -163,6 +163,10 @@ impl FactoryCodegen {
         }
     }
 
+    /// Generates setter methods for each field in the factory struct.
+    ///
+    /// Each setter method takes a value and stores it in the factory's optional field,
+    /// enabling a fluent builder pattern for constructing objects.
     fn generate_factory_method_fields(&self) -> impl Iterator<Item = TokenStream> {
         self.analysis.fields.clone().into_iter().map(|field| {
             let name = &field.field.ident;

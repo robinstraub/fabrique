@@ -10,15 +10,19 @@ pub struct FactoryAnalysis {
     input: DeriveInput,
 }
 
+/// Attributes parsed from `#[fabrique(...)]` field annotations.
 #[derive(FromField, Debug, Default, Clone)]
 #[darling(attributes(fabrique))]
 pub struct FabriqueFieldAttributes {
+    /// Whether this field is a primary key
     #[darling(default)]
     primary_key: bool,
 
+    /// The type referenced by this relation field
     #[darling(default)]
     relation: Option<Ident>,
 
+    /// The key field of the referenced type
     #[darling(default)]
     referenced_key: Option<Ident>,
 }
@@ -85,6 +89,11 @@ pub struct FactoryAnalysisOutput {
 }
 
 impl FactoryAnalysisOutput {
+    /// Returns an iterator over all fields that have factory relations.
+    ///
+    /// This method filters the struct's fields to only include those marked with
+    /// the `#[fabrique(relation = "...")]` attribute, returning tuples of the
+    /// field and its corresponding relation metadata.
     pub fn relations(&self) -> impl Iterator<Item = (&Field, &Relation)> {
         self.fields.iter().filter_map(|field| {
             field
@@ -95,11 +104,15 @@ impl FactoryAnalysisOutput {
     }
 }
 
+/// Analysis output for a single factory field.
 #[derive(Debug, Clone)]
 pub struct FactoryFieldAnalysisOutput {
+    /// The original field from the struct
     pub field: Field,
+    /// Whether this field is marked as a primary key
     #[allow(dead_code)]
     pub primary_key: bool,
+    /// Relation metadata if this field references another model
     pub relation: Option<Relation>,
 }
 

@@ -3,3 +3,6 @@
 members = ["fabrique-derive", "fabrique", "fabrique-core"]
 
 resolver = "3"
+
+[workspace.dependencies]
+sqlx = { version = "0.8", features = ["postgres"] }
