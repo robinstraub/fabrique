@@ -35,20 +35,17 @@ impl<'a> PersistableCodegen<'a> {
         let impl_from_row = self.generate_impl_from_row();
 
         let generated = quote! {
-            #[cfg(feature = "sqlx")]
             #impl_from_row
 
             impl ::fabrique::Persistable for #base_struct_ident {
                 type Connection = sqlx::Pool<sqlx::Postgres>;
                 type Error = sqlx::Error;
 
-                #[cfg(feature = "sqlx")]
                 type QueryBuilder = #query_builder_ident;
 
                 #fn_create
                 #fn_all
 
-                #[cfg(feature = "sqlx")]
                 #fn_query
             }
 
