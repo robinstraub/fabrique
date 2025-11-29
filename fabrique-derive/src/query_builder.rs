@@ -37,15 +37,12 @@ impl<'a> QueryBuilderCodegen<'a> {
         let fetch_all = self.generate_fetch_all();
 
         quote! {
-            #[cfg(feature = "sqlx")]
             #struct_query_builder
 
-            #[cfg(feature = "sqlx")]
             impl #ident {
                 #fn_new
             }
 
-            #[cfg(feature = "sqlx")]
             impl ::fabrique::QueryBuilder for #ident {
                 type Model = #base_struct_ident;
                 type Executor = ::sqlx::Pool<::sqlx::Postgres>;
@@ -150,13 +147,11 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                #[cfg(feature = "sqlx")]
                 pub struct AnvilQueryBuilder {
                     builder: ::sqlx::query_builder::QueryBuilder<'static, ::sqlx::Postgres>,
                     has_where: bool,
                 }
 
-                #[cfg(feature = "sqlx")]
                 impl AnvilQueryBuilder {
                     pub fn new() -> Self {
                         let builder = ::sqlx::query_builder::QueryBuilder::new("SELECT id FROM anvils");
@@ -167,7 +162,6 @@ mod tests {
                     }
                 }
 
-                #[cfg(feature = "sqlx")]
                 impl ::fabrique::QueryBuilder for AnvilQueryBuilder {
                     type Model = Anvil;
                     type Executor = ::sqlx::Pool<::sqlx::Postgres>;
