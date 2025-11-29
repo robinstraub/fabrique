@@ -191,7 +191,6 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                #[cfg(feature = "sqlx")]
                 impl<'r> ::sqlx::FromRow<'r, ::sqlx::postgres::PgRow> for Anvil {
                     fn from_row(row: &'r ::sqlx::postgres::PgRow) -> Result<Self, ::sqlx::Error> {
                         use ::sqlx::Row;
@@ -205,7 +204,6 @@ mod tests {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
 
-                    #[cfg(feature = "sqlx")]
                     type QueryBuilder = AnvilQueryBuilder;
 
                     async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
@@ -218,7 +216,6 @@ mod tests {
                         sqlx::query_as!(Self, "SELECT id FROM anvils").fetch_all(connection).await
                     }
 
-                    #[cfg(feature = "sqlx")]
                     fn query() -> Self::QueryBuilder {
                         AnvilQueryBuilder::new()
                     }
