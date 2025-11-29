@@ -92,7 +92,7 @@ impl<'a> PersistableCodegen<'a> {
 
         let query = format!(
             "INSERT INTO {} ({}) VALUES ({}) RETURNING {}",
-            self.analysis.table_name, column_names, placeholders, column_names
+            self.analysis.model.table_name, column_names, placeholders, column_names
         );
 
         // Generate field bindings (self.field1, self.field2, ...)
