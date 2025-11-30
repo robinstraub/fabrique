@@ -20,4 +20,7 @@ pub enum Error {
 
     #[error("Missing `referenced_key` attribute for relation {0}")]
     MissingReferencedKey(String),
+
+    #[error("Missing `relation` value")]
+    MissingRelation,
 }

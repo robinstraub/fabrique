@@ -4,7 +4,7 @@
 //! - `#[derive(Factory)]` - Generates factory structs with optional fields for flexible object creation
 //! - `#[derive(Persistable)]` - Generates persistence implementations for data storage
 
-use crate::factory::FactoryCodegen;
+use crate::{analysis::Analysis, factory::FactoryCodegen};
 use proc_macro::TokenStream;
 use syn::{DeriveInput, Error, parse_macro_input, spanned::Spanned};
 
@@ -53,8 +53,13 @@ pub fn derive_persistable(input: TokenStream) -> TokenStream {
 pub fn derive_factory(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let span = input.span();
-    FactoryCodegen::from(input)
-        .map(|codegen| codegen.generate_factory())
-        .unwrap_or_else(|e| Error::new(span, e).into_compile_error())
-        .into()
+
+    let analysis = match Analysis::from(&input) {
+        Ok(analysis) => analysis,
+        Err(e) => {
+            return Error::new(span, e).into_compile_error().into();
+        }
+    };
+
+    FactoryCodegen::new(&analysis).generate_factory().into()
 }

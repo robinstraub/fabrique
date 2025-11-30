@@ -34,7 +34,7 @@ pub struct ParsedStruct<'a> {
 
 /// Validated and parsed fields.
 pub struct ParsedFields<'a> {
-    fields: Vec<ModelField<'a>>,
+    fields: Vec<ModelField>,
     ident: &'a Ident,
     model: Model,
 }
@@ -80,8 +80,8 @@ impl<'a> ParsedStruct<'a> {
         let fields = fields
             .iter()
             .map(|field| {
-                let attributes = ModelFieldAttrs::from_field(field)?;
-                Ok(ModelField::new(field, attributes))
+                let attrs = ModelFieldAttrs::from_field(field)?;
+                ModelField::try_from(attrs)
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
@@ -90,7 +90,7 @@ impl<'a> ParsedStruct<'a> {
 }
 
 impl<'a> ParsedFields<'a> {
-    pub fn new(previous_step: ParsedStruct<'a>, fields: Vec<ModelField<'a>>) -> Self {
+    pub fn new(previous_step: ParsedStruct<'a>, fields: Vec<ModelField>) -> Self {
         Self {
             ident: previous_step.ident,
             fields,
@@ -114,8 +114,7 @@ impl<'a> ParsedFields<'a> {
 fn base_select_query(fields: &Vec<ModelField>, table_name: &str) -> String {
     let column_names = fields
         .iter()
-        .filter_map(|field| field.ident.as_ref())
-        .map(|ident| ident.to_string())
+        .map(|field| field.ident.to_string())
         .collect::<Vec<String>>()
         .join(", ");
 

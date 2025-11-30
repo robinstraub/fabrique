@@ -1,16 +1,16 @@
-use crate::analysis::ast::{Model, ModelField};
+use crate::analysis::ast::{Model, ModelField, Relation};
 use crate::analysis::steps::Input;
 use crate::error::Error;
 use syn::{DeriveInput, Ident};
 
-mod ast;
+pub mod ast;
 mod steps;
 
 /// Completed analysis containing parsed input and validated metadata.
 #[derive(Debug)]
 pub struct Analysis<'a> {
     /// Named fields of the analyzed struct.
-    pub fields: Vec<ModelField<'a>>,
+    pub fields: Vec<ModelField>,
 
     /// Identifier of the analyzed struct.
     #[allow(dead_code)]
@@ -29,5 +29,13 @@ impl<'a> Analysis<'a> {
         let analysis = Input::new(input).parse_struct()?.parse_fields()?.build()?;
 
         Ok(analysis)
+    }
+
+    pub fn relations(&self) -> impl Iterator<Item = (&ModelField, &Relation)> {
+        self.fields.iter().filter_map(|field| {
+            let relation = field.relation.as_ref()?;
+
+            Some((field, relation))
+        })
     }
 }
