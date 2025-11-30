@@ -39,7 +39,7 @@ pub struct ModelFieldAttrs {
 
     /// Wether this field is a primary key
     #[darling(default)]
-    primary_key: bool,
+    _primary_key: bool,
 
     /// The type referenced by this relation field
     #[darling(default)]
@@ -65,7 +65,7 @@ pub struct Relation {
 #[derive(Debug)]
 pub struct ModelField {
     /// Type marker to (de)serialize from/to the persistance layer.
-    pub r#as: Option<Type>,
+    pub _as: Option<Type>,
 
     /// The field ident.
     pub ident: Ident,
@@ -106,7 +106,7 @@ impl ModelField {
         };
 
         Ok(Self {
-            r#as: attrs.r#as,
+            _as: attrs.r#as,
             ident,
             relation,
             span: attrs.span,

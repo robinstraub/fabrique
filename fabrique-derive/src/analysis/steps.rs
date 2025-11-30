@@ -111,7 +111,7 @@ impl<'a> ParsedFields<'a> {
     }
 }
 
-fn base_select_query(fields: &Vec<ModelField>, table_name: &str) -> String {
+fn base_select_query(fields: &[ModelField], table_name: &str) -> String {
     let column_names = fields
         .iter()
         .map(|field| field.ident.to_string())

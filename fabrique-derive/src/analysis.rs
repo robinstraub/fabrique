@@ -9,6 +9,9 @@ mod steps;
 /// Completed analysis containing parsed input and validated metadata.
 #[derive(Debug)]
 pub struct Analysis<'a> {
+    /// The base SELECT query for this model.
+    pub base_select_query: String,
+
     /// Named fields of the analyzed struct.
     pub fields: Vec<ModelField>,
 
@@ -18,9 +21,6 @@ pub struct Analysis<'a> {
 
     /// The model information.
     pub model: Model,
-
-    /// The base SELECT query for this model.
-    pub base_select_query: String,
 }
 
 impl<'a> Analysis<'a> {
