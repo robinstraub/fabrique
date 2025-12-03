@@ -15,6 +15,7 @@ proc-macro = true
 sqlx = ["dep:sqlx"]
 
 [dependencies]
+aquamarine = { workspace = true }
 darling = "0.21"
 fabrique-core = { path = "../fabrique-core", version = "0.1.0" }
 proc-macro2 = "1.0"

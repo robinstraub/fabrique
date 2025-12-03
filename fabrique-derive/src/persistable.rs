@@ -71,32 +71,29 @@ impl<'a> PersistableCodegen<'a> {
     /// Generates the `create()` method.
     fn generate_fn_create(&self) -> TokenStream {
         // Get field identifiers and names
-        let field_idents: Vec<_> = self
+
+        let column_names = self
             .analysis
             .fields
             .iter()
-            .filter_map(|field| field.ident.as_ref())
-            .collect();
-
-        let column_names = field_idents
-            .iter()
-            .map(|ident| ident.to_string())
+            .map(|fields| fields.ident.to_string())
             .collect::<Vec<String>>()
             .join(", ");
 
         // Generate placeholders ($1, $2, $3, ...)
-        let placeholders = (1..=field_idents.len())
+        let placeholders = (1..=self.analysis.fields.len())
             .map(|i| format!("${}", i))
             .collect::<Vec<String>>()
             .join(", ");
 
         let query = format!(
             "INSERT INTO {} ({}) VALUES ({}) RETURNING {}",
-            self.analysis.table_name, column_names, placeholders, column_names
+            self.analysis.model.table_name, column_names, placeholders, column_names
         );
 
         // Generate field bindings (self.field1, self.field2, ...)
-        let field_bindings = field_idents.iter().map(|ident| {
+        let field_bindings = self.analysis.fields.iter().map(|field| {
+            let ident = &field.ident;
             quote! { self.#ident }
         });
 
@@ -116,7 +113,7 @@ impl<'a> PersistableCodegen<'a> {
             .fields
             .iter()
             .map(|field| {
-                let field_ident = field.ident.as_ref().expect("field must have identifier");
+                let field_ident = &field.ident;
                 let field_type = &field.ty;
                 let const_name = syn::Ident::new(
                     &field_ident.to_string().to_uppercase(),
@@ -149,7 +146,7 @@ impl<'a> PersistableCodegen<'a> {
 
         // Generate field assignments: field_name: row.try_get("field_name")?
         let field_assignments = self.analysis.fields.iter().map(|field| {
-            let field_ident = field.ident.as_ref().expect("field must have identifier");
+            let field_ident = &field.ident;
             let column_name = field_ident.to_string();
 
             quote! {
