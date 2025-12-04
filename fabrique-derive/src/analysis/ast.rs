@@ -39,7 +39,8 @@ pub struct ModelFieldAttrs {
 
     /// Wether this field is a primary key
     #[darling(default)]
-    _primary_key: bool,
+    #[allow(dead_code)]
+    primary_key: bool,
 
     /// The type referenced by this relation field
     #[darling(default)]
