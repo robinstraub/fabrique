@@ -32,10 +32,8 @@ impl<'a> PersistableCodegen<'a> {
         let fn_create = self.generate_fn_create();
         let fn_query = self.generate_fn_query(query_builder_ident);
         let column_constants = self.generate_column_constants();
-        let impl_from_row = self.generate_impl_from_row();
 
         let generated = quote! {
-            #impl_from_row
 
             impl ::fabrique::Persistable for #base_struct_ident {
                 type Connection = sqlx::Pool<sqlx::Postgres>;
@@ -72,7 +70,7 @@ impl<'a> PersistableCodegen<'a> {
     fn generate_fn_create(&self) -> TokenStream {
         // Get field identifiers and names
 
-        let column_names = self
+        let columns = self
             .analysis
             .fields
             .iter()
@@ -88,7 +86,7 @@ impl<'a> PersistableCodegen<'a> {
 
         let query = format!(
             "INSERT INTO {} ({}) VALUES ({}) RETURNING {}",
-            self.analysis.model.table_name, column_names, placeholders, column_names
+            self.analysis.model.table_name, columns, placeholders, self.analysis.returning,
         );
 
         // Generate field bindings (self.field1, self.field2, ...)
@@ -139,32 +137,6 @@ impl<'a> PersistableCodegen<'a> {
             }
         }
     }
-
-    /// Generates the `FromRow` trait implementation.
-    fn generate_impl_from_row(&self) -> TokenStream {
-        let base_struct_ident = &self.analysis.ident;
-
-        // Generate field assignments: field_name: row.try_get("field_name")?
-        let field_assignments = self.analysis.fields.iter().map(|field| {
-            let field_ident = &field.ident;
-            let column_name = field_ident.to_string();
-
-            quote! {
-                #field_ident: row.try_get(#column_name)?
-            }
-        });
-
-        quote! {
-            impl<'r> ::sqlx::FromRow<'r, ::sqlx::postgres::PgRow> for #base_struct_ident {
-                fn from_row(row: &'r ::sqlx::postgres::PgRow) -> Result<Self, ::sqlx::Error> {
-                    use ::sqlx::Row;
-                    Ok(Self {
-                        #(#field_assignments),*
-                    })
-                }
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -188,15 +160,6 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                impl<'r> ::sqlx::FromRow<'r, ::sqlx::postgres::PgRow> for Anvil {
-                    fn from_row(row: &'r ::sqlx::postgres::PgRow) -> Result<Self, ::sqlx::Error> {
-                        use ::sqlx::Row;
-                        Ok(Self {
-                            id: row.try_get("id")?
-                        })
-                    }
-                }
-
                 impl ::fabrique::Persistable for Anvil {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
@@ -204,13 +167,13 @@ mod tests {
                     type QueryBuilder = AnvilQueryBuilder;
 
                     async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
-                        sqlx::query_as!(Self, "INSERT INTO anvils (id) VALUES ($1) RETURNING id", self.id)
+                        sqlx::query_as!(Self, "INSERT INTO anvils (id) VALUES ($1) RETURNING id as \"id: String\"", self.id)
                             .fetch_one(connection)
                             .await
                     }
 
                     async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
-                        sqlx::query_as!(Self, "SELECT id FROM anvils").fetch_all(connection).await
+                        sqlx::query_as!(Self, "SELECT id as \"id: String\" FROM anvils").fetch_all(connection).await
                     }
 
                     fn query() -> Self::QueryBuilder {
@@ -242,7 +205,7 @@ mod tests {
             result.to_string(),
             quote! {
                 async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
-                    sqlx::query_as!(Self, "SELECT id FROM anvils").fetch_all(connection).await
+                    sqlx::query_as!(Self, "SELECT id as \"id: String\" FROM anvils").fetch_all(connection).await
                 }
             }
             .to_string()
@@ -265,7 +228,7 @@ mod tests {
             result.to_string(),
             quote! {
                 async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
-                    sqlx::query_as!(Self, "INSERT INTO anvils (id) VALUES ($1) RETURNING id", self.id)
+                    sqlx::query_as!(Self, "INSERT INTO anvils (id) VALUES ($1) RETURNING id as \"id: String\"", self.id)
                         .fetch_one(connection)
                         .await
                 }

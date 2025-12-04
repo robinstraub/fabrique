@@ -1,5 +1,6 @@
 use darling::{FromDeriveInput, FromField};
 use proc_macro2::Span;
+use quote::quote;
 use syn::{Ident, Type};
 
 use crate::error::Error;
@@ -68,6 +69,9 @@ pub struct ModelField {
     /// Type marker to (de)serialize from/to the persistance layer.
     pub _as: Option<Type>,
 
+    /// The column name with its type marker.
+    pub column: String,
+
     /// The field ident.
     pub ident: Ident,
 
@@ -86,6 +90,9 @@ impl ModelField {
         let ident = attrs
             .ident
             .ok_or(Error::UnsupportedDataStructureTupleStruct)?;
+
+        let ty = &attrs.ty;
+        let column = format!(r#"{} as "{}: {}""#, ident, ident, quote!(#ty));
 
         let relation = match attrs.relation {
             Some(referenced_type) => {
@@ -108,6 +115,7 @@ impl ModelField {
 
         Ok(Self {
             _as: attrs.r#as,
+            column,
             ident,
             relation,
             span: attrs.span,

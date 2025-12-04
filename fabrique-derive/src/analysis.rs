@@ -21,6 +21,9 @@ pub struct Analysis<'a> {
 
     /// The model information.
     pub model: Model,
+
+    /// The returning type mappings.
+    pub returning: String,
 }
 
 impl<'a> Analysis<'a> {

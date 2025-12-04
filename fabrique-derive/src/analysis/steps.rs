@@ -100,25 +100,22 @@ impl<'a> ParsedFields<'a> {
 
     /// Builds the final analysis.
     pub fn build(self) -> Result<Analysis<'a>, Error> {
-        let base_select_query = base_select_query(&self.fields, &self.model.table_name);
+        let returning = self
+            .fields
+            .iter()
+            .map(|fields| fields.column.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+        let base_select_query = format!("SELECT {} FROM {}", &returning, &self.model.table_name);
 
         Ok(Analysis {
             base_select_query,
+            returning,
             fields: self.fields,
             ident: self.ident,
             model: self.model,
         })
     }
-}
-
-fn base_select_query(fields: &[ModelField], table_name: &str) -> String {
-    let column_names = fields
-        .iter()
-        .map(|field| field.ident.to_string())
-        .collect::<Vec<String>>()
-        .join(", ");
-
-    format!("SELECT {} FROM {}", column_names, table_name)
 }
 
 #[cfg(test)]
