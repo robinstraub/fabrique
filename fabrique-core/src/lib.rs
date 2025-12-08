@@ -91,14 +91,12 @@ pub trait Persistable: Sized {
     type Error;
 
     /// The query builder type for constructing database queries
-    #[cfg(feature = "sqlx")]
     type QueryBuilder: QueryBuilder;
 
     /// Creates a new query builder for this model.
     ///
     /// This method returns a query builder that allows chaining where clauses
     /// to construct type-safe database queries with compile-time column validation.
-    #[cfg(feature = "sqlx")]
     fn query() -> Self::QueryBuilder;
 
     /// Creates and persists this object using the provided connection.
@@ -148,7 +146,6 @@ impl<T> ColumnMarker<T> {
 /// Query builders enable constructing SQL queries with compile-time safety by requiring
 /// column names to be static strings. This prevents dynamic column name injection while
 /// providing a fluent, chainable API for building complex queries.
-#[cfg(feature = "sqlx")]
 pub trait QueryBuilder {
     /// The model type that this query builder queries
     type Model;
