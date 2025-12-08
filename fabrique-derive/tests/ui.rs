@@ -3,10 +3,7 @@ fn ui() {
     let t = trybuild::TestCases::new();
     t.compile_fail("tests/ui/*.rs");
 
-    // derive_persistable (only when sqlx feature is enabled)
-    #[cfg(feature = "sqlx")]
-    {
-        t.pass("tests/ui/persistable/pass/*.rs");
-        t.compile_fail("tests/ui/persistable/fail/*.rs");
-    }
+    // derive_persistable tests
+    t.pass("tests/ui/persistable/pass/*.rs");
+    t.compile_fail("tests/ui/persistable/fail/*.rs");
 }

@@ -11,15 +11,10 @@ use syn::{DeriveInput, Error, parse_macro_input, spanned::Spanned};
 mod analysis;
 mod error;
 mod factory;
-
-#[cfg(feature = "sqlx")]
 mod persistable;
-
-#[cfg(feature = "sqlx")]
 mod query_builder;
 
 /// Derives a `Persistable` implementation for the annotated struct.
-#[cfg(feature = "sqlx")]
 #[proc_macro_derive(Persistable, attributes(fabrique))]
 pub fn derive_persistable(input: TokenStream) -> TokenStream {
     use crate::{
