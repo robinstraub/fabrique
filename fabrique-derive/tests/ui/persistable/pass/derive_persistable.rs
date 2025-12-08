@@ -1,8 +1,7 @@
 use fabrique_derive::Persistable;
-use sqlx::FromRow;
 use uuid::Uuid;
 
-#[derive(Persistable, FromRow)]
+#[derive(Persistable)]
 pub struct Anvil {
     pub id: Uuid,
 }
