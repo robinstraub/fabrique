@@ -1,6 +1,5 @@
 use darling::{FromDeriveInput, FromField};
 use proc_macro2::Span;
-use quote::quote;
 use syn::{Ident, Type};
 
 use crate::error::Error;
@@ -33,7 +32,7 @@ impl Model {
 #[darling(attributes(fabrique))]
 pub struct ModelFieldAttrs {
     /// The database type for conversion
-    #[darling(default)]
+    #[darling(default, rename = "as")]
     r#as: Option<Type>,
 
     ident: Option<Ident>,
@@ -91,8 +90,8 @@ impl ModelField {
             .ident
             .ok_or(Error::UnsupportedDataStructureTupleStruct)?;
 
-        let ty = &attrs.ty;
-        let column = format!(r#"{} as "{}: {}""#, ident, ident, quote!(#ty));
+        // Simple column name without type annotations (for runtime queries)
+        let column = ident.to_string();
 
         let relation = match attrs.relation {
             Some(referenced_type) => {

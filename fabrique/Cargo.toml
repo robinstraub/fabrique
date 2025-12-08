@@ -17,6 +17,8 @@ fabrique-derive = { path = "../fabrique-derive", version = "0.1.0" }
 
 [dev-dependencies]
 fabrique = { path = ".", features = ["sqlx"] }
+strum = "0.27"
+strum_macros = "0.27"
 tokio = { version = "1.0", features = ["rt", "macros"] }
 sqlx = { workspace = true, features = ["runtime-tokio-rustls", "uuid"] }
 uuid = "1"

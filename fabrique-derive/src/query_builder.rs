@@ -154,7 +154,7 @@ mod tests {
 
                 impl AnvilQueryBuilder {
                     pub fn new() -> Self {
-                        let builder = ::sqlx::query_builder::QueryBuilder::new("SELECT id as \"id: String\" FROM anvils");
+                        let builder = ::sqlx::query_builder::QueryBuilder::new("SELECT id FROM anvils");
                         Self {
                             builder,
                             has_where: false,
