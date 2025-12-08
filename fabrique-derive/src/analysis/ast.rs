@@ -32,14 +32,15 @@ impl Model {
 #[darling(attributes(fabrique))]
 pub struct ModelFieldAttrs {
     /// The database type for conversion
-    #[darling(default)]
+    #[darling(default, rename = "as")]
     r#as: Option<Type>,
 
     ident: Option<Ident>,
 
     /// Wether this field is a primary key
     #[darling(default)]
-    _primary_key: bool,
+    #[allow(dead_code)]
+    primary_key: bool,
 
     /// The type referenced by this relation field
     #[darling(default)]
@@ -67,6 +68,9 @@ pub struct ModelField {
     /// Type marker to (de)serialize from/to the persistance layer.
     pub _as: Option<Type>,
 
+    /// The column name with its type marker.
+    pub column: String,
+
     /// The field ident.
     pub ident: Ident,
 
@@ -85,6 +89,9 @@ impl ModelField {
         let ident = attrs
             .ident
             .ok_or(Error::UnsupportedDataStructureTupleStruct)?;
+
+        // Simple column name without type annotations (for runtime queries)
+        let column = ident.to_string();
 
         let relation = match attrs.relation {
             Some(referenced_type) => {
@@ -107,6 +114,7 @@ impl ModelField {
 
         Ok(Self {
             _as: attrs.r#as,
+            column,
             ident,
             relation,
             span: attrs.span,
