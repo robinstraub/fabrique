@@ -164,17 +164,25 @@ impl<'a> PersistableCodegen<'a> {
     }
 
     fn generate_fn_delete(&self) -> TokenStream {
-        let query = format!(
-            "DELETE FROM {} WHERE id = $1",
-            self.analysis.model.table_name
-        );
-
-        let bindings = self
+        let primary_key = self
             .analysis
             .fields
             .iter()
-            .filter(|field| field.primary_key)
-            .map(|ModelField { ident, .. }| quote! { self.#ident });
+            .filter(|field| field.primary_key);
+
+        let clause = primary_key
+            .clone()
+            .enumerate()
+            .map(|(i, field)| format!("{} = ${}", field.ident, i + 1))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+
+        let query = format!(
+            "DELETE FROM {} WHERE {}",
+            self.analysis.model.table_name, clause
+        );
+
+        let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
 
         quote! {
             async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
@@ -403,9 +411,54 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_fn_delete() {
+    fn test_generate_fn_destroy() {
         // Arrange the codegen
-        let input = parse_quote! { struct Anvil { id: String } };
+        let input = parse_quote! {
+            struct Anvil {
+                #[fabrique(primary_key)]
+                first_name: String,
+
+                #[fabrique(primary_key)]
+                last_name: String,
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
+        let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
+
+        // Act the call to the generate method
+        let result = codegen.generate_fn_destroy();
+
+        // Assert the result
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                    sqlx::query("DELETE FROM anvils WHERE first_name = $1 AND last_name = $2")
+                        .bind(id.0)
+                        .bind(id.1)
+                        .execute(connection)
+                        .await?;
+
+                    Ok(())
+                }
+            }
+            .to_string()
+        )
+    }
+
+    #[test]
+    fn test_generate_fn_delete_on_composite_keys() {
+        // Arrange the codegen
+        let input = parse_quote! {
+            struct Anvil {
+                #[fabrique(primary_key)]
+                first_name: String,
+
+                #[fabrique(primary_key)]
+                last_name: String,
+            }
+        };
         let analysis = Analysis::from(&input).unwrap();
         let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
         let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
@@ -418,8 +471,9 @@ mod tests {
             result.to_string(),
             quote! {
                 async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                    sqlx::query("DELETE FROM anvils WHERE id = $1")
-                        .bind(self.id)
+                    sqlx::query("DELETE FROM anvils WHERE first_name = $1 AND last_name = $2")
+                        .bind(self.first_name)
+                        .bind(self.last_name)
                         .execute(connection)
                         .await?;
 
