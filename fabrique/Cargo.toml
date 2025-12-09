@@ -1,6 +1,6 @@
 [package]
 name = "fabrique"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A lightweight ORM for Rust inspired by Laravel Eloquent, with built-in factories for testing"
 license = "MIT"
@@ -12,8 +12,8 @@ documentation = "https://docs.rs/fabrique"
 all-features = true
 
 [dependencies]
-fabrique-core = { path = "../fabrique-core", version = "0.1.0" }
-fabrique-derive = { path = "../fabrique-derive", version = "0.1.0" }
+fabrique-core = { path = "../fabrique-core", version = "0.1.1" }
+fabrique-derive = { path = "../fabrique-derive", version = "0.1.1" }
 
 [dev-dependencies]
 fabrique = { path = "." }
