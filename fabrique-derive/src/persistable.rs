@@ -540,4 +540,33 @@ mod tests {
         assert!(result_str.contains("pub const NAME"));
         assert!(result_str.contains("pub const WEIGHT"));
     }
+
+    #[test]
+    fn test_generate_ty_primary_keys_on_composite_keys() {
+        // Arrange the codegen
+        let input = parse_quote! {
+            struct Anvil {
+                #[fabrique(primary_key)]
+                first_name: String,
+
+                #[fabrique(primary_key)]
+                last_name: String,
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
+        let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
+
+        // Act the call to the generate method
+        let result = codegen.generate_ty_primary_key();
+
+        // Assert the result
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                (String, String)
+            }
+            .to_string()
+        )
+    }
 }
