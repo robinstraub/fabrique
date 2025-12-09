@@ -3,27 +3,72 @@
 //! Fabrique provides an ergonomic interface for database interactions, combining
 //! expressive query building with model-driven persistence and factory-based test data generation.
 //!
-//! # A tour of Fabrique
+//! # Inserting and Updating Models
 //!
-//! Fabrique centers around three concepts: models derive [`Persistable`] to interact with the database,
-//! use the [`QueryBuilder`] for type-safe queries, and leverage [`Factory`] to generate test data.
+//! ## Inserts
 //!
-//! ## Persistable
+//! To insert a new record into the database, you should instantiate a new model
+//! instance and set attributes on the model. Then, call the `create` method on
+//! the model instance:
 //!
-//! Derive `Persistable` on your models to enable database operations. The macro generates methods
-//! for creating records, querying all instances, and building queries with column constants.
+//! ```rust,no_run
+//! # use fabrique_core::Persistable;
+//! # use fabrique_derive::{Factory, Persistable};
+//! # use sqlx::PgPool;
+//! #
+//! # #[derive(Factory, Persistable)]
+//! # pub struct Anvil {
+//! #     id: uuid::Uuid,
+//! # }
+//! #
+//! # async fn example(connection: &PgPool, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! anvil.create(&connection).await?;
+//! #     Ok(())
+//! # }
+//! ```
 //!
-//! ## QueryBuilder
+//! # Deleting Models
 //!
-//! Build queries using generated column constants that enforce type safety. The query builder
-//! prevents passing values of the wrong type to WHERE clauses at compile time.
+//! To delete a model, you may call the `delete` method on the model instance:
 //!
-//! ## Factory
+//! ```rust,no_run
+//! # use fabrique_core::Persistable;
+//! # use fabrique_derive::{Factory, Persistable};
+//! # use sqlx::PgPool;
+//! #
+//! # #[derive(Factory, Persistable)]
+//! # pub struct Anvil {
+//! #     id: uuid::Uuid,
+//! # }
+//! #
+//! # async fn example(connection: &PgPool, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! anvil.delete(&connection).await?;
+//! #     Ok(())
+//! # }
+//! ```
 //!
-//! Generate test data with the factory pattern. Derive `Factory` to create builder instances
-//! with optional fields, making test setup concise and readable.
+//! ## Deleting an Existing Model by its Primary Key
 //!
-
+//! In the example above, we are retrieving the model from the database before calling
+//! the delete method. However, if you know the primary key of the model, you may delete
+//! the model without explicitly retrieving it by calling the destroy method.
+//!
+//! ```rust,no_run
+//! # use fabrique_core::Persistable;
+//! # use fabrique_derive::{Factory, Persistable};
+//! # use sqlx::PgPool;
+//! # use uuid::Uuid;
+//! #
+//! # #[derive(Factory, Persistable)]
+//! # pub struct Anvil {
+//! #     id: uuid::Uuid,
+//! # }
+//! #
+//! # async fn example(connection: &PgPool, id: Uuid) -> Result<(), sqlx::Error> {
+//! Anvil::destroy(&connection, id).await?;
+//! #     Ok(())
+//! # }
+//! ```
 pub use fabrique_core::QueryBuilder;
 pub use fabrique_core::{ColumnMarker, Operator, Persistable};
 pub use fabrique_derive::Factory;

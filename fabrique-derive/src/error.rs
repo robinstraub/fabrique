@@ -18,6 +18,9 @@ pub enum Error {
     #[error("Factory can only be derived from named structs, unit struct given")]
     UnsupportedDataStructureUnitStruct,
 
+    #[error("Missing primary key, either add an id column or mark an existing column as primary")]
+    MissingPrimaryKey,
+
     #[error("Missing `referenced_key` attribute for relation {0}")]
     MissingReferencedKey(String),
 }

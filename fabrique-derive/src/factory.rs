@@ -253,6 +253,7 @@ mod tests {
         // Arrange the codegen
         let input = parse_quote! {
             struct Anvil {
+                id: u32,
                 #[fabrique(relation = "Hammer", referenced_key = "id")]
                 hammer_id: u32,
                 hardness: u32,
@@ -275,6 +276,7 @@ mod tests {
                     }
                 }
                 pub struct AnvilFactory {
+                    id: std::option::Option<u32>,
                     hammer_id: std::option::Option<u32>,
                     hardness: std::option::Option<u32>,
                     weight: std::option::Option<u32>,
@@ -285,6 +287,7 @@ mod tests {
                 impl AnvilFactory {
                     pub fn new() -> Self {
                         Self {
+                            id: None,
                             hammer_id: None,
                             hardness: None,
                             weight: None,
@@ -299,11 +302,17 @@ mod tests {
                         }
 
                         let instance = Anvil {
+                            id: self.id.unwrap_or(<u32 as Default>::default()),
                             hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
                             hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
                             weight: self.weight.unwrap_or(<u32 as Default>::default()),
                         };
                         instance.create(connection).await
+                    }
+
+                    pub fn id(mut self, id: u32) -> Self {
+                        self.id = Some(id);
+                        self
                     }
 
                     pub fn hammer_id(mut self, hammer_id: u32) -> Self {
@@ -338,6 +347,7 @@ mod tests {
         // Arrange the codegen
         let input = parse_quote! {
             struct Anvil {
+                id: u32,
                 weight: u32,
             }
         };
@@ -350,6 +360,10 @@ mod tests {
         // Assert the result
         assert_eq!(
             generated[0].to_string(),
+            quote! { id: std::option::Option<u32> }.to_string()
+        );
+        assert_eq!(
+            generated[1].to_string(),
             quote! { weight: std::option::Option<u32> }.to_string()
         );
     }
@@ -359,6 +373,7 @@ mod tests {
         // Arrange the codegen
         let input = parse_quote! {
             struct Dynamite {
+                id: u32,
                 #[fabrique(relation = "Explosive", referenced_key = "id")]
                 explosive_id: String,
             }
@@ -383,6 +398,7 @@ mod tests {
         // Arrange the codegen
         let input = parse_quote! {
             struct Anvil {
+                id: u32,
                 #[fabrique(relation = "Hammer", referenced_key = "id")]
                 hammer_id: u32,
                 hardness: u32,
@@ -406,6 +422,7 @@ mod tests {
                     }
 
                     let instance = Anvil {
+                        id: self.id.unwrap_or(<u32 as Default>::default()),
                         hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
                         hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
                         weight: self.weight.unwrap_or(<u32 as Default>::default()),
@@ -422,6 +439,7 @@ mod tests {
         // Arrange the codegen
         let input = parse_quote! {
             struct Anvil {
+                id: u32,
                 hardness: u32,
                 weight: u32,
             }
@@ -438,6 +456,7 @@ mod tests {
             quote! {
                 pub fn new() -> Self {
                     Self {
+                        id: None,
                         hardness: None,
                         weight: None,
                     }
@@ -452,6 +471,7 @@ mod tests {
         // Arrange the codegen
         let input = parse_quote! {
             struct Anvil {
+                id: u32,
                 hardness: u32,
                 weight: u32,
             }
@@ -465,6 +485,16 @@ mod tests {
         // Assert the result
         assert_eq!(
             generated[0].to_string(),
+            quote! {
+                pub fn id(mut self, id: u32) -> Self {
+                    self.id = Some(id);
+                    self
+                }
+            }
+            .to_string()
+        );
+        assert_eq!(
+            generated[1].to_string(),
             quote! {
                 pub fn hardness(mut self, hardness: u32) -> Self {
                     self.hardness = Some(hardness);
@@ -480,6 +510,7 @@ mod tests {
         // Arrange the codegen
         let input = parse_quote! {
             struct Dynamite {
+                id: u32,
                 #[fabrique(relation = "Explosive", referenced_key = "id")]
                 explosive_id: String,
             }

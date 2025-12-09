@@ -71,19 +71,29 @@ impl<'a> ParsedStruct<'a> {
 
     /// Parses and validates named fields.
     pub fn parse_fields(self) -> Result<ParsedFields<'a>, Error> {
+        // Extract fields from the structure
         let fields = match &self.data.fields {
             Fields::Named(FieldsNamed { named, .. }) => named,
             Fields::Unit => return Err(Error::UnsupportedDataStructureUnitStruct),
             Fields::Unnamed(_) => return Err(Error::UnsupportedDataStructureTupleStruct),
         };
 
-        let fields = fields
+        // Transform `syn::Field` into `ast::ModelField`
+        let mut fields = fields
             .iter()
             .map(|field| {
                 let attrs = ModelFieldAttrs::from_field(field)?;
                 ModelField::try_from(attrs)
             })
             .collect::<Result<Vec<_>, Error>>()?;
+
+        // Ensure manual primary keys are defined or attempt to infer auto primary keys
+        if !fields.iter().any(|field| field.primary_key) {
+            match fields.iter().position(|field| field.ident == "id") {
+                Some(index) => fields[index].primary_key = true,
+                None => Err(Error::MissingPrimaryKey)?,
+            }
+        }
 
         Ok(ParsedFields::new(self, fields))
     }
@@ -165,7 +175,7 @@ mod tests {
     #[test]
     fn test_parsing_a_named_struct_works() {
         // Arrange the analysis
-        let input = parse_quote! { struct Anvil {} };
+        let input = parse_quote! { struct Anvil { id: u32 } };
         let analysis = Input::new(&input);
 
         // Act the call to the fields method
@@ -218,6 +228,15 @@ mod tests {
         let analysis = Analysis::from(&input);
 
         // Assert the result
+        assert!(analysis.is_err());
+    }
+
+    #[test]
+    fn test_analysis_fails_explicitly_on_missing_primary_key() {
+        // Arrange the analysis
+        let input = parse_quote! { struct Anvil { name: String }  };
+        let analysis = Analysis::from(&input);
+
         assert!(analysis.is_err());
     }
 

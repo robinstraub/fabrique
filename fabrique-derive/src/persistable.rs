@@ -1,4 +1,7 @@
-use crate::{analysis::Analysis, query_builder::QueryBuilderCodegen};
+use crate::{
+    analysis::{Analysis, ast::ModelField},
+    query_builder::QueryBuilderCodegen,
+};
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -30,7 +33,10 @@ impl<'a> PersistableCodegen<'a> {
         let query_builder_ident = &self.query_builder.query_builder_ident;
         let fn_all = self.generate_fn_all();
         let fn_create = self.generate_fn_create();
+        let fn_delete = self.generate_fn_delete();
+        let fn_destroy = self.generate_fn_destroy();
         let fn_query = self.generate_fn_query(query_builder_ident);
+        let ty_primary_key = self.generate_ty_primary_key();
         let column_constants = self.generate_column_constants();
         let from_row_impl = self.generate_impl_from_row();
 
@@ -39,11 +45,19 @@ impl<'a> PersistableCodegen<'a> {
 
             impl ::fabrique::Persistable for #base_struct_ident {
                 type Connection = sqlx::Pool<sqlx::Postgres>;
+
                 type Error = sqlx::Error;
+
+                type PrimaryKey = #ty_primary_key;
 
                 type QueryBuilder = #query_builder_ident;
 
                 #fn_create
+
+                #fn_destroy
+
+                #fn_delete
+
                 #fn_all
 
                 #fn_query
@@ -106,6 +120,75 @@ impl<'a> PersistableCodegen<'a> {
                     #(.bind(#field_bindings))*
                     .fetch_one(connection)
                     .await
+            }
+        }
+    }
+
+    fn generate_fn_destroy(&self) -> TokenStream {
+        let primary_key: Vec<_> = self
+            .analysis
+            .fields
+            .iter()
+            .filter(|field| field.primary_key)
+            .collect();
+
+        let clause = primary_key
+            .iter()
+            .enumerate()
+            .map(|(i, field)| format!("{} = ${}", field.ident, i + 1))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+
+        let query = format!(
+            "DELETE FROM {} WHERE {}",
+            self.analysis.model.table_name, clause
+        );
+
+        let binds = match primary_key.as_slice() {
+            [ModelField { ident, .. }] => quote! { .bind(#ident) },
+            composite => {
+                let indices = (0..composite.len()).map(syn::Index::from);
+                quote! { #(.bind(id.#indices))* }
+            }
+        };
+
+        quote! {
+            async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                sqlx::query(#query)
+                    #binds
+                    .execute(connection)
+                    .await?;
+                Ok(())
+            }
+        }
+    }
+
+    fn generate_fn_delete(&self) -> TokenStream {
+        let primary_key = self
+            .analysis
+            .fields
+            .iter()
+            .filter(|field| field.primary_key);
+
+        let clause = primary_key
+            .clone()
+            .enumerate()
+            .map(|(i, field)| format!("{} = ${}", field.ident, i + 1))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+
+        let query = format!(
+            "DELETE FROM {} WHERE {}",
+            self.analysis.model.table_name, clause
+        );
+
+        let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
+
+        quote! {
+            async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                sqlx::query(#query)#(.bind(#bindings))*.execute(connection).await?;
+
+                Ok(())
             }
         }
     }
@@ -184,6 +267,28 @@ impl<'a> PersistableCodegen<'a> {
             }
         }
     }
+
+    fn generate_ty_primary_key(&self) -> TokenStream {
+        // todo: use the primary_keys attr from analysis: we're insterting the 'id' when no pk.
+        // todo: actually we should mutate the id column to mark it as primary
+        let primary_keys: Vec<&ModelField> = self
+            .analysis
+            .fields
+            .iter()
+            .filter(|field| field.primary_key)
+            .collect();
+
+        match primary_keys.as_slice() {
+            [simple] => {
+                let ty = &simple.ty;
+                quote! { #ty }
+            }
+            composite => {
+                let tys = composite.iter().map(|field| &field.ty);
+                quote! { (#(#tys),*) }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -219,7 +324,7 @@ mod tests {
                 impl ::fabrique::Persistable for Anvil {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
-
+                    type PrimaryKey = String;
                     type QueryBuilder = AnvilQueryBuilder;
 
                     async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
@@ -227,6 +332,16 @@ mod tests {
                             .bind(self.id)
                             .fetch_one(connection)
                             .await
+                    }
+
+                    async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                        sqlx::query("DELETE FROM anvils WHERE id = $1").bind(id).execute(connection).await?;
+                        Ok(())
+                    }
+
+                    async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                        sqlx::query("DELETE FROM anvils WHERE id = $1").bind(self.id).execute(connection).await?;
+                        Ok(())
                     }
 
                     async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
@@ -296,6 +411,80 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_fn_destroy() {
+        // Arrange the codegen
+        let input = parse_quote! {
+            struct Anvil {
+                #[fabrique(primary_key)]
+                first_name: String,
+
+                #[fabrique(primary_key)]
+                last_name: String,
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
+        let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
+
+        // Act the call to the generate method
+        let result = codegen.generate_fn_destroy();
+
+        // Assert the result
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                    sqlx::query("DELETE FROM anvils WHERE first_name = $1 AND last_name = $2")
+                        .bind(id.0)
+                        .bind(id.1)
+                        .execute(connection)
+                        .await?;
+
+                    Ok(())
+                }
+            }
+            .to_string()
+        )
+    }
+
+    #[test]
+    fn test_generate_fn_delete_on_composite_keys() {
+        // Arrange the codegen
+        let input = parse_quote! {
+            struct Anvil {
+                #[fabrique(primary_key)]
+                first_name: String,
+
+                #[fabrique(primary_key)]
+                last_name: String,
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
+        let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
+
+        // Act the call to the generate method
+        let result = codegen.generate_fn_delete();
+
+        // Assert the result
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                    sqlx::query("DELETE FROM anvils WHERE first_name = $1 AND last_name = $2")
+                        .bind(self.first_name)
+                        .bind(self.last_name)
+                        .execute(connection)
+                        .await?;
+
+                    Ok(())
+                }
+            }
+            .to_string()
+        )
+    }
+
+    #[test]
     fn test_codegen_fail_explicitly() {
         // Arrange the codegen
         let input = parse_quote! { enum Anvil {} };
@@ -350,5 +539,34 @@ mod tests {
         assert!(result_str.contains("pub const ID"));
         assert!(result_str.contains("pub const NAME"));
         assert!(result_str.contains("pub const WEIGHT"));
+    }
+
+    #[test]
+    fn test_generate_ty_primary_keys_on_composite_keys() {
+        // Arrange the codegen
+        let input = parse_quote! {
+            struct Anvil {
+                #[fabrique(primary_key)]
+                first_name: String,
+
+                #[fabrique(primary_key)]
+                last_name: String,
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
+        let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
+
+        // Act the call to the generate method
+        let result = codegen.generate_ty_primary_key();
+
+        // Assert the result
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                (String, String)
+            }
+            .to_string()
+        )
     }
 }

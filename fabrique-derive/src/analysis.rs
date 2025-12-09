@@ -22,6 +22,7 @@ pub struct Analysis<'a> {
     /// The model information.
     pub model: Model,
 
+    // pub primary_keys: Vec<Ident>,
     /// The returning type mappings.
     pub returning: String,
 }

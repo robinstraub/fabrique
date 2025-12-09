@@ -20,5 +20,6 @@ fabrique = { path = "." }
 strum = "0.27"
 strum_macros = "0.27"
 tokio = { version = "1.0", features = ["rt", "macros"] }
+tokio-test = "0.4"
 sqlx = { workspace = true, features = ["runtime-tokio-rustls", "uuid"] }
-uuid = "1"
+uuid = { version = "1", features = ["v4"] }
