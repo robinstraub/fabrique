@@ -40,7 +40,6 @@ pub struct Anvil {
 #[sqlx::test(migrations = "../migrations")]
 async fn test_persistable_macro_compiles(connection: Pool<Postgres>) {
     let result = Anvil::all(&connection).await;
-    println!("result: {:?}", &result);
     assert!(result.is_ok());
     assert_eq!(result.unwrap().len(), 0);
 }
@@ -66,6 +65,27 @@ async fn test_create(connection: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn test_delete(connection: Pool<Postgres>) {
+    let anvil = Anvil::factory().create(&connection).await.unwrap();
+    let existing = Anvil::all(&connection).await.unwrap();
+    assert!(!existing.is_empty());
+    let result = anvil.delete(&connection).await;
+    assert!(result.is_ok());
+    let existing = Anvil::all(&connection).await.unwrap();
+    assert!(existing.is_empty());
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn test_destroy(connection: Pool<Postgres>) {
+    let id = Uuid::new_v4();
+    Anvil::factory().id(id).create(&connection).await.unwrap();
+    let result = Anvil::destroy(&connection, id).await;
+    assert!(result.is_ok());
+    let anvils = Anvil::all(&connection).await.unwrap();
+    assert_eq!(anvils.len(), 0);
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn test_all(connection: Pool<Postgres>) {
     Anvil::factory().create(&connection).await.unwrap();
 
@@ -88,7 +108,6 @@ async fn test_query_builder(connection: Pool<Postgres>) {
         .fetch_all(connection)
         .await;
 
-    println!("result: {:#?}", &result);
     assert!(result.is_ok());
     assert_eq!(result.unwrap().len(), 1);
 }

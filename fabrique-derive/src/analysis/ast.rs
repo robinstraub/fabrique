@@ -74,6 +74,9 @@ pub struct ModelField {
     /// The field ident.
     pub ident: Ident,
 
+    /// True if the field is primary key.
+    pub primary_key: bool,
+
     /// The field relation, if any.
     pub relation: Option<Relation>,
 
@@ -116,6 +119,7 @@ impl ModelField {
             _as: attrs.r#as,
             column,
             ident,
+            primary_key: attrs.primary_key,
             relation,
             span: attrs.span,
             ty: attrs.ty,

@@ -90,6 +90,10 @@ pub trait Persistable: Sized {
     /// The error type returned by persistence operations
     type Error;
 
+    /// The primary key type, which is either concrete value or a tuple for composite primary
+    /// keys.
+    type PrimaryKey;
+
     /// The query builder type for constructing database queries
     type QueryBuilder: QueryBuilder;
 
@@ -99,7 +103,7 @@ pub trait Persistable: Sized {
     /// to construct type-safe database queries with compile-time column validation.
     fn query() -> Self::QueryBuilder;
 
-    /// Creates and persists this object using the provided connection.
+    /// Creates and persists this model using the provided connection.
     ///
     /// This method should handle the actual database insertion or persistence logic
     /// and return the created object with any auto-generated fields (like IDs) populated.
@@ -107,6 +111,18 @@ pub trait Persistable: Sized {
         self,
         connection: &Self::Connection,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send;
+
+    /// Destroy the model for the given ID.
+    fn destroy(
+        connection: &Self::Connection,
+        id: Self::PrimaryKey,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+
+    /// Deletes this model using the provided connection.
+    fn delete(
+        self,
+        connection: &Self::Connection,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
     /// Retrieves all instances of this model from the persistence layer
     ///

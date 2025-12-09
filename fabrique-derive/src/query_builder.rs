@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn test_generate_fn_where() {
         // Arrange the codegen
-        let input = parse_quote! { struct Anvil {} };
+        let input = parse_quote! { struct Anvil { id: u32 } };
         let analysis = Analysis::from(&input).unwrap();
         let codegen = QueryBuilderCodegen::new(&analysis);
 
@@ -249,7 +249,7 @@ mod tests {
     #[test]
     fn test_generate_ident_query_builder() {
         // Arrange the codegen
-        let input = parse_quote! { struct Anvil {} };
+        let input = parse_quote! { struct Anvil { id: u32 } };
         let analysis = Analysis::from(&input).unwrap();
         let codegen = QueryBuilderCodegen::new(&analysis);
 
@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn test_generate_struct_query_builder() {
         // Arrange the codegen
-        let input = parse_quote! { struct Anvil {} };
+        let input = parse_quote! { struct Anvil { id: u32 } };
         let analysis = Analysis::from(&input).unwrap();
         let codegen = QueryBuilderCodegen::new(&analysis);
 
