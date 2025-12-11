@@ -116,10 +116,8 @@ impl<'a> ParsedFields<'a> {
             .map(|fields| fields.column.to_string())
             .collect::<Vec<String>>()
             .join(", ");
-        let base_select_query = format!("SELECT {} FROM {}", &returning, &self.model.table_name);
 
         Ok(Analysis {
-            base_select_query,
             returning,
             fields: self.fields,
             ident: self.ident,

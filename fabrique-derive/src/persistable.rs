@@ -73,7 +73,25 @@ impl<'a> PersistableCodegen<'a> {
 
     /// Generates the `all()` associated function.
     fn generate_fn_all(&self) -> TokenStream {
-        let query = &self.analysis.base_select_query;
+        let soft_delete = self.analysis.fields.iter().find(|field| field.soft_delete);
+
+        let returning = self
+            .analysis
+            .fields
+            .iter()
+            .map(|fields| fields.column.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let base_select_query = format!(
+            "SELECT {} FROM {}",
+            &returning, &self.analysis.model.table_name
+        );
+
+        let query = match soft_delete {
+            Some(field) => format!("{} WHERE {} IS NULL", base_select_query, field.ident),
+            None => base_select_query,
+        };
 
         quote! {
             async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
@@ -108,7 +126,7 @@ impl<'a> PersistableCodegen<'a> {
         // Generate field bindings (self.field1, self.field2, ...)
         let field_bindings = self.analysis.fields.iter().map(|field| {
             let ident = &field.ident;
-            match &field._as {
+            match &field.r#as {
                 Some(ty) => quote! { #ty::from(self.#ident) },
                 None => quote! { self.#ident },
             }
@@ -139,10 +157,18 @@ impl<'a> PersistableCodegen<'a> {
             .collect::<Vec<_>>()
             .join(" AND ");
 
-        let query = format!(
-            "DELETE FROM {} WHERE {}",
-            self.analysis.model.table_name, clause
-        );
+        let soft_delete = self.analysis.fields.iter().find(|field| field.soft_delete);
+
+        let query = match soft_delete {
+            Some(field) => format!(
+                "UPDATE {} SET {} = now() WHERE {}",
+                self.analysis.model.table_name, field.ident, clause
+            ),
+            None => format!(
+                "DELETE FROM {} WHERE {}",
+                self.analysis.model.table_name, clause
+            ),
+        };
 
         let binds = match primary_key.as_slice() {
             [ModelField { ident, .. }] => quote! { .bind(#ident) },
@@ -177,10 +203,18 @@ impl<'a> PersistableCodegen<'a> {
             .collect::<Vec<_>>()
             .join(" AND ");
 
-        let query = format!(
-            "DELETE FROM {} WHERE {}",
-            self.analysis.model.table_name, clause
-        );
+        let soft_delete = self.analysis.fields.iter().find(|field| field.soft_delete);
+
+        let query = match soft_delete {
+            Some(field) => format!(
+                "UPDATE {} SET {} = now() WHERE {}",
+                self.analysis.model.table_name, field.ident, clause
+            ),
+            None => format!(
+                "DELETE FROM {} WHERE {}",
+                self.analysis.model.table_name, clause
+            ),
+        };
 
         let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
 
@@ -238,7 +272,7 @@ impl<'a> PersistableCodegen<'a> {
             let field_ident = &field.ident;
             let column_name = field.ident.to_string();
 
-            match &field._as {
+            match &field.r#as {
                 Some(intermediate_ty) => {
                     // Field has `as` attribute, need to convert from intermediate type using TryFrom
                     quote! {
@@ -428,6 +462,77 @@ mod tests {
                 impl Anvil {
                     pub const USER_ID: ::fabrique::ColumnMarker<uuid::Uuid> = ::fabrique::ColumnMarker::new("user_id");
                     pub const ORGANIZATION_ID: ::fabrique::ColumnMarker<uuid::Uuid> = ::fabrique::ColumnMarker::new("organization_id");
+                }
+            }
+            .to_string()
+        )
+    }
+
+    #[test]
+    fn test_soft_delete() {
+        let input = parse_quote! { struct Anvil {
+            id: uuid::Uuid,
+
+            #[fabrique(soft_delete)]
+            deleted_at: Option<chrono::DateTime<chrono::Utc>>,
+        } };
+        let analysis = Analysis::from(&input).unwrap();
+        let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
+        let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
+
+        // Act the call to the generate method
+        let result = codegen.generate();
+
+        // Assert the result
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                impl<'r> ::sqlx::FromRow<'r, ::sqlx::postgres::PgRow> for Anvil {
+                    fn from_row(row: &'r ::sqlx::postgres::PgRow) -> ::sqlx::Result<Self> {
+                        use ::sqlx::Row;
+                        Ok(Self {
+                            id: row.try_get("id")?,
+                            deleted_at: row.try_get("deleted_at")?
+                        })
+                    }
+                }
+
+                impl ::fabrique::Persistable for Anvil {
+                    type Connection = sqlx::Pool<sqlx::Postgres>;
+                    type Error = sqlx::Error;
+                    type PrimaryKey = uuid::Uuid;
+                    type QueryBuilder = AnvilQueryBuilder;
+
+                    async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
+                        sqlx::query_as::<_, Self>("INSERT INTO anvils (id, deleted_at) VALUES ($1, $2) RETURNING id, deleted_at")
+                            .bind(self.id)
+                            .bind(self.deleted_at)
+                            .fetch_one(connection)
+                            .await
+                    }
+
+                    async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                        sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(id).execute(connection).await?;
+                        Ok(())
+                    }
+
+                    async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                        sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(self.id).execute(connection).await?;
+                        Ok(())
+                    }
+
+                    async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
+                        sqlx::query_as::<_, Self>("SELECT id, deleted_at FROM anvils WHERE deleted_at IS NULL").fetch_all(connection).await
+                    }
+
+                    fn query() -> Self::QueryBuilder {
+                        AnvilQueryBuilder::new()
+                    }
+                }
+
+                impl Anvil {
+                    pub const ID: ::fabrique::ColumnMarker<uuid::Uuid> = ::fabrique::ColumnMarker::new("id");
+                    pub const DELETED_AT: ::fabrique::ColumnMarker<Option<chrono::DateTime<chrono::Utc> > > = ::fabrique::ColumnMarker::new("deleted_at");
                 }
             }
             .to_string()

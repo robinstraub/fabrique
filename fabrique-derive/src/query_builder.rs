@@ -114,7 +114,18 @@ impl<'a> QueryBuilderCodegen<'a> {
 
     /// Generates the `new()` function.
     fn generate_fn_new(&self) -> TokenStream {
-        let base_query = &self.analysis.base_select_query;
+        let returning = self
+            .analysis
+            .fields
+            .iter()
+            .map(|fields| fields.column.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let base_query = format!(
+            "SELECT {} FROM {}",
+            &returning, &self.analysis.model.table_name
+        );
 
         quote! {
             pub fn new() -> Self {

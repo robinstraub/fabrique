@@ -10,7 +10,7 @@ mod steps;
 #[derive(Debug)]
 pub struct Analysis<'a> {
     /// The base SELECT query for this model.
-    pub base_select_query: String,
+    // pub base_select_query: String,
 
     /// Named fields of the analyzed struct.
     pub fields: Vec<ModelField>,
