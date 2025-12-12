@@ -97,10 +97,9 @@ pub struct ModelField {
 
 impl ModelField {
     pub fn try_from(attrs: ModelFieldAttrs) -> Result<Self, Error> {
-        let ident = attrs.ident.ok_or(Error::new(
-            attrs.span,
-            ErrorKind::UnsupportedDataStructureTupleStruct,
-        ))?;
+        let ident = attrs.ident.ok_or_else(|| {
+            Error::new(attrs.span, ErrorKind::UnsupportedDataStructureTupleStruct)
+        })?;
 
         // Simple column name without type annotations (for runtime queries)
         let column = ident.to_string();
@@ -137,5 +136,37 @@ impl ModelField {
             relation,
             soft_delete: attrs.soft_delete,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn test_model_field_try_from_without_ident_fails() {
+        // Arrange a ModelFieldAttrs without an identifier (simulating tuple struct field)
+        let attrs = ModelFieldAttrs {
+            ident: None,
+            ty: parse_quote!(u32),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            relation: None,
+            referenced_key: None,
+        };
+
+        // Act the call to the `ModelField::try_from` method
+        let result = ModelField::try_from(attrs);
+
+        // Assert the error
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(matches!(
+            error.kind,
+            ErrorKind::UnsupportedDataStructureTupleStruct
+        ));
     }
 }
