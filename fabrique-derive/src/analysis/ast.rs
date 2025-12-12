@@ -97,9 +97,10 @@ pub struct ModelField {
 
 impl ModelField {
     pub fn try_from(attrs: ModelFieldAttrs) -> Result<Self, Error> {
-        let ident = attrs.ident.ok_or_else(|| {
-            Error::new(attrs.span, ErrorKind::UnsupportedDataStructureTupleStruct)
-        })?;
+        let ident = attrs.ident.ok_or(Error::new(
+            attrs.span,
+            ErrorKind::UnsupportedDataStructureTupleStruct,
+        ))?;
 
         // Simple column name without type annotations (for runtime queries)
         let column = ident.to_string();
