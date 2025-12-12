@@ -1,0 +1,6 @@
+[toolchain]
+channel = "stable"
+components = ["rustfmt"]
+
+[toolchain.nightly]
+components = ["rustfmt"]

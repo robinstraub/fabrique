@@ -96,8 +96,9 @@ impl<'a> FactoryCodegen<'a> {
 
     /// Generates field definitions for the factory struct.
     ///
-    /// Transforms each field into an Option so users can either set specific values
-    /// or let the factory generate defaults when building the final struct.
+    /// Transforms each field into an Option so users can either set specific
+    /// values or let the factory generate defaults when building the final
+    /// struct.
     fn generate_factory_fields(&self) -> impl Iterator<Item = TokenStream> {
         self.analysis.fields.iter().map(|field| {
             let name = &field.ident;
@@ -196,8 +197,8 @@ impl<'a> FactoryCodegen<'a> {
 
     /// Generates setter methods for each field in the factory struct.
     ///
-    /// Each setter method takes a value and stores it in the factory's optional field,
-    /// enabling a fluent builder pattern for constructing objects.
+    /// Each setter method takes a value and stores it in the factory's optional
+    /// field, enabling a fluent builder pattern for constructing objects.
     fn generate_factory_method_fields(&self) -> impl Iterator<Item = TokenStream> {
         self.analysis.fields.iter().map(|field| {
             let name = &field.ident;

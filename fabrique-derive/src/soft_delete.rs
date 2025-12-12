@@ -7,7 +7,8 @@ pub struct SoftDeleteCodegen<'a> {
 }
 
 impl<'a> SoftDeleteCodegen<'a> {
-    /// Creates a new code generator for the `fabrique::SoftDelete` trait implementation.
+    /// Creates a new code generator for the `fabrique::SoftDelete` trait
+    /// implementation.
     pub fn new(analysis: &'a Analysis<'a>) -> Self {
         Self { analysis }
     }

@@ -7,12 +7,14 @@ pub struct DeleteCodegen<'a> {
 }
 
 impl<'a> DeleteCodegen<'a> {
-    /// Creates a new code generator for the `fabrique::HardDelete` trait implementation.
+    /// Creates a new code generator for the `fabrique::HardDelete` trait
+    /// implementation.
     pub fn new(analysis: &'a Analysis<'a>) -> Self {
         Self { analysis }
     }
 
-    /// Generates the `fabrique::HardDelete` trait implementation as a token stream.
+    /// Generates the `fabrique::HardDelete` trait implementation as a token
+    /// stream.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
         let fn_hard_destroy = self.generate_fn_hard_destroy();

@@ -146,7 +146,8 @@ mod tests {
 
     #[test]
     fn test_model_field_try_from_without_ident_fails() {
-        // Arrange a ModelFieldAttrs without an identifier (simulating tuple struct field)
+        // Arrange a ModelFieldAttrs without an identifier (simulating tuple struct
+        // field)
         let attrs = ModelFieldAttrs {
             ident: None,
             ty: parse_quote!(u32),

@@ -27,7 +27,8 @@ impl<'a> QueryBuilderCodegen<'a> {
     /// This method generates:
     /// - QueryBuilder struct definition
     /// - `new()` constructor method
-    /// - `QueryBuilder` trait implementation with `where()` and `fetch_all()` methods
+    /// - `QueryBuilder` trait implementation with `where()` and `fetch_all()`
+    ///   methods
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
         let ident = &self.query_builder_ident;
@@ -45,7 +46,7 @@ impl<'a> QueryBuilderCodegen<'a> {
 
             impl ::fabrique::QueryBuilder for #ident {
                 type Model = #base_struct_ident;
-                type Executor = ::sqlx::Pool<::sqlx::Postgres>;
+                type Connection = ::sqlx::Pool<::sqlx::Postgres>;
                 type Error = ::sqlx::Error;
 
                 #fn_where
@@ -103,10 +104,10 @@ impl<'a> QueryBuilderCodegen<'a> {
     /// Generates the `fetch_all()` function.
     fn generate_fetch_all(&self) -> TokenStream {
         quote! {
-            async fn fetch_all(mut self, executor: Self::Executor) -> Result<Vec<Self::Model>, Self::Error> {
+            async fn fetch_all(mut self, connection: &Self::Connection) -> Result<Vec<Self::Model>, Self::Error> {
                 self.builder
                     .build_query_as::<Self::Model>()
-                    .fetch_all(&executor)
+                    .fetch_all(connection)
                     .await
             }
         }
@@ -175,7 +176,7 @@ mod tests {
 
                 impl ::fabrique::QueryBuilder for AnvilQueryBuilder {
                     type Model = Anvil;
-                    type Executor = ::sqlx::Pool<::sqlx::Postgres>;
+                    type Connection = ::sqlx::Pool<::sqlx::Postgres>;
                     type Error = ::sqlx::Error;
 
                     fn r#where<T, O>(mut self, column: ::fabrique::ColumnMarker<T>, operator: O, value: T) -> Self
@@ -203,11 +204,11 @@ mod tests {
 
                     async fn fetch_all(
                         mut self,
-                        executor: Self::Executor
+                        connection: &Self::Connection
                     ) -> Result<Vec<Self::Model>, Self::Error> {
                         self.builder
                             .build_query_as::<Self::Model>()
-                            .fetch_all(&executor)
+                            .fetch_all(connection)
                             .await
                     }
                 }

@@ -1,8 +1,10 @@
 //! Procedural macros for generating factory and persistence code.
 //!
 //! This crate provides two derive macros:
-//! - `#[derive(Factory)]` - Generates factory structs with optional fields for flexible object creation
-//! - `#[derive(Persistable)]` - Generates persistence implementations for data storage
+//! - `#[derive(Factory)]` - Generates factory structs with optional fields for
+//!   flexible object creation
+//! - `#[derive(Persistable)]` - Generates persistence implementations for data
+//!   storage
 
 use crate::{
     analysis::Analysis, delete::DeleteCodegen, factory::FactoryCodegen,
