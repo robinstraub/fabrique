@@ -1,7 +1,6 @@
-use std::str::FromStr;
-
 use fabrique::{Factory, Persistable, QueryBuilder};
 use sqlx::{Pool, Postgres};
+use std::str::FromStr;
 use strum_macros::{Display, EnumString, IntoStaticStr};
 use uuid::Uuid;
 

@@ -43,12 +43,13 @@ impl<'a> PersistableCodegen<'a> {
         let generated = quote! {
             #from_row_impl
 
-            impl ::fabrique::Persistable for #base_struct_ident {
+            impl ::fabrique::Model for #base_struct_ident {
                 type Connection = sqlx::Pool<sqlx::Postgres>;
-
                 type Error = sqlx::Error;
-
                 type PrimaryKey = #ty_primary_key;
+            }
+
+            impl ::fabrique::Persistable for #base_struct_ident {
 
                 type QueryBuilder = #query_builder_ident;
 
@@ -73,7 +74,25 @@ impl<'a> PersistableCodegen<'a> {
 
     /// Generates the `all()` associated function.
     fn generate_fn_all(&self) -> TokenStream {
-        let query = &self.analysis.base_select_query;
+        let soft_delete = self.analysis.fields.iter().find(|field| field.soft_delete);
+
+        let returning = self
+            .analysis
+            .fields
+            .iter()
+            .map(|fields| fields.column.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let base_select_query = format!(
+            "SELECT {} FROM {}",
+            &returning, &self.analysis.model.table_name
+        );
+
+        let query = match soft_delete {
+            Some(field) => format!("{} WHERE {} IS NULL", base_select_query, field.ident),
+            None => base_select_query,
+        };
 
         quote! {
             async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
@@ -108,7 +127,7 @@ impl<'a> PersistableCodegen<'a> {
         // Generate field bindings (self.field1, self.field2, ...)
         let field_bindings = self.analysis.fields.iter().map(|field| {
             let ident = &field.ident;
-            match &field._as {
+            match &field.r#as {
                 Some(ty) => quote! { #ty::from(self.#ident) },
                 None => quote! { self.#ident },
             }
@@ -125,71 +144,36 @@ impl<'a> PersistableCodegen<'a> {
     }
 
     fn generate_fn_destroy(&self) -> TokenStream {
-        let primary_key: Vec<_> = self
-            .analysis
-            .fields
-            .iter()
-            .filter(|field| field.primary_key)
-            .collect();
+        let soft_delete = self.analysis.fields.iter().find(|field| field.soft_delete);
 
-        let clause = primary_key
-            .iter()
-            .enumerate()
-            .map(|(i, field)| format!("{} = ${}", field.ident, i + 1))
-            .collect::<Vec<_>>()
-            .join(" AND ");
-
-        let query = format!(
-            "DELETE FROM {} WHERE {}",
-            self.analysis.model.table_name, clause
-        );
-
-        let binds = match primary_key.as_slice() {
-            [ModelField { ident, .. }] => quote! { .bind(#ident) },
-            composite => {
-                let indices = (0..composite.len()).map(syn::Index::from);
-                quote! { #(.bind(id.#indices))* }
-            }
-        };
-
-        quote! {
-            async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                sqlx::query(#query)
-                    #binds
-                    .execute(connection)
-                    .await?;
-                Ok(())
-            }
+        match soft_delete {
+            Some(_) => quote! {
+                async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                    <Self as ::fabrique::SoftDelete>::soft_destroy(connection, id).await
+                }
+            },
+            None => quote! {
+                async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                    <Self as ::fabrique::HardDelete>::hard_destroy(connection, id).await
+                }
+            },
         }
     }
 
     fn generate_fn_delete(&self) -> TokenStream {
-        let primary_key = self
-            .analysis
-            .fields
-            .iter()
-            .filter(|field| field.primary_key);
+        let soft_delete = self.analysis.fields.iter().find(|field| field.soft_delete);
 
-        let clause = primary_key
-            .clone()
-            .enumerate()
-            .map(|(i, field)| format!("{} = ${}", field.ident, i + 1))
-            .collect::<Vec<_>>()
-            .join(" AND ");
-
-        let query = format!(
-            "DELETE FROM {} WHERE {}",
-            self.analysis.model.table_name, clause
-        );
-
-        let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
-
-        quote! {
-            async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                sqlx::query(#query)#(.bind(#bindings))*.execute(connection).await?;
-
-                Ok(())
-            }
+        match soft_delete {
+            Some(_) => quote! {
+                async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                    <Self as ::fabrique::SoftDelete>::soft_delete(self, connection).await
+                }
+            },
+            None => quote! {
+                async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                    <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
+                }
+            },
         }
     }
 
@@ -238,7 +222,7 @@ impl<'a> PersistableCodegen<'a> {
             let field_ident = &field.ident;
             let column_name = field.ident.to_string();
 
-            match &field._as {
+            match &field.r#as {
                 Some(intermediate_ty) => {
                     // Field has `as` attribute, need to convert from intermediate type using TryFrom
                     quote! {
@@ -298,7 +282,7 @@ mod tests {
     use syn::parse_quote;
 
     #[test]
-    fn test_generate() {
+    fn test_a_basic_struct_can_derive_persistable() {
         // Arrange the codegen
         let input = parse_quote! { struct Anvil { id: String } };
         let analysis = Analysis::from(&input).unwrap();
@@ -321,10 +305,14 @@ mod tests {
                     }
                 }
 
-                impl ::fabrique::Persistable for Anvil {
+                impl ::fabrique::Model for Anvil {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
                     type PrimaryKey = String;
+                }
+
+                impl ::fabrique::Persistable for Anvil {
+
                     type QueryBuilder = AnvilQueryBuilder;
 
                     async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
@@ -335,13 +323,11 @@ mod tests {
                     }
 
                     async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                        sqlx::query("DELETE FROM anvils WHERE id = $1").bind(id).execute(connection).await?;
-                        Ok(())
+                        <Self as ::fabrique::HardDelete>::hard_destroy(connection, id).await
                     }
 
                     async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                        sqlx::query("DELETE FROM anvils WHERE id = $1").bind(self.id).execute(connection).await?;
-                        Ok(())
+                        <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
                     }
 
                     async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
@@ -362,22 +348,74 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_fn_all() {
+    fn test_composite_keys() {
         // Arrange the codegen
-        let input = parse_quote! { struct Anvil { id: String } };
+        let input = parse_quote! { struct Anvil {
+            #[fabrique(primary_key)]
+            user_id: uuid::Uuid,
+
+            #[fabrique(primary_key)]
+            organization_id: uuid::Uuid,
+        } };
         let analysis = Analysis::from(&input).unwrap();
         let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
         let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
 
         // Act the call to the generate method
-        let result = codegen.generate_fn_all();
+        let result = codegen.generate();
 
         // Assert the result
         assert_eq!(
             result.to_string(),
             quote! {
-                async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
-                    sqlx::query_as::<_, Self>("SELECT id FROM anvils").fetch_all(connection).await
+                impl<'r> ::sqlx::FromRow<'r, ::sqlx::postgres::PgRow> for Anvil {
+                    fn from_row(row: &'r ::sqlx::postgres::PgRow) -> ::sqlx::Result<Self> {
+                        use ::sqlx::Row;
+                        Ok(Self {
+                            user_id: row.try_get("user_id")?,
+                            organization_id: row.try_get("organization_id")?
+                        })
+                    }
+                }
+
+                impl ::fabrique::Model for Anvil {
+                    type Connection = sqlx::Pool<sqlx::Postgres>;
+                    type Error = sqlx::Error;
+                    type PrimaryKey = (uuid::Uuid, uuid::Uuid);
+                }
+
+                impl ::fabrique::Persistable for Anvil {
+
+                    type QueryBuilder = AnvilQueryBuilder;
+
+                    async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
+                        sqlx::query_as::<_, Self>("INSERT INTO anvils (user_id, organization_id) VALUES ($1, $2) RETURNING user_id, organization_id")
+                            .bind(self.user_id)
+                            .bind(self.organization_id)
+                            .fetch_one(connection)
+                            .await
+                    }
+
+                    async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                        <Self as ::fabrique::HardDelete>::hard_destroy(connection, id).await
+                    }
+
+                    async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                        <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
+                    }
+
+                    async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
+                        sqlx::query_as::<_, Self>("SELECT user_id, organization_id FROM anvils").fetch_all(connection).await
+                    }
+
+                    fn query() -> Self::QueryBuilder {
+                        AnvilQueryBuilder::new()
+                    }
+                }
+
+                impl Anvil {
+                    pub const USER_ID: ::fabrique::ColumnMarker<uuid::Uuid> = ::fabrique::ColumnMarker::new("user_id");
+                    pub const ORGANIZATION_ID: ::fabrique::ColumnMarker<uuid::Uuid> = ::fabrique::ColumnMarker::new("organization_id");
                 }
             }
             .to_string()
@@ -385,99 +423,72 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_fn_create() {
-        // Arrange the codegen
-        let input = parse_quote! { struct Anvil { id: String } };
+    fn test_soft_delete() {
+        let input = parse_quote! { struct Anvil {
+            id: uuid::Uuid,
+
+            #[fabrique(soft_delete)]
+            deleted_at: Option<chrono::DateTime<chrono::Utc>>,
+        } };
         let analysis = Analysis::from(&input).unwrap();
         let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
         let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
 
         // Act the call to the generate method
-        let result = codegen.generate_fn_create();
+        let result = codegen.generate();
 
         // Assert the result
         assert_eq!(
             result.to_string(),
             quote! {
-                async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
-                    sqlx::query_as::<_, Self>("INSERT INTO anvils (id) VALUES ($1) RETURNING id")
-                        .bind(self.id)
-                        .fetch_one(connection)
-                        .await
+                impl<'r> ::sqlx::FromRow<'r, ::sqlx::postgres::PgRow> for Anvil {
+                    fn from_row(row: &'r ::sqlx::postgres::PgRow) -> ::sqlx::Result<Self> {
+                        use ::sqlx::Row;
+                        Ok(Self {
+                            id: row.try_get("id")?,
+                            deleted_at: row.try_get("deleted_at")?
+                        })
+                    }
                 }
-            }
-            .to_string()
-        )
-    }
 
-    #[test]
-    fn test_generate_fn_destroy() {
-        // Arrange the codegen
-        let input = parse_quote! {
-            struct Anvil {
-                #[fabrique(primary_key)]
-                first_name: String,
-
-                #[fabrique(primary_key)]
-                last_name: String,
-            }
-        };
-        let analysis = Analysis::from(&input).unwrap();
-        let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
-        let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
-
-        // Act the call to the generate method
-        let result = codegen.generate_fn_destroy();
-
-        // Assert the result
-        assert_eq!(
-            result.to_string(),
-            quote! {
-                async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                    sqlx::query("DELETE FROM anvils WHERE first_name = $1 AND last_name = $2")
-                        .bind(id.0)
-                        .bind(id.1)
-                        .execute(connection)
-                        .await?;
-
-                    Ok(())
+                impl ::fabrique::Model for Anvil {
+                    type Connection = sqlx::Pool<sqlx::Postgres>;
+                    type Error = sqlx::Error;
+                    type PrimaryKey = uuid::Uuid;
                 }
-            }
-            .to_string()
-        )
-    }
 
-    #[test]
-    fn test_generate_fn_delete_on_composite_keys() {
-        // Arrange the codegen
-        let input = parse_quote! {
-            struct Anvil {
-                #[fabrique(primary_key)]
-                first_name: String,
+                impl ::fabrique::Persistable for Anvil {
 
-                #[fabrique(primary_key)]
-                last_name: String,
-            }
-        };
-        let analysis = Analysis::from(&input).unwrap();
-        let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
-        let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
+                    type QueryBuilder = AnvilQueryBuilder;
 
-        // Act the call to the generate method
-        let result = codegen.generate_fn_delete();
+                    async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
+                        sqlx::query_as::<_, Self>("INSERT INTO anvils (id, deleted_at) VALUES ($1, $2) RETURNING id, deleted_at")
+                            .bind(self.id)
+                            .bind(self.deleted_at)
+                            .fetch_one(connection)
+                            .await
+                    }
 
-        // Assert the result
-        assert_eq!(
-            result.to_string(),
-            quote! {
-                async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                    sqlx::query("DELETE FROM anvils WHERE first_name = $1 AND last_name = $2")
-                        .bind(self.first_name)
-                        .bind(self.last_name)
-                        .execute(connection)
-                        .await?;
+                    async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                        <Self as ::fabrique::SoftDelete>::soft_destroy(connection, id).await
+                    }
 
-                    Ok(())
+                    async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                        <Self as ::fabrique::SoftDelete>::soft_delete(self, connection).await
+                    }
+
+                    async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
+                        sqlx::query_as::<_, Self>("SELECT id, deleted_at FROM anvils WHERE deleted_at IS NULL").fetch_all(connection).await
+                    }
+
+                    fn query() -> Self::QueryBuilder {
+                        AnvilQueryBuilder::new()
+                    }
+                }
+
+                impl Anvil {
+                    pub const ID: ::fabrique::ColumnMarker<uuid::Uuid> = ::fabrique::ColumnMarker::new("id");
+                    pub const DELETED_AT: ::fabrique::ColumnMarker<Option<chrono::DateTime<chrono::Utc> > > = ::fabrique::ColumnMarker::new("deleted_at");
                 }
             }
             .to_string()
@@ -494,79 +505,5 @@ mod tests {
 
         // Assert the result
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_generate_column_constants() {
-        // Arrange the codegen
-        let input = parse_quote! { struct Anvil { id: String } };
-        let analysis = Analysis::from(&input).unwrap();
-        let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
-        let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
-
-        // Act the call to the generate method
-        let result = codegen.generate_column_constants();
-
-        // Assert the result
-        assert_eq!(
-            result.to_string(),
-            quote! {
-                pub const ID: ::fabrique::ColumnMarker<String> = ::fabrique::ColumnMarker::new("id");
-            }
-            .to_string()
-        )
-    }
-
-    #[test]
-    fn test_generate_column_constants_multiple_fields() {
-        // Arrange the codegen with multiple fields to cover all iterator branches
-        let input = parse_quote! {
-            struct Anvil {
-                id: String,
-                name: String,
-                weight: i32
-            }
-        };
-        let analysis = Analysis::from(&input).unwrap();
-        let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
-        let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
-
-        // Act the call to the generate method
-        let result = codegen.generate_column_constants();
-
-        // Assert the result contains all three constants
-        let result_str = result.to_string();
-        assert!(result_str.contains("pub const ID"));
-        assert!(result_str.contains("pub const NAME"));
-        assert!(result_str.contains("pub const WEIGHT"));
-    }
-
-    #[test]
-    fn test_generate_ty_primary_keys_on_composite_keys() {
-        // Arrange the codegen
-        let input = parse_quote! {
-            struct Anvil {
-                #[fabrique(primary_key)]
-                first_name: String,
-
-                #[fabrique(primary_key)]
-                last_name: String,
-            }
-        };
-        let analysis = Analysis::from(&input).unwrap();
-        let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
-        let codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
-
-        // Act the call to the generate method
-        let result = codegen.generate_ty_primary_key();
-
-        // Assert the result
-        assert_eq!(
-            result.to_string(),
-            quote! {
-                (String, String)
-            }
-            .to_string()
-        )
     }
 }

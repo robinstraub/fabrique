@@ -4,15 +4,20 @@
 //! - `#[derive(Factory)]` - Generates factory structs with optional fields for flexible object creation
 //! - `#[derive(Persistable)]` - Generates persistence implementations for data storage
 
-use crate::{analysis::Analysis, factory::FactoryCodegen};
+use crate::{
+    analysis::Analysis, delete::DeleteCodegen, factory::FactoryCodegen,
+    soft_delete::SoftDeleteCodegen,
+};
 use proc_macro::TokenStream;
 use syn::{DeriveInput, Error, parse_macro_input, spanned::Spanned};
 
 mod analysis;
+mod delete;
 mod error;
 mod factory;
 mod persistable;
 mod query_builder;
+mod soft_delete;
 
 /// Derives a `Persistable` implementation for the annotated struct.
 #[proc_macro_derive(Persistable, attributes(fabrique))]
@@ -31,12 +36,19 @@ pub fn derive_persistable(input: TokenStream) -> TokenStream {
         }
     };
 
+    let delete_codegen = DeleteCodegen::new(&analysis);
+    let soft_delete_codegen = SoftDeleteCodegen::new(&analysis);
     let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
+    let persistable_codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
 
-    let persistable = PersistableCodegen::new(&analysis, &query_builder_codegen).generate();
+    let delete = delete_codegen.generate();
+    let soft_delete = soft_delete_codegen.generate();
+    let persistable = persistable_codegen.generate();
     let query_builder = query_builder_codegen.generate();
 
     quote::quote! {
+        #delete
+        #soft_delete
         #persistable
         #query_builder
     }

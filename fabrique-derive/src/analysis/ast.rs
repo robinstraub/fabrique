@@ -31,16 +31,27 @@ impl Model {
 #[derive(FromField, Debug)]
 #[darling(attributes(fabrique))]
 pub struct ModelFieldAttrs {
+    /// The field base `syn::Ident`
+    ident: Option<Ident>,
+
+    /// The field base `syn::Type`
+    ty: Type,
+
+    /// The field base `syn::Span`
+    #[darling(skip, default = "Span::call_site")]
+    span: Span,
+
     /// The database type for conversion
     #[darling(default, rename = "as")]
     r#as: Option<Type>,
 
-    ident: Option<Ident>,
-
     /// Wether this field is a primary key
     #[darling(default)]
-    #[allow(dead_code)]
     primary_key: bool,
+
+    /// Wether this field is a soft delete key
+    #[darling(default)]
+    soft_delete: bool,
 
     /// The type referenced by this relation field
     #[darling(default)]
@@ -49,11 +60,6 @@ pub struct ModelFieldAttrs {
     /// The key field of the referenced type
     #[darling(default)]
     referenced_key: Option<Ident>,
-
-    #[darling(skip, default = "Span::call_site")]
-    span: Span,
-
-    ty: Type,
 }
 
 #[derive(Debug)]
@@ -65,14 +71,20 @@ pub struct Relation {
 
 #[derive(Debug)]
 pub struct ModelField {
+    /// The field ident.
+    pub ident: Ident,
+
+    /// The field span.
+    pub span: Span,
+
+    /// The field type.
+    pub ty: Type,
+
     /// Type marker to (de)serialize from/to the persistance layer.
-    pub _as: Option<Type>,
+    pub r#as: Option<Type>,
 
     /// The column name with its type marker.
     pub column: String,
-
-    /// The field ident.
-    pub ident: Ident,
 
     /// True if the field is primary key.
     pub primary_key: bool,
@@ -80,11 +92,7 @@ pub struct ModelField {
     /// The field relation, if any.
     pub relation: Option<Relation>,
 
-    /// The field span.
-    pub span: Span,
-
-    /// The field type.
-    pub ty: Type,
+    pub soft_delete: bool,
 }
 
 impl ModelField {
@@ -116,13 +124,14 @@ impl ModelField {
         };
 
         Ok(Self {
-            _as: attrs.r#as,
-            column,
             ident,
-            primary_key: attrs.primary_key,
-            relation,
             span: attrs.span,
             ty: attrs.ty,
+            r#as: attrs.r#as,
+            column,
+            primary_key: attrs.primary_key,
+            relation,
+            soft_delete: attrs.soft_delete,
         })
     }
 }
