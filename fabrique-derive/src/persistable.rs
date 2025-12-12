@@ -43,12 +43,13 @@ impl<'a> PersistableCodegen<'a> {
         let generated = quote! {
             #from_row_impl
 
-            impl ::fabrique::Persistable for #base_struct_ident {
+            impl ::fabrique::Model for #base_struct_ident {
                 type Connection = sqlx::Pool<sqlx::Postgres>;
-
                 type Error = sqlx::Error;
-
                 type PrimaryKey = #ty_primary_key;
+            }
+
+            impl ::fabrique::Persistable for #base_struct_ident {
 
                 type QueryBuilder = #query_builder_ident;
 
@@ -143,87 +144,36 @@ impl<'a> PersistableCodegen<'a> {
     }
 
     fn generate_fn_destroy(&self) -> TokenStream {
-        let primary_key: Vec<_> = self
-            .analysis
-            .fields
-            .iter()
-            .filter(|field| field.primary_key)
-            .collect();
-
-        let clause = primary_key
-            .iter()
-            .enumerate()
-            .map(|(i, field)| format!("{} = ${}", field.ident, i + 1))
-            .collect::<Vec<_>>()
-            .join(" AND ");
-
         let soft_delete = self.analysis.fields.iter().find(|field| field.soft_delete);
 
-        let query = match soft_delete {
-            Some(field) => format!(
-                "UPDATE {} SET {} = now() WHERE {}",
-                self.analysis.model.table_name, field.ident, clause
-            ),
-            None => format!(
-                "DELETE FROM {} WHERE {}",
-                self.analysis.model.table_name, clause
-            ),
-        };
-
-        let binds = match primary_key.as_slice() {
-            [ModelField { ident, .. }] => quote! { .bind(#ident) },
-            composite => {
-                let indices = (0..composite.len()).map(syn::Index::from);
-                quote! { #(.bind(id.#indices))* }
-            }
-        };
-
-        quote! {
-            async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                sqlx::query(#query)
-                    #binds
-                    .execute(connection)
-                    .await?;
-                Ok(())
-            }
+        match soft_delete {
+            Some(_) => quote! {
+                async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                    <Self as ::fabrique::SoftDelete>::soft_destroy(connection, id).await
+                }
+            },
+            None => quote! {
+                async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                    <Self as ::fabrique::HardDelete>::hard_destroy(connection, id).await
+                }
+            },
         }
     }
 
     fn generate_fn_delete(&self) -> TokenStream {
-        let primary_key = self
-            .analysis
-            .fields
-            .iter()
-            .filter(|field| field.primary_key);
-
-        let clause = primary_key
-            .clone()
-            .enumerate()
-            .map(|(i, field)| format!("{} = ${}", field.ident, i + 1))
-            .collect::<Vec<_>>()
-            .join(" AND ");
-
         let soft_delete = self.analysis.fields.iter().find(|field| field.soft_delete);
 
-        let query = match soft_delete {
-            Some(field) => format!(
-                "UPDATE {} SET {} = now() WHERE {}",
-                self.analysis.model.table_name, field.ident, clause
-            ),
-            None => format!(
-                "DELETE FROM {} WHERE {}",
-                self.analysis.model.table_name, clause
-            ),
-        };
-
-        let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
-
-        quote! {
-            async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                sqlx::query(#query)#(.bind(#bindings))*.execute(connection).await?;
-
-                Ok(())
-            }
+        match soft_delete {
+            Some(_) => quote! {
+                async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                    <Self as ::fabrique::SoftDelete>::soft_delete(self, connection).await
+                }
+            },
+            None => quote! {
+                async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                    <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
+                }
+            },
         }
     }
 
@@ -355,10 +305,14 @@ mod tests {
                     }
                 }
 
-                impl ::fabrique::Persistable for Anvil {
+                impl ::fabrique::Model for Anvil {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
                     type PrimaryKey = String;
+                }
+
+                impl ::fabrique::Persistable for Anvil {
+
                     type QueryBuilder = AnvilQueryBuilder;
 
                     async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
@@ -369,13 +323,11 @@ mod tests {
                     }
 
                     async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                        sqlx::query("DELETE FROM anvils WHERE id = $1").bind(id).execute(connection).await?;
-                        Ok(())
+                        <Self as ::fabrique::HardDelete>::hard_destroy(connection, id).await
                     }
 
                     async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                        sqlx::query("DELETE FROM anvils WHERE id = $1").bind(self.id).execute(connection).await?;
-                        Ok(())
+                        <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
                     }
 
                     async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
@@ -426,10 +378,14 @@ mod tests {
                     }
                 }
 
-                impl ::fabrique::Persistable for Anvil {
+                impl ::fabrique::Model for Anvil {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
                     type PrimaryKey = (uuid::Uuid, uuid::Uuid);
+                }
+
+                impl ::fabrique::Persistable for Anvil {
+
                     type QueryBuilder = AnvilQueryBuilder;
 
                     async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
@@ -441,13 +397,11 @@ mod tests {
                     }
 
                     async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                        sqlx::query("DELETE FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(id.0).bind(id.1).execute(connection).await?;
-                        Ok(())
+                        <Self as ::fabrique::HardDelete>::hard_destroy(connection, id).await
                     }
 
                     async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                        sqlx::query("DELETE FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(connection).await?;
-                        Ok(())
+                        <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
                     }
 
                     async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
@@ -497,10 +451,14 @@ mod tests {
                     }
                 }
 
-                impl ::fabrique::Persistable for Anvil {
+                impl ::fabrique::Model for Anvil {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
                     type PrimaryKey = uuid::Uuid;
+                }
+
+                impl ::fabrique::Persistable for Anvil {
+
                     type QueryBuilder = AnvilQueryBuilder;
 
                     async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
@@ -512,13 +470,11 @@ mod tests {
                     }
 
                     async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                        sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(id).execute(connection).await?;
-                        Ok(())
+                        <Self as ::fabrique::SoftDelete>::soft_destroy(connection, id).await
                     }
 
                     async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                        sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(self.id).execute(connection).await?;
-                        Ok(())
+                        <Self as ::fabrique::SoftDelete>::soft_delete(self, connection).await
                     }
 
                     async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {

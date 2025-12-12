@@ -155,7 +155,7 @@ impl<'a> FactoryCodegen<'a> {
         });
 
         quote! {
-            pub async fn create(mut self, connection: &<#struct_ident as fabrique::Persistable>::Connection) -> Result<#struct_ident, <#struct_ident as fabrique::Persistable>::Error>
+            pub async fn create(mut self, connection: &<#struct_ident as fabrique::Model>::Connection) -> Result<#struct_ident, <#struct_ident as fabrique::Model>::Error>
             {
                 #(#relations_create)*
 
@@ -295,7 +295,7 @@ mod tests {
                         }
                     }
 
-                    pub async fn create(mut self, connection: &<Anvil as fabrique::Persistable>::Connection) -> Result<Anvil, <Anvil as fabrique::Persistable>::Error> {
+                    pub async fn create(mut self, connection: &<Anvil as fabrique::Model>::Connection) -> Result<Anvil, <Anvil as fabrique::Model>::Error> {
                         if let Some(callback) = self.hammer_factory {
                             let instance = callback(HammerFactory::new()).create(connection).await?;
                             self.hammer_id = Some(instance.id);
@@ -415,7 +415,7 @@ mod tests {
         assert_eq!(
             generated.to_string(),
             quote! {
-                pub async fn create(mut self, connection: &<Anvil as fabrique::Persistable>::Connection) -> Result<Anvil, <Anvil as fabrique::Persistable>::Error> {
+                pub async fn create(mut self, connection: &<Anvil as fabrique::Model>::Connection) -> Result<Anvil, <Anvil as fabrique::Model>::Error> {
                     if let Some(callback) = self.hammer_factory {
                         let instance = callback(HammerFactory::new()).create(connection).await?;
                         self.hammer_id = Some(instance.id);

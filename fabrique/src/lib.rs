@@ -69,7 +69,37 @@
 //! #     Ok(())
 //! # }
 //! ```
+//!
+//! ## Soft Deleting
+//!
+//! In addition to actually removing records from your database, Fabrique can also "soft
+//! delete" models. When models are soft deleted, they are not actually removed from your
+//! database. Instead, a soft delete attribute is set on the model indicating the date and
+//! time at which the model was "deleted". To enable soft deletes for a model, annotate
+//! an attribute with the `#[fabrique(soft_delete)]` annotation. The attribute type must
+//! be an optional date, such as `Option<chrono::DateTime<chrono::Utc>>`.
+//!
+//!```rust,no_run
+//! # use fabrique_core::Persistable;
+//! # use fabrique_derive::{Factory, Persistable};
+//! # use sqlx::PgPool;
+//! # use uuid::Uuid;
+//! use chrono::{DateTime, Utc};
+//!
+//! #[derive(Factory, Persistable)]
+//! pub struct Anvil {
+//!     id: uuid::Uuid,
+//!
+//!     #[fabrique(soft_delete)]
+//!     deleted_at: Option<DateTime<Utc>>
+//! }
+//! #
+//! # async fn example(connection: &PgPool, id: Uuid) -> Result<(), sqlx::Error> {
+//! Anvil::destroy(&connection, id).await?;
+//! #     Ok(())
+//! # }
+//! ```
 pub use fabrique_core::QueryBuilder;
-pub use fabrique_core::{ColumnMarker, Operator, Persistable};
+pub use fabrique_core::{ColumnMarker, HardDelete, Model, Operator, Persistable, SoftDelete};
 pub use fabrique_derive::Factory;
 pub use fabrique_derive::Persistable;
