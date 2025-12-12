@@ -242,4 +242,58 @@ mod tests {
             .to_string()
         )
     }
+
+    #[test]
+    fn test_composite_keys() {
+        // Arrange the codegen
+        let input = parse_quote! {
+            struct Anvil {
+                #[fabrique(primary_key)]
+                user_id: uuid::Uuid,
+
+                #[fabrique(primary_key)]
+                organization_id: uuid::Uuid,
+
+                #[fabrique(soft_delete)]
+                deleted_at: Option<chrono::DateTime::<chrono::Utc>>
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = SoftDeleteCodegen::new(&analysis);
+
+        // Act the call to the generate method
+        let result = codegen.generate();
+
+        // Assert the result
+        assert_eq!(
+            result.unwrap().to_string(),
+            quote! {
+                impl ::fabrique::SoftDelete for Anvil {
+                    async fn force_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                        <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
+                    }
+
+                    async fn soft_destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                        sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(id.0).bind(id.1).execute(connection).await?;
+                        Ok(())
+                    }
+
+                    async fn soft_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                        sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(connection).await?;
+                        Ok(())
+                    }
+
+                    async fn restore(&self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                        sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(connection).await?;
+                        Ok(())
+                    }
+
+                    async fn trashed(&self, connection: &Self::Connection) -> Result<bool, Self::Error> {
+                        sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).fetch_one(connection).await
+                    }
+                }
+            }
+            .to_string()
+        )
+    }
 }

@@ -130,4 +130,42 @@ mod tests {
             .to_string()
         );
     }
+
+    #[test]
+    fn test_composite_keys() {
+        // Arrange the codegen
+        let input = parse_quote! {
+            struct Anvil {
+                #[fabrique(primary_key)]
+                user_id: uuid::Uuid,
+
+                #[fabrique(primary_key)]
+                organization_id: uuid::Uuid
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = DeleteCodegen::new(&analysis);
+
+        // Act the call to the generate method
+        let result = codegen.generate();
+
+        // Assert the result
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                impl ::fabrique::HardDelete for Anvil {
+                    async fn hard_destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                        sqlx::query("DELETE FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(id.0).bind(id.1).execute(connection).await?;
+                        Ok(())
+                    }
+
+                    async fn hard_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                        sqlx::query("DELETE FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(connection).await?;
+                        Ok(())
+                    }
+                }
+            }
+            .to_string()
+        );
+    }
 }
