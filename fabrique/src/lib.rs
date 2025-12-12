@@ -104,7 +104,7 @@
 //! `trashed` method:
 //!
 //!```rust,no_run
-//! # use fabrique_core::Persistable;
+//! # use fabrique_core::{Persistable, SoftDelete};
 //! # use fabrique_derive::{Factory, Persistable};
 //! # use sqlx::PgPool;
 //! # use uuid::Uuid;
@@ -119,10 +119,11 @@
 //! # }
 //! #
 //! # async fn example(connection: &PgPool, anvil: Anvil) -> Result<(), sqlx::Error> {
-//! if (anvil.trashed(&connection).await?) {
+//! if anvil.trashed(&connection).await? {
 //!     // --snip--
 //! }
-//! #     Ok()
+//! #     Ok(())
+//! # }
 //! ```
 //!
 //! ### Restoring Soft Deleted Models
@@ -132,7 +133,7 @@
 //! set the model's deleted_at column to null:
 //!
 //!```rust,no_run
-//! # use fabrique_core::Persistable;
+//! # use fabrique_core::{Persistable, SoftDelete};
 //! # use fabrique_derive::{Factory, Persistable};
 //! # use sqlx::PgPool;
 //! # use uuid::Uuid;
@@ -159,7 +160,7 @@
 //! table:
 //!
 //!```rust,no_run
-//! # use fabrique_core::Persistable;
+//! # use fabrique_core::{HardDelete, Persistable};
 //! # use fabrique_derive::{Factory, Persistable};
 //! # use sqlx::PgPool;
 //! # use uuid::Uuid;

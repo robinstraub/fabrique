@@ -1,5 +1,5 @@
 error: Missing `referenced_key` attribute for relation hammer_id
- --> tests/ui/missing_referenced_key.rs:4:1
+ --> tests/ui/missing_referenced_key.rs:6:5
   |
-4 | struct Anvil {
-  | ^^^^^^
+6 |     hammer_id: u32,
+  |     ^^^^^^^^^
