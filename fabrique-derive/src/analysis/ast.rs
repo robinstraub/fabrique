@@ -2,7 +2,7 @@ use darling::{FromDeriveInput, FromField};
 use proc_macro2::Span;
 use syn::{Ident, Type};
 
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 
 /// Attributes parsed from `#[fabrique(...)]` struct annotations.
 #[derive(FromDeriveInput)]
@@ -97,9 +97,9 @@ pub struct ModelField {
 
 impl ModelField {
     pub fn try_from(attrs: ModelFieldAttrs) -> Result<Self, Error> {
-        let ident = attrs
-            .ident
-            .ok_or(Error::UnsupportedDataStructureTupleStruct)?;
+        let ident = attrs.ident.ok_or_else(|| {
+            Error::new(attrs.span, ErrorKind::UnsupportedDataStructureTupleStruct)
+        })?;
 
         // Simple column name without type annotations (for runtime queries)
         let column = ident.to_string();
@@ -107,9 +107,12 @@ impl ModelField {
         let relation = match attrs.relation {
             Some(referenced_type) => {
                 let field_name = ident.to_string();
-                let referenced_key = attrs
-                    .referenced_key
-                    .ok_or(Error::MissingReferencedKey(field_name.clone()))?;
+                let referenced_key = attrs.referenced_key.ok_or_else(|| {
+                    Error::new(
+                        ident.span(),
+                        ErrorKind::MissingReferencedKey(field_name.clone()),
+                    )
+                })?;
                 let name = field_name
                     .strip_suffix(&format!("_{}", referenced_key))
                     .unwrap_or(&field_name)
