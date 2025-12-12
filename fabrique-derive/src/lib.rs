@@ -9,7 +9,7 @@ use crate::{
     soft_delete::SoftDeleteCodegen,
 };
 use proc_macro::TokenStream;
-use syn::{DeriveInput, Error, parse_macro_input, spanned::Spanned};
+use syn::{DeriveInput, parse_macro_input};
 
 mod analysis;
 mod delete;
@@ -27,12 +27,12 @@ pub fn derive_persistable(input: TokenStream) -> TokenStream {
     };
 
     let input = parse_macro_input!(input as DeriveInput);
-    let span = input.span();
 
     let analysis = match Analysis::from(&input) {
         Ok(analysis) => analysis,
         Err(e) => {
-            return Error::new(span, e).into_compile_error().into();
+            let syn_error: syn::Error = e.into();
+            return syn_error.into_compile_error().into();
         }
     };
 
@@ -59,12 +59,12 @@ pub fn derive_persistable(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Factory, attributes(factory, fabrique))]
 pub fn derive_factory(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let span = input.span();
 
     let analysis = match Analysis::from(&input) {
         Ok(analysis) => analysis,
         Err(e) => {
-            return Error::new(span, e).into_compile_error().into();
+            let syn_error: syn::Error = e.into();
+            return syn_error.into_compile_error().into();
         }
     };
 

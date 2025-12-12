@@ -1,5 +1,5 @@
 error: Unknown value: `` at referenced_key
- --> tests/ui/invalid_string_literal_in_referenced_key.rs:4:1
+ --> tests/ui/invalid_string_literal_in_referenced_key.rs:5:5
   |
-4 | struct Anvil {
-  | ^^^^^^
+5 |     #[fabrique(relation = "Hammer", referenced_key = "")]
+  |     ^

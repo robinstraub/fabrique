@@ -10,14 +10,14 @@
 //! ```
 
 use darling::{FromDeriveInput, FromField};
-use syn::{Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident};
+use syn::{Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, spanned::Spanned};
 
 use crate::{
     analysis::{
         Analysis,
         ast::{Model, ModelAttrs, ModelField, ModelFieldAttrs},
     },
-    error::Error,
+    error::{Error, ErrorKind},
 };
 
 /// Entry point for analysis. Wraps the derive input.
@@ -49,11 +49,22 @@ impl<'a> Input<'a> {
     pub fn parse_struct(self) -> Result<ParsedStruct<'a>, Error> {
         let data = match &self.input.data {
             Data::Struct(data) => data,
-            Data::Enum(_) => return Err(Error::UnsupportedDataStructureEnum),
-            Data::Union(_) => return Err(Error::UnsupportedDataStructureUnion),
+            Data::Enum(_) => {
+                return Err(Error::new(
+                    self.input.ident.span(),
+                    ErrorKind::UnsupportedDataStructureEnum,
+                ));
+            }
+            Data::Union(_) => {
+                return Err(Error::new(
+                    self.input.ident.span(),
+                    ErrorKind::UnsupportedDataStructureUnion,
+                ));
+            }
         };
 
-        let attrs = ModelAttrs::from_derive_input(self.input)?;
+        let attrs = ModelAttrs::from_derive_input(self.input)
+            .map_err(|e| Error::from_darling(e, self.input.span()))?;
         let model = Model::new(&self.input.ident, attrs);
 
         Ok(ParsedStruct::new(self, data, model))
@@ -74,15 +85,26 @@ impl<'a> ParsedStruct<'a> {
         // Extract fields from the structure
         let fields = match &self.data.fields {
             Fields::Named(FieldsNamed { named, .. }) => named,
-            Fields::Unit => return Err(Error::UnsupportedDataStructureUnitStruct),
-            Fields::Unnamed(_) => return Err(Error::UnsupportedDataStructureTupleStruct),
+            Fields::Unit => {
+                return Err(Error::new(
+                    self.ident.span(),
+                    ErrorKind::UnsupportedDataStructureUnitStruct,
+                ));
+            }
+            Fields::Unnamed(fields) => {
+                return Err(Error::new(
+                    fields.span(),
+                    ErrorKind::UnsupportedDataStructureTupleStruct,
+                ));
+            }
         };
 
         // Transform `syn::Field` into `ast::ModelField`
         let mut fields = fields
             .iter()
             .map(|field| {
-                let attrs = ModelFieldAttrs::from_field(field)?;
+                let attrs = ModelFieldAttrs::from_field(field)
+                    .map_err(|e| Error::from_darling(e, field.span()))?;
                 ModelField::try_from(attrs)
             })
             .collect::<Result<Vec<_>, Error>>()?;
@@ -91,7 +113,7 @@ impl<'a> ParsedStruct<'a> {
         if !fields.iter().any(|field| field.primary_key) {
             match fields.iter().position(|field| field.ident == "id") {
                 Some(index) => fields[index].primary_key = true,
-                None => Err(Error::MissingPrimaryKey)?,
+                None => Err(Error::new(self.ident.span(), ErrorKind::MissingPrimaryKey))?,
             }
         }
 
