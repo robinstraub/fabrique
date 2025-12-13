@@ -1,6 +1,0 @@
-error: Unexpected type `int` at referenced_key
- --> tests/ui/invalid_referenced_key_type.rs:5:5
-  |
-5 | /     #[fabrique(relation = "Hammer", referenced_key = 123)]
-6 | |     hammer_id: u32,
-  | |__________________^

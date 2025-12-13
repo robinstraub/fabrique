@@ -1,4 +1,5 @@
 use darling::{FromDeriveInput, FromField};
+use heck::ToSnakeCase;
 use proc_macro2::Span;
 use syn::{Ident, Type};
 
@@ -56,17 +57,12 @@ pub struct ModelFieldAttrs {
     /// The type referenced by this relation field
     #[darling(default)]
     relation: Option<Ident>,
-
-    /// The key field of the referenced type
-    #[darling(default)]
-    referenced_key: Option<Ident>,
 }
 
 #[derive(Debug)]
 pub struct Relation {
     pub name: String,
     pub referenced_type: Ident,
-    pub referenced_key: Ident,
 }
 
 #[derive(Debug)]
@@ -104,27 +100,10 @@ impl ModelField {
         // Simple column name without type annotations (for runtime queries)
         let column = ident.to_string();
 
-        let relation = match attrs.relation {
-            Some(referenced_type) => {
-                let field_name = ident.to_string();
-                let referenced_key = attrs.referenced_key.ok_or_else(|| {
-                    Error::new(
-                        ident.span(),
-                        ErrorKind::MissingReferencedKey(field_name.clone()),
-                    )
-                })?;
-                let name = field_name
-                    .strip_suffix(&format!("_{}", referenced_key))
-                    .unwrap_or(&field_name)
-                    .to_owned();
-                Some(Relation {
-                    name,
-                    referenced_key,
-                    referenced_type,
-                })
-            }
-            None => None,
-        };
+        let relation = attrs.relation.map(|referenced_type| Relation {
+            name: referenced_type.to_string().to_snake_case(),
+            referenced_type,
+        });
 
         Ok(Self {
             ident,
@@ -156,7 +135,6 @@ mod tests {
             primary_key: false,
             soft_delete: false,
             relation: None,
-            referenced_key: None,
         };
 
         // Act the call to the `ModelField::try_from` method

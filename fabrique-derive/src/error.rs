@@ -45,9 +45,6 @@ pub enum ErrorKind {
 
     #[error("Missing primary key, either add an id column or mark an existing column as primary")]
     MissingPrimaryKey,
-
-    #[error("Missing `referenced_key` attribute for relation {0}")]
-    MissingReferencedKey(String),
 }
 
 impl From<Error> for syn::Error {

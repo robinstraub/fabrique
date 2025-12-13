@@ -10,17 +10,11 @@ pub struct FactoryRelation<'a> {
     /// The relation factory field to append to the factory struct.
     factory_field: Ident,
 
-    /// The related model factory type.
-    factory_ty: Ident,
-
     /// The relation name.
     name: &'a String,
 
-    /// The related model referenced key.
-    referenced_key: &'a Ident,
-
     /// The related model type.
-    _referenced_type: &'a Ident,
+    referenced_type: &'a Ident,
 }
 
 /// Code generator for factory struct implementations.
@@ -52,6 +46,8 @@ impl<'a> FactoryCodegen<'a> {
         let factory_method_fields = self.generate_factory_method_fields();
         let factory_methods_for_relation = self.generate_factory_methods_for_relation();
         let factory_relation_fields = self.generate_factory_relation_fields();
+        let factory_trait_impl = self.generate_impl_factory_trait();
+        let for_relation_factory_impl = self.generate_impl_for_relation_factory();
 
         quote! {
             impl #base_struct_ident {
@@ -64,6 +60,10 @@ impl<'a> FactoryCodegen<'a> {
                 #(#factory_fields,)*
                 #(#factory_relation_fields,)*
             }
+
+            #factory_trait_impl
+
+            #for_relation_factory_impl
 
             impl #factory_ident {
                 #factory_method_new
@@ -79,17 +79,13 @@ impl<'a> FactoryCodegen<'a> {
 
     fn relations(&self) -> impl Iterator<Item = FactoryRelation<'a>> {
         self.analysis.relations().map(|(field, relation)| {
-            let factory_field = Ident::new(&format!("{}_factory", &relation.name), field.span);
-            let factory_ty =
-                Ident::new(&format!("{}Factory", relation.referenced_type), field.span);
+            let factory_field = Ident::new(&format!("{}_relation", &relation.name), field.span);
 
             FactoryRelation {
                 base_ident: &field.ident,
                 factory_field,
-                factory_ty,
                 name: &relation.name,
-                referenced_key: &relation.referenced_key,
-                _referenced_type: &relation.referenced_type,
+                referenced_type: &relation.referenced_type,
             }
         })
     }
@@ -113,10 +109,10 @@ impl<'a> FactoryCodegen<'a> {
     fn generate_factory_relation_fields(&self) -> impl Iterator<Item = TokenStream> {
         self.relations().map(|relation| {
             let factory_field = relation.factory_field;
-            let factory_ty = relation.factory_ty;
+            let referenced_type = relation.referenced_type;
 
             quote! {
-                #factory_field: std::option::Option<Box<dyn FnOnce(#factory_ty) -> #factory_ty + Send>>
+                #factory_field: std::option::Option<Box<dyn fabrique::ForRelation<#referenced_type>>>
             }
         })
     }
@@ -133,13 +129,11 @@ impl<'a> FactoryCodegen<'a> {
         let relations_create = self.relations().map(|relation| {
             let field = &relation.base_ident;
             let factory_field = relation.factory_field;
-            let factory_ty = relation.factory_ty;
-            let referenced_key = &relation.referenced_key;
 
             quote! {
-                if let Some(callback) = self.#factory_field {
-                    let instance = callback(#factory_ty::new()).create(connection).await?;
-                    self.#field = Some(instance.#referenced_key);
+                if let Some(relation) = self.#factory_field {
+                    let key = relation.into_key(connection).await?;
+                    self.#field = Some(key);
                 }
             }
         });
@@ -215,22 +209,59 @@ impl<'a> FactoryCodegen<'a> {
 
     /// Generates the `for_[relation]` methods for the factory struct.
     ///
-    /// These methods allow buffering the creation of related factory instances,
-    /// which are then executed when building the final object.
+    /// These methods accept either a model instance or a factory instance
+    /// and store them for deferred execution during `create()`.
     fn generate_factory_methods_for_relation(&self) -> impl Iterator<Item = TokenStream> {
         self.relations().map(|relation| {
-            let factory_ty = relation.factory_ty;
-            let method_name = Ident::new(&format!("for_{}", &relation.name), factory_ty.span());
+            let referenced_type = relation.referenced_type;
+            let method_name =
+                Ident::new(&format!("for_{}", &relation.name), referenced_type.span());
             let field_ident = &relation.factory_field;
+
             quote! {
-                pub fn #method_name<F>(mut self, callback: F) -> Self
-                where F: FnOnce(#factory_ty) -> #factory_ty + Send + 'static
+                pub fn #method_name<R>(mut self, input: R) -> Self
+                where R: fabrique::ForRelation<#referenced_type> + 'static
                 {
-                    self.#field_ident = Some(Box::new(callback));
+                    self.#field_ident = Some(Box::new(input));
                     self
                 }
             }
         })
+    }
+
+    /// Generates the Factory trait implementation.
+    fn generate_impl_factory_trait(&self) -> TokenStream {
+        let factory_ident = &self.ident;
+        let model_ident = &self.analysis.ident;
+
+        quote! {
+            impl fabrique::Factory for #factory_ident {
+                type Model = #model_ident;
+            }
+        }
+    }
+
+    /// Generates ForRelation implementation for the Factory type.
+    fn generate_impl_for_relation_factory(&self) -> TokenStream {
+        let factory_ident = &self.ident;
+        let model_ident = &self.analysis.ident;
+
+        quote! {
+            impl fabrique::ForRelation<#model_ident> for #factory_ident
+            where
+                Self: 'static,
+            {
+                fn into_key<'a>(
+                    self: Box<Self>,
+                    connection: &'a <#model_ident as fabrique::Model>::Connection,
+                ) -> fabrique::IntoKeyFuture<'a, #model_ident> {
+                    Box::pin(async move {
+                        let instance = (*self).create(connection).await?;
+                        Ok(<#model_ident as fabrique::Model>::primary_key(&instance))
+                    })
+                }
+            }
+        }
     }
 }
 
@@ -254,8 +285,9 @@ mod tests {
         // Arrange the codegen
         let input = parse_quote! {
             struct Anvil {
+                #[fabrique(primary_key)]
                 id: u32,
-                #[fabrique(relation = "Hammer", referenced_key = "id")]
+                #[fabrique(relation = "Hammer")]
                 hammer_id: u32,
                 hardness: u32,
                 weight: u32,
@@ -282,7 +314,26 @@ mod tests {
                     hardness: std::option::Option<u32>,
                     weight: std::option::Option<u32>,
 
-                    hammer_factory: std::option::Option<Box<dyn FnOnce(HammerFactory) -> HammerFactory + Send>>,
+                    hammer_relation: std::option::Option<Box<dyn fabrique::ForRelation<Hammer>>>,
+                }
+
+                impl fabrique::Factory for AnvilFactory {
+                    type Model = Anvil;
+                }
+
+                impl fabrique::ForRelation<Anvil> for AnvilFactory
+                where
+                    Self: 'static,
+                {
+                    fn into_key<'a>(
+                        self: Box<Self>,
+                        connection: &'a <Anvil as fabrique::Model>::Connection,
+                    ) -> fabrique::IntoKeyFuture<'a, Anvil> {
+                        Box::pin(async move {
+                            let instance = (*self).create(connection).await?;
+                            Ok(<Anvil as fabrique::Model>::primary_key(&instance))
+                        })
+                    }
                 }
 
                 impl AnvilFactory {
@@ -292,14 +343,14 @@ mod tests {
                             hammer_id: None,
                             hardness: None,
                             weight: None,
-                            hammer_factory: None,
+                            hammer_relation: None,
                         }
                     }
 
                     pub async fn create(mut self, connection: &<Anvil as fabrique::Model>::Connection) -> Result<Anvil, <Anvil as fabrique::Model>::Error> {
-                        if let Some(callback) = self.hammer_factory {
-                            let instance = callback(HammerFactory::new()).create(connection).await?;
-                            self.hammer_id = Some(instance.id);
+                        if let Some(relation) = self.hammer_relation {
+                            let key = relation.into_key(connection).await?;
+                            self.hammer_id = Some(key);
                         }
 
                         let instance = Anvil {
@@ -331,10 +382,10 @@ mod tests {
                         self
                     }
 
-                    pub fn for_hammer<F>(mut self, callback: F) -> Self
-                    where F: FnOnce(HammerFactory) -> HammerFactory + Send + 'static
+                    pub fn for_hammer<R>(mut self, input: R) -> Self
+                    where R: fabrique::ForRelation<Hammer> + 'static
                     {
-                        self.hammer_factory = Some(Box::new(callback));
+                        self.hammer_relation = Some(Box::new(input));
                         self
                     }
                 }
@@ -375,7 +426,7 @@ mod tests {
         let input = parse_quote! {
             struct Dynamite {
                 id: u32,
-                #[fabrique(relation = "Explosive", referenced_key = "id")]
+                #[fabrique(relation = "Explosive")]
                 explosive_id: String,
             }
         };
@@ -389,8 +440,9 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                explosive_factory: std::option::Option<Box<dyn FnOnce(ExplosiveFactory) -> ExplosiveFactory + Send>>
-            }.to_string()
+                explosive_relation: std::option::Option<Box<dyn fabrique::ForRelation<Explosive>>>
+            }
+            .to_string()
         );
     }
 
@@ -400,7 +452,7 @@ mod tests {
         let input = parse_quote! {
             struct Anvil {
                 id: u32,
-                #[fabrique(relation = "Hammer", referenced_key = "id")]
+                #[fabrique(relation = "Hammer")]
                 hammer_id: u32,
                 hardness: u32,
                 weight: u32,
@@ -417,9 +469,9 @@ mod tests {
             generated.to_string(),
             quote! {
                 pub async fn create(mut self, connection: &<Anvil as fabrique::Model>::Connection) -> Result<Anvil, <Anvil as fabrique::Model>::Error> {
-                    if let Some(callback) = self.hammer_factory {
-                        let instance = callback(HammerFactory::new()).create(connection).await?;
-                        self.hammer_id = Some(instance.id);
+                    if let Some(relation) = self.hammer_relation {
+                        let key = relation.into_key(connection).await?;
+                        self.hammer_id = Some(key);
                     }
 
                     let instance = Anvil {
@@ -512,7 +564,7 @@ mod tests {
         let input = parse_quote! {
             struct Dynamite {
                 id: u32,
-                #[fabrique(relation = "Explosive", referenced_key = "id")]
+                #[fabrique(relation = "Explosive")]
                 explosive_id: String,
             }
         };
@@ -526,10 +578,10 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                pub fn for_explosive<F>(mut self, callback: F) -> Self
-                where F: FnOnce(ExplosiveFactory) -> ExplosiveFactory + Send + 'static
+                pub fn for_explosive<R>(mut self, input: R) -> Self
+                where R: fabrique::ForRelation<Explosive> + 'static
                 {
-                    self.explosive_factory = Some(Box::new(callback));
+                    self.explosive_relation = Some(Box::new(input));
                     self
                 }
             }

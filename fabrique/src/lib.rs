@@ -329,9 +329,10 @@
 //! #     Ok(())
 //! # }
 //! ```
-pub use fabrique_core::QueryBuilder;
 pub use fabrique_core::{ColumnMarker, HardDelete, Model, Operator, Persistable, SoftDelete};
-pub use fabrique_derive::Factory;
 pub use fabrique_derive::Persistable;
+pub use factory::*;
+pub use query_builder::*;
 
+pub mod factory;
 pub mod query_builder;

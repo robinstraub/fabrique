@@ -37,6 +37,7 @@ impl<'a> PersistableCodegen<'a> {
         let fn_delete = self.generate_fn_delete();
         let fn_destroy = self.generate_fn_destroy();
         let fn_query = self.generate_fn_query(query_builder_ident);
+        let fn_primary_key = self.generate_fn_primary_key();
         let ty_primary_key = self.generate_ty_primary_key();
         let column_constants = self.generate_column_constants();
         let from_row_impl = self.generate_impl_from_row();
@@ -48,6 +49,8 @@ impl<'a> PersistableCodegen<'a> {
                 type Connection = sqlx::Pool<sqlx::Postgres>;
                 type Error = sqlx::Error;
                 type PrimaryKey = #ty_primary_key;
+
+                #fn_primary_key
             }
 
             impl ::fabrique::Persistable for #base_struct_ident {
@@ -277,6 +280,37 @@ impl<'a> PersistableCodegen<'a> {
             }
         }
     }
+
+    fn generate_fn_primary_key(&self) -> TokenStream {
+        let primary_keys: Vec<&ModelField> = self
+            .analysis
+            .fields
+            .iter()
+            .filter(|field| field.primary_key)
+            .collect();
+
+        match primary_keys.as_slice() {
+            [simple] => {
+                let ident = &simple.ident;
+                quote! {
+                    fn primary_key(&self) -> Self::PrimaryKey {
+                        self.#ident.clone()
+                    }
+                }
+            }
+            composite => {
+                let idents = composite.iter().map(|field| {
+                    let ident = &field.ident;
+                    quote! { self.#ident.clone() }
+                });
+                quote! {
+                    fn primary_key(&self) -> Self::PrimaryKey {
+                        (#(#idents),*)
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -313,6 +347,10 @@ mod tests {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
                     type PrimaryKey = String;
+
+                    fn primary_key(&self) -> Self::PrimaryKey {
+                        self.id.clone()
+                    }
                 }
 
                 impl ::fabrique::Persistable for Anvil {
@@ -386,6 +424,10 @@ mod tests {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
                     type PrimaryKey = (uuid::Uuid, uuid::Uuid);
+
+                    fn primary_key(&self) -> Self::PrimaryKey {
+                        (self.user_id.clone(), self.organization_id.clone())
+                    }
                 }
 
                 impl ::fabrique::Persistable for Anvil {
@@ -459,6 +501,10 @@ mod tests {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
                     type PrimaryKey = uuid::Uuid;
+
+                    fn primary_key(&self) -> Self::PrimaryKey {
+                        self.id.clone()
+                    }
                 }
 
                 impl ::fabrique::Persistable for Anvil {
