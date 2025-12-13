@@ -1,5 +1,6 @@
 error: Unknown field: `primery_key`. Did you mean `primary_key`?
  --> tests/ui/typo_in_attribute.rs:5:5
   |
-5 |     #[fabrique(primery_key)]
-  |     ^
+5 | /     #[fabrique(primery_key)]
+6 | |     id: u32,
+  | |___________^

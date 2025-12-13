@@ -1,5 +1,6 @@
 error: Unknown value: `invalid` at primary_key
  --> tests/ui/invalid_primary_key_type.rs:5:5
   |
-5 |     #[fabrique(primary_key = "invalid")]
-  |     ^
+5 | /     #[fabrique(primary_key = "invalid")]
+6 | |     id: u32,
+  | |___________^

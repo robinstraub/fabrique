@@ -1,5 +1,6 @@
 error: Unknown field: `unknown_attribute`. Available values: `as`, `primary_key`, `referenced_key`, `relation`, `soft_delete`
  --> tests/ui/invalid_attribute_name.rs:5:5
   |
-5 |     #[fabrique(unknown_attribute = true)]
-  |     ^
+5 | /     #[fabrique(unknown_attribute = true)]
+6 | |     weight: u32,
+  | |_______________^
