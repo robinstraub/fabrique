@@ -79,7 +79,7 @@ impl<'a> DeleteCodegen<'a> {
         );
 
         let binds = match primary_key.as_slice() {
-            [ModelField { ident, .. }] => quote! { .bind(#ident) },
+            [_] => quote! { .bind(id) },
             composite => {
                 let indices = (0..composite.len()).map(syn::Index::from);
                 quote! { #(.bind(id.#indices))* }
