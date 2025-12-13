@@ -1,5 +1,7 @@
 use std::marker::PhantomData;
 
+pub mod factory;
+
 pub trait Model: Sized {
     /// The connection type used for database operations (e.g., database
     /// connection pool)
@@ -10,7 +12,10 @@ pub trait Model: Sized {
 
     /// The primary key type, which is either concrete value or a tuple for
     /// composite primary keys.
-    type PrimaryKey;
+    type PrimaryKey: Send;
+
+    /// Returns the primary key value of this model instance.
+    fn primary_key(&self) -> Self::PrimaryKey;
 }
 
 /// Trait for objects that can be persisted to a database or storage backend.

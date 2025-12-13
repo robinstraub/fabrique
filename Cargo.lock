@@ -392,6 +392,7 @@ dependencies = [
  "fabrique",
  "fabrique-core",
  "fabrique-derive",
+ "heck",
  "proc-macro2",
  "quote",
  "sqlx",
