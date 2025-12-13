@@ -1,22 +1,24 @@
 use std::marker::PhantomData;
 
 pub trait Model: Sized {
-    /// The connection type used for database operations (e.g., database connection pool)
+    /// The connection type used for database operations (e.g., database
+    /// connection pool)
     type Connection: Clone + Sync;
 
     /// The error type returned by persistence operations
     type Error;
 
-    /// The primary key type, which is either concrete value or a tuple for composite primary
-    /// keys.
+    /// The primary key type, which is either concrete value or a tuple for
+    /// composite primary keys.
     type PrimaryKey;
 }
 
 /// Trait for objects that can be persisted to a database or storage backend.
 ///
-/// This trait enables factories to create and persist objects using the `create()` method.
-/// The trait is designed to be flexible, allowing different connection types and error handling
-/// strategies based on your specific database or persistence layer.
+/// This trait enables factories to create and persist objects using the
+/// `create()` method. The trait is designed to be flexible, allowing different
+/// connection types and error handling strategies based on your specific
+/// database or persistence layer.
 ///
 /// # Example
 ///
@@ -38,13 +40,15 @@ pub trait Persistable: Model {
     /// Creates a new query builder for this model.
     ///
     /// This method returns a query builder that allows chaining where clauses
-    /// to construct type-safe database queries with compile-time column validation.
+    /// to construct type-safe database queries with compile-time column
+    /// validation.
     fn query() -> Self::QueryBuilder;
 
     /// Creates and persists this model using the provided connection.
     ///
-    /// This method should handle the actual database insertion or persistence logic
-    /// and return the created object with any auto-generated fields (like IDs) populated.
+    /// This method should handle the actual database insertion or persistence
+    /// logic and return the created object with any auto-generated fields
+    /// (like IDs) populated.
     fn create(
         self,
         connection: &Self::Connection,
@@ -132,7 +136,8 @@ pub struct ColumnMarker<T> {
 impl<T> ColumnMarker<T> {
     /// Creates a new column marker with the specified name.
     ///
-    /// This is a const function to allow generating column constants at compile time.
+    /// This is a const function to allow generating column constants at compile
+    /// time.
     pub const fn new(name: &'static str) -> Self {
         Self {
             name,
@@ -143,8 +148,8 @@ impl<T> ColumnMarker<T> {
 
 /// SQL comparison operators for query building.
 ///
-/// This enum provides type-safe SQL operators that can be used in WHERE clauses.
-/// It supports conversion from string literals for convenience.
+/// This enum provides type-safe SQL operators that can be used in WHERE
+/// clauses. It supports conversion from string literals for convenience.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operator {
     /// Equal to (=)
@@ -207,26 +212,28 @@ impl From<&'static str> for Operator {
 
 /// Trait for building type-safe database queries.
 ///
-/// Query builders enable constructing SQL queries with compile-time safety by requiring
-/// column names to be static strings. This prevents dynamic column name injection while
-/// providing a fluent, chainable API for building complex queries.
+/// Query builders enable constructing SQL queries with compile-time safety by
+/// requiring column names to be static strings. This prevents dynamic column
+/// name injection while providing a fluent, chainable API for building complex
+/// queries.
 pub trait QueryBuilder {
     /// The model type that this query builder queries
     type Model;
 
     /// The database executor type used to run queries
-    type Executor;
+    type Connection;
 
     /// The error type returned from query operations
     type Error;
 
     /// Adds a WHERE clause to the query.
     ///
-    /// This method appends a condition to the query using the specified column, operator,
-    /// and value. Multiple where clauses can be chained together to build complex queries.
+    /// This method appends a condition to the query using the specified column,
+    /// operator, and value. Multiple where clauses can be chained together
+    /// to build complex queries.
     ///
-    /// The operator can be either an `Operator` enum variant or a string literal that will
-    /// be converted to an operator at runtime.
+    /// The operator can be either an `Operator` enum variant or a string
+    /// literal that will be converted to an operator at runtime.
     fn r#where<T, O>(self, column: ColumnMarker<T>, operator: O, value: T) -> Self
     where
         T: 'static + for<'q> sqlx::Encode<'q, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
@@ -238,7 +245,7 @@ pub trait QueryBuilder {
     /// returning a vector of model instances that match the query criteria.
     fn fetch_all(
         self,
-        executor: Self::Executor,
+        connection: &Self::Connection,
     ) -> impl Future<Output = Result<Vec<Self::Model>, Self::Error>>;
 }
 

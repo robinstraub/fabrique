@@ -1,5 +1,6 @@
 error: Unknown value: `` at relation
  --> tests/ui/invalid_string_literal_in_relation.rs:5:5
   |
-5 |     #[fabrique(relation = "", referenced_key = "id")]
-  |     ^
+5 | /     #[fabrique(relation = "", referenced_key = "id")]
+6 | |     hammer_id: u32,
+  | |__________________^

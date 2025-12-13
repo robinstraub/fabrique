@@ -22,7 +22,8 @@ impl<'a> PersistableCodegen<'a> {
         }
     }
 
-    /// Generates the complete Persistable trait implementation as a token stream.
+    /// Generates the complete Persistable trait implementation as a token
+    /// stream.
     ///
     /// This method generates:
     /// - `FromRow` trait implementation for database row mapping
@@ -213,7 +214,8 @@ impl<'a> PersistableCodegen<'a> {
 
     /// Generates the `FromRow` trait implementation.
     ///
-    /// This implementation handles automatic type conversions for fields with the `as` attribute.
+    /// This implementation handles automatic type conversions for fields with
+    /// the `as` attribute.
     fn generate_impl_from_row(&self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
 
@@ -224,7 +226,8 @@ impl<'a> PersistableCodegen<'a> {
 
             match &field.r#as {
                 Some(intermediate_ty) => {
-                    // Field has `as` attribute, need to convert from intermediate type using TryFrom
+                    // Field has `as` attribute, need to convert from intermediate type using
+                    // TryFrom
                     quote! {
                         #field_ident: row.try_get::<#intermediate_ty, _>(#column_name)?
                             .try_into()
@@ -253,8 +256,9 @@ impl<'a> PersistableCodegen<'a> {
     }
 
     fn generate_ty_primary_key(&self) -> TokenStream {
-        // todo: use the primary_keys attr from analysis: we're insterting the 'id' when no pk.
-        // todo: actually we should mutate the id column to mark it as primary
+        // todo: use the primary_keys attr from analysis: we're insterting the 'id' when
+        // no pk. todo: actually we should mutate the id column to mark it as
+        // primary
         let primary_keys: Vec<&ModelField> = self
             .analysis
             .fields

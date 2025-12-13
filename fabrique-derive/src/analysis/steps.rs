@@ -1,4 +1,5 @@
-//! Analysis builder using typestate pattern for procedural macro input validation.
+//! Analysis builder using typestate pattern for procedural macro input
+//! validation.
 //!
 //! # Workflow
 //!
