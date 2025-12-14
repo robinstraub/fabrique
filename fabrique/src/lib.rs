@@ -16,11 +16,10 @@
 //! conventions:
 //!
 //!```rust,no_run
-//! # use fabrique_core::Persistable;
-//! # use fabrique_derive::Persistable;
+//! # use fabrique::prelude::*;
 //! # use uuid::Uuid;
 //!
-//! #[derive(Persistable)]
+//! #[derive(Model)]
 //! pub struct Anvil {
 //!     id: uuid::Uuid,
 //!     // --snip--
@@ -41,11 +40,10 @@
 //! on the model:
 //!
 //!```rust,no_run
-//! # use fabrique_core::Persistable;
-//! # use fabrique_derive::Persistable;
+//! # use fabrique::prelude::*;
 //! # use uuid::Uuid;
 //!
-//! #[derive(Persistable)]
+//! #[derive(Model)]
 //! #[fabrique(table="acme_anvil")]
 //! pub struct Anvil {
 //!     id: uuid::Uuid,
@@ -60,11 +58,10 @@
 //! attribute to specify which field serves as your model's primary key:
 //!
 //!```rust,no_run
-//! # use fabrique_core::Persistable;
-//! # use fabrique_derive::Persistable;
+//! # use fabrique::prelude::*;
 //! # use uuid::Uuid;
 //!
-//! #[derive(Persistable)]
+//! #[derive(Model)]
 //! pub struct Anvil {
 //!     #[fabrique(primary_key)]
 //!     anvil_id: uuid::Uuid,
@@ -79,11 +76,10 @@
 //! #[fabrique(primary_key)] attributes:
 //!
 //! ```rust,no_run
-//! # use fabrique_core::Persistable;
-//! # use fabrique_derive::Persistable;
+//! # use fabrique::{Model, Persist, Query};
 //! # use uuid::Uuid;
 //!
-//! #[derive(Persistable)]
+//! #[derive(Model)]
 //! pub struct Anvil {
 //!     #[fabrique(primary_key)]
 //!     production_batch: String,
@@ -102,15 +98,14 @@
 //! start retrieving data from your database. You can think of each Fabrique
 //! model as a powerful [query builder][QueryBuilder] allowing you to fluently
 //! query the database table associated with the model. The model's
-//! [all][Persistable::all] method will retrieve all of the records from the
+//! [all][Query::all] method will retrieve all of the records from the
 //! model's associated database table:
 //!
 //! ```rust,no_run
-//! # use fabrique_core::Persistable;
-//! # use fabrique_derive::{Factory, Persistable};
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //! #
-//! # #[derive(Factory, Persistable)]
+//! # #[derive(Factory, Model)]
 //! # pub struct Anvil {
 //! #     id: uuid::Uuid,
 //! # }
@@ -123,17 +118,16 @@
 //!
 //! ### Building Queries
 //!
-//! The Fabrique [all][Persistable::all] method will return all of the results
+//! The Fabrique [all][Query::all] method will return all of the results
 //! in the model's table. However, since each Fabrique model serves as a [query
 //! builder][QueryBuilder], you may add additional constraints to queries and
 //! then invoke the get method to retrieve the results:
 //!
 //! ```rust,no_run
-//! # use fabrique_core::{Persistable, QueryBuilder};
-//! # use fabrique_derive::{Factory, Persistable};
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //! #
-//! # #[derive(Factory, Persistable)]
+//! # #[derive(Factory, Model)]
 //! # pub struct Anvil {
 //! #     id: uuid::Uuid,
 //! #     weight: i32,
@@ -154,14 +148,13 @@
 //!
 //! To insert a new record into the database, you should instantiate a new model
 //! instance and set attributes on the model. Then, call the
-//! [create][Persistable::create] method on the model instance:
+//! [create][Persist::create] method on the model instance:
 //!
 //! ```rust,no_run
-//! # use fabrique_core::Persistable;
-//! # use fabrique_derive::{Factory, Persistable};
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //! #
-//! # #[derive(Factory, Persistable)]
+//! # #[derive(Factory, Model)]
 //! # pub struct Anvil {
 //! #     id: uuid::Uuid,
 //! # }
@@ -174,15 +167,14 @@
 //!
 //! ## Deleting Models
 //!
-//! To delete a model, you may call the [delete][Persistable::delete] method on
+//! To delete a model, you may call the [delete][Persist::delete] method on
 //! the model instance:
 //!
 //! ```rust,no_run
-//! # use fabrique_core::Persistable;
-//! # use fabrique_derive::{Factory, Persistable};
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //! #
-//! # #[derive(Factory, Persistable)]
+//! # #[derive(Factory, Model)]
 //! # pub struct Anvil {
 //! #     id: uuid::Uuid,
 //! # }
@@ -196,17 +188,16 @@
 //! ### Deleting an Existing Model by its Primary Key
 //!
 //! In the example above, we are retrieving the model from the database before
-//! calling the [delete][Persistable::delete] method. However, if you know the
+//! calling the [delete][Persist::delete] method. However, if you know the
 //! primary key of the model, you may delete the model without explicitly
-//! retrieving it by calling the [destroy][Persistable::destroy] method.
+//! retrieving it by calling the [destroy][Persist::destroy] method.
 //!
 //! ```rust,no_run
-//! # use fabrique_core::Persistable;
-//! # use fabrique_derive::{Factory, Persistable};
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //! # use uuid::Uuid;
 //! #
-//! # #[derive(Factory, Persistable)]
+//! # #[derive(Factory, Model)]
 //! # pub struct Anvil {
 //! #     id: uuid::Uuid,
 //! # }
@@ -228,13 +219,12 @@
 //! be an optional date, such as `Option<chrono::DateTime<chrono::Utc>>`.
 //!
 //!```rust,no_run
-//! # use fabrique_core::Persistable;
-//! # use fabrique_derive::{Factory, Persistable};
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //! # use uuid::Uuid;
 //! use chrono::{DateTime, Utc};
 //!
-//! #[derive(Factory, Persistable)]
+//! #[derive(Factory, Model)]
 //! pub struct Anvil {
 //!     id: uuid::Uuid,
 //!
@@ -253,13 +243,12 @@
 //! the [trashed][SoftDelete::trashed] method:
 //!
 //!```rust,no_run
-//! # use fabrique_core::{Persistable, SoftDelete};
-//! # use fabrique_derive::{Factory, Persistable};
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //! # use uuid::Uuid;
 //! # use chrono::{DateTime, Utc};
 //!
-//! # #[derive(Factory, Persistable)]
+//! # #[derive(Factory, Model)]
 //! # pub struct Anvil {
 //! #    id: uuid::Uuid,
 //! #
@@ -283,13 +272,12 @@
 //! column to null:
 //!
 //!```rust,no_run
-//! # use fabrique_core::{Persistable, SoftDelete};
-//! # use fabrique_derive::{Factory, Persistable};
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //! # use uuid::Uuid;
 //! # use chrono::{DateTime, Utc};
 //!
-//! # #[derive(Factory, Persistable)]
+//! # #[derive(Factory, Model)]
 //! # pub struct Anvil {
 //! #    id: uuid::Uuid,
 //! #
@@ -310,13 +298,12 @@
 //! a soft deleted model from the database table:
 //!
 //!```rust,no_run
-//! # use fabrique_core::{HardDelete, Persistable};
-//! # use fabrique_derive::{Factory, Persistable};
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //! # use uuid::Uuid;
 //! # use chrono::{DateTime, Utc};
 //!
-//! # #[derive(Factory, Persistable)]
+//! # #[derive(Factory, Model)]
 //! # pub struct Anvil {
 //! #    id: uuid::Uuid,
 //! #
@@ -329,10 +316,13 @@
 //! #     Ok(())
 //! # }
 //! ```
-pub use fabrique_core::{ColumnMarker, HardDelete, Model, Operator, Persistable, SoftDelete};
-pub use fabrique_derive::Persistable;
+pub use database::*;
 pub use factory::*;
+pub use model::*;
 pub use query_builder::*;
 
+pub mod database;
 pub mod factory;
+pub mod model;
+pub mod prelude;
 pub mod query_builder;

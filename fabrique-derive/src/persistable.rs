@@ -22,12 +22,14 @@ impl<'a> PersistableCodegen<'a> {
         }
     }
 
-    /// Generates the complete Persistable trait implementation as a token
-    /// stream.
+    /// Generates the complete trait implementations as a token stream.
     ///
     /// This method generates:
     /// - `FromRow` trait implementation for database row mapping
-    /// - `Persistable` trait implementation
+    /// - `Database` trait implementation with connection and error types
+    /// - `Model` trait implementation with primary key and table name
+    /// - `Query` trait implementation with query building operations
+    /// - `Persist` trait implementation with CRUD operations
     /// - Column marker constants for type-safe query building
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
@@ -38,6 +40,7 @@ impl<'a> PersistableCodegen<'a> {
         let fn_destroy = self.generate_fn_destroy();
         let fn_query = self.generate_fn_query(query_builder_ident);
         let fn_primary_key = self.generate_fn_primary_key();
+        let fn_table_name = self.generate_fn_table_name();
         let ty_primary_key = self.generate_ty_primary_key();
         let column_constants = self.generate_column_constants();
         let from_row_impl = self.generate_impl_from_row();
@@ -45,27 +48,33 @@ impl<'a> PersistableCodegen<'a> {
         let generated = quote! {
             #from_row_impl
 
-            impl ::fabrique::Model for #base_struct_ident {
+            impl ::fabrique::Database for #base_struct_ident {
                 type Connection = sqlx::Pool<sqlx::Postgres>;
                 type Error = sqlx::Error;
+            }
+
+            impl ::fabrique::Model for #base_struct_ident {
                 type PrimaryKey = #ty_primary_key;
 
                 #fn_primary_key
+
+                #fn_table_name
             }
 
-            impl ::fabrique::Persistable for #base_struct_ident {
-
+            impl ::fabrique::Query for #base_struct_ident {
                 type QueryBuilder = #query_builder_ident;
 
-                #fn_create
+                #fn_query
 
-                #fn_destroy
+                #fn_all
+            }
+
+            impl ::fabrique::Persist for #base_struct_ident {
+                #fn_create
 
                 #fn_delete
 
-                #fn_all
-
-                #fn_query
+                #fn_destroy
             }
 
             impl #base_struct_ident {
@@ -108,7 +117,6 @@ impl<'a> PersistableCodegen<'a> {
     /// Generates the `create()` method.
     fn generate_fn_create(&self) -> TokenStream {
         // Get field identifiers and names
-
         let columns = self
             .analysis
             .fields
@@ -311,6 +319,15 @@ impl<'a> PersistableCodegen<'a> {
             }
         }
     }
+
+    fn generate_fn_table_name(&self) -> TokenStream {
+        let table_name = &self.analysis.model.table_name;
+        quote! {
+            fn table_name() -> &'static str {
+                #table_name
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -343,20 +360,36 @@ mod tests {
                     }
                 }
 
-                impl ::fabrique::Model for Anvil {
+                impl ::fabrique::Database for Anvil {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
+                }
+
+                impl ::fabrique::Model for Anvil {
                     type PrimaryKey = String;
 
                     fn primary_key(&self) -> Self::PrimaryKey {
                         self.id.clone()
                     }
+
+                    fn table_name() -> &'static str {
+                        "anvils"
+                    }
                 }
 
-                impl ::fabrique::Persistable for Anvil {
-
+                impl ::fabrique::Query for Anvil {
                     type QueryBuilder = AnvilQueryBuilder;
 
+                    fn query() -> Self::QueryBuilder {
+                        AnvilQueryBuilder::new()
+                    }
+
+                    async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
+                        sqlx::query_as::<_, Self>("SELECT id FROM anvils").fetch_all(connection).await
+                    }
+                }
+
+                impl ::fabrique::Persist for Anvil {
                     async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
                         sqlx::query_as::<_, Self>("INSERT INTO anvils (id) VALUES ($1) RETURNING id")
                             .bind(self.id)
@@ -364,20 +397,12 @@ mod tests {
                             .await
                     }
 
-                    async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                        <Self as ::fabrique::HardDelete>::hard_destroy(connection, id).await
-                    }
-
                     async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
                         <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
                     }
 
-                    async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
-                        sqlx::query_as::<_, Self>("SELECT id FROM anvils").fetch_all(connection).await
-                    }
-
-                    fn query() -> Self::QueryBuilder {
-                        AnvilQueryBuilder::new()
+                    async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                        <Self as ::fabrique::HardDelete>::hard_destroy(connection, id).await
                     }
                 }
 
@@ -420,20 +445,36 @@ mod tests {
                     }
                 }
 
-                impl ::fabrique::Model for Anvil {
+                impl ::fabrique::Database for Anvil {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
+                }
+
+                impl ::fabrique::Model for Anvil {
                     type PrimaryKey = (uuid::Uuid, uuid::Uuid);
 
                     fn primary_key(&self) -> Self::PrimaryKey {
                         (self.user_id.clone(), self.organization_id.clone())
                     }
+
+                    fn table_name() -> &'static str {
+                        "anvils"
+                    }
                 }
 
-                impl ::fabrique::Persistable for Anvil {
-
+                impl ::fabrique::Query for Anvil {
                     type QueryBuilder = AnvilQueryBuilder;
 
+                    fn query() -> Self::QueryBuilder {
+                        AnvilQueryBuilder::new()
+                    }
+
+                    async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
+                        sqlx::query_as::<_, Self>("SELECT user_id, organization_id FROM anvils").fetch_all(connection).await
+                    }
+                }
+
+                impl ::fabrique::Persist for Anvil {
                     async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
                         sqlx::query_as::<_, Self>("INSERT INTO anvils (user_id, organization_id) VALUES ($1, $2) RETURNING user_id, organization_id")
                             .bind(self.user_id)
@@ -442,20 +483,12 @@ mod tests {
                             .await
                     }
 
-                    async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                        <Self as ::fabrique::HardDelete>::hard_destroy(connection, id).await
-                    }
-
                     async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
                         <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
                     }
 
-                    async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
-                        sqlx::query_as::<_, Self>("SELECT user_id, organization_id FROM anvils").fetch_all(connection).await
-                    }
-
-                    fn query() -> Self::QueryBuilder {
-                        AnvilQueryBuilder::new()
+                    async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                        <Self as ::fabrique::HardDelete>::hard_destroy(connection, id).await
                     }
                 }
 
@@ -497,20 +530,36 @@ mod tests {
                     }
                 }
 
-                impl ::fabrique::Model for Anvil {
+                impl ::fabrique::Database for Anvil {
                     type Connection = sqlx::Pool<sqlx::Postgres>;
                     type Error = sqlx::Error;
+                }
+
+                impl ::fabrique::Model for Anvil {
                     type PrimaryKey = uuid::Uuid;
 
                     fn primary_key(&self) -> Self::PrimaryKey {
                         self.id.clone()
                     }
+
+                    fn table_name() -> &'static str {
+                        "anvils"
+                    }
                 }
 
-                impl ::fabrique::Persistable for Anvil {
-
+                impl ::fabrique::Query for Anvil {
                     type QueryBuilder = AnvilQueryBuilder;
 
+                    fn query() -> Self::QueryBuilder {
+                        AnvilQueryBuilder::new()
+                    }
+
+                    async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
+                        sqlx::query_as::<_, Self>("SELECT id, deleted_at FROM anvils WHERE deleted_at IS NULL").fetch_all(connection).await
+                    }
+                }
+
+                impl ::fabrique::Persist for Anvil {
                     async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
                         sqlx::query_as::<_, Self>("INSERT INTO anvils (id, deleted_at) VALUES ($1, $2) RETURNING id, deleted_at")
                             .bind(self.id)
@@ -519,20 +568,12 @@ mod tests {
                             .await
                     }
 
-                    async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                        <Self as ::fabrique::SoftDelete>::soft_destroy(connection, id).await
-                    }
-
                     async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
                         <Self as ::fabrique::SoftDelete>::soft_delete(self, connection).await
                     }
 
-                    async fn all(connection: &Self::Connection) -> Result<Vec<Self>, Self::Error> {
-                        sqlx::query_as::<_, Self>("SELECT id, deleted_at FROM anvils WHERE deleted_at IS NULL").fetch_all(connection).await
-                    }
-
-                    fn query() -> Self::QueryBuilder {
-                        AnvilQueryBuilder::new()
+                    async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                        <Self as ::fabrique::SoftDelete>::soft_destroy(connection, id).await
                     }
                 }
 

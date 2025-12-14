@@ -1,4 +1,4 @@
-use fabrique::{Factory, Persistable, QueryBuilder};
+use fabrique::prelude::*;
 use sqlx::{Pool, Postgres};
 use std::str::FromStr;
 use strum_macros::{Display, EnumString, IntoStaticStr};
@@ -26,7 +26,7 @@ impl TryFrom<String> for Material {
 }
 
 // Simple struct to test derive macro compilation
-#[derive(Debug, Default, Factory, PartialEq, Persistable)]
+#[derive(Debug, Default, Factory, PartialEq, Model)]
 #[allow(dead_code)]
 pub struct Anvil {
     pub id: Uuid,

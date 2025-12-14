@@ -1,7 +1,7 @@
-use fabrique_derive::Persistable;
+use fabrique_derive::Model;
 use uuid::Uuid;
 
-#[derive(Persistable)]
+#[derive(Model)]
 pub struct Anvil {
     pub id: Uuid,
 }

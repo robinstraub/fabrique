@@ -13,16 +13,16 @@
 //! create an `Order` model instance that belong to a factory generated user:
 //!
 //!```rust,no_run
-//! # use fabrique::{Factory, Persistable};
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //! # use uuid::Uuid;
 //!
-//! # #[derive(Factory, Persistable)]
+//! # #[derive(Factory, Model)]
 //! # pub struct User {
 //! #     id: Uuid,
 //! # }
 //! #
-//! #[derive(Factory, Persistable)]
+//! #[derive(Factory, Model)]
 //! pub struct Anvil {
 //!     id: Uuid,
 //!
@@ -44,16 +44,16 @@
 //! [for][Factory::for] method:
 //!
 //!```rust,no_run
-//! # use fabrique::{Factory, Persistable};
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //! # use uuid::Uuid;
 //!
-//! # #[derive(Factory, Persistable)]
+//! # #[derive(Factory, Model)]
 //! # pub struct User {
 //! #     id: Uuid,
 //! # }
 //!
-//! #[derive(Factory, Persistable)]
+//! #[derive(Factory, Model)]
 //! pub struct Anvil {
 //!     id: Uuid,
 //!

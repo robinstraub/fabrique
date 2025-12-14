@@ -27,11 +27,10 @@
 //! 35:
 //!
 //!```rust,no_run
-//! # use fabrique_core::{Persistable, QueryBuilder};
-//! # use fabrique_derive::Persistable;
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //!
-//! # #[derive(Persistable)]
+//! # #[derive(Model)]
 //! # pub struct Anvil {
 //! #     id: uuid::Uuid,
 //! #     weight: i32,
@@ -51,11 +50,10 @@
 //! database system:
 //!
 //!```rust,no_run
-//! # use fabrique_core::{Persistable, QueryBuilder};
-//! # use fabrique_derive::Persistable;
+//! # use fabrique::prelude::*;
 //! # use sqlx::PgPool;
 //!
-//! # #[derive(Persistable)]
+//! # #[derive(Model)]
 //! # pub struct Anvil {
 //! #     id: uuid::Uuid,
 //! #     name: String,
@@ -74,4 +72,4 @@
 //! #     Ok(())
 //! # }
 //! ```
-pub use fabrique_core::QueryBuilder;
+pub use fabrique_core::query_builder::*;

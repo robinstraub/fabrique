@@ -1,8 +1,8 @@
-use fabrique::{Factory, Persistable};
+use fabrique::prelude::*;
 use sqlx::{Pool, Postgres};
 use uuid::Uuid;
 
-#[derive(Debug, Default, Factory, PartialEq, Persistable)]
+#[derive(Debug, Default, Factory, PartialEq, Model)]
 pub struct Anvil {
     pub id: Uuid,
     pub material: String,
@@ -10,12 +10,12 @@ pub struct Anvil {
     pub weight: i16,
 }
 
-#[derive(Debug, Default, Factory, PartialEq, Persistable)]
+#[derive(Debug, Default, Factory, PartialEq, Model)]
 pub struct Order {
     pub id: Uuid,
 }
 
-#[derive(Debug, Default, Factory, PartialEq, Persistable)]
+#[derive(Debug, Default, Factory, PartialEq, Model)]
 #[fabrique(table = "order_lines")]
 pub struct OrderLine {
     #[fabrique(primary_key, relation = "Order")]

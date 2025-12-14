@@ -44,10 +44,13 @@ impl<'a> QueryBuilderCodegen<'a> {
                 #fn_new
             }
 
-            impl ::fabrique::QueryBuilder for #ident {
-                type Model = #base_struct_ident;
+            impl ::fabrique::Database for #ident {
                 type Connection = ::sqlx::Pool<::sqlx::Postgres>;
                 type Error = ::sqlx::Error;
+            }
+
+            impl ::fabrique::QueryBuilder for #ident {
+                type Model = #base_struct_ident;
 
                 #fn_where
 
@@ -174,10 +177,13 @@ mod tests {
                     }
                 }
 
-                impl ::fabrique::QueryBuilder for AnvilQueryBuilder {
-                    type Model = Anvil;
+                impl ::fabrique::Database for AnvilQueryBuilder {
                     type Connection = ::sqlx::Pool<::sqlx::Postgres>;
                     type Error = ::sqlx::Error;
+                }
+
+                impl ::fabrique::QueryBuilder for AnvilQueryBuilder {
+                    type Model = Anvil;
 
                     fn r#where<T, O>(mut self, column: ::fabrique::ColumnMarker<T>, operator: O, value: T) -> Self
                     where

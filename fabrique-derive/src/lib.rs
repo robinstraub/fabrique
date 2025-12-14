@@ -1,10 +1,9 @@
-//! Procedural macros for generating factory and persistence code.
+//! Procedural macros for generating factory and model code.
 //!
 //! This crate provides two derive macros:
 //! - `#[derive(Factory)]` - Generates factory structs with optional fields for
 //!   flexible object creation
-//! - `#[derive(Persistable)]` - Generates persistence implementations for data
-//!   storage
+//! - `#[derive(Model)]` - Generates model implementations with database operations
 
 use crate::{
     analysis::Analysis, delete::DeleteCodegen, factory::FactoryCodegen,
@@ -21,9 +20,17 @@ mod persistable;
 mod query_builder;
 mod soft_delete;
 
-/// Derives a `Persistable` implementation for the annotated struct.
-#[proc_macro_derive(Persistable, attributes(fabrique))]
-pub fn derive_persistable(input: TokenStream) -> TokenStream {
+/// Derives a `Model` implementation for the annotated struct.
+///
+/// This generates implementations for:
+/// - `Database` trait (connection and error types)
+/// - `Model` trait (primary key and table name)
+/// - `Query` trait (query building and retrieval)
+/// - `Persist` trait (creation and deletion)
+/// - `HardDelete` trait (permanent deletion)
+/// - `SoftDelete` trait (conditional, if soft delete field is present)
+#[proc_macro_derive(Model, attributes(fabrique))]
+pub fn derive_model(input: TokenStream) -> TokenStream {
     use crate::{
         analysis::Analysis, persistable::PersistableCodegen, query_builder::QueryBuilderCodegen,
     };

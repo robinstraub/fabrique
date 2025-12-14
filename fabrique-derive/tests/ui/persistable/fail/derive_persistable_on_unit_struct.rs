@@ -1,6 +1,6 @@
-use fabrique_derive::Persistable;
+use fabrique_derive::Model;
 
-#[derive(Persistable)]
+#[derive(Model)]
 struct Anvil;
 
 fn main() {}

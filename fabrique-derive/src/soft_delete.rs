@@ -22,7 +22,6 @@ impl<'a> SoftDeleteCodegen<'a> {
             .find(|field| field.soft_delete)?;
 
         let base_struct_ident = &self.analysis.ident;
-        let fn_force_delete = &self.generate_fn_force_delete(soft_delete_field);
         let fn_soft_destroy = &self.generate_fn_soft_destroy(soft_delete_field);
         let fn_soft_delete = &self.generate_fn_soft_delete(soft_delete_field);
         let fn_restore = &self.generate_fn_restore(soft_delete_field);
@@ -30,21 +29,12 @@ impl<'a> SoftDeleteCodegen<'a> {
 
         Some(quote! {
             impl ::fabrique::SoftDelete for #base_struct_ident {
-                #fn_force_delete
-                #fn_soft_destroy
                 #fn_soft_delete
+                #fn_soft_destroy
                 #fn_restore
                 #fn_trashed
             }
         })
-    }
-
-    fn generate_fn_force_delete(&self, _soft_delete_field: &ModelField) -> TokenStream {
-        quote! {
-            async fn force_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
-            }
-        }
     }
 
     fn generate_fn_soft_delete(&self, soft_delete_field: &ModelField) -> TokenStream {
@@ -216,17 +206,13 @@ mod tests {
             result.unwrap().to_string(),
             quote! {
                 impl ::fabrique::SoftDelete for Anvil {
-                    async fn force_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                        <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
+                    async fn soft_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                        sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(self.id).execute(connection).await?;
+                        Ok(())
                     }
 
                     async fn soft_destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
                         sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(id).execute(connection).await?;
-                        Ok(())
-                    }
-
-                    async fn soft_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                        sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(self.id).execute(connection).await?;
                         Ok(())
                     }
 
@@ -270,17 +256,13 @@ mod tests {
             result.unwrap().to_string(),
             quote! {
                 impl ::fabrique::SoftDelete for Anvil {
-                    async fn force_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                        <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
+                    async fn soft_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                        sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(connection).await?;
+                        Ok(())
                     }
 
                     async fn soft_destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
                         sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(id.0).bind(id.1).execute(connection).await?;
-                        Ok(())
-                    }
-
-                    async fn soft_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                        sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(connection).await?;
                         Ok(())
                     }
 
