@@ -15,8 +15,8 @@ impl<'a> DeleteCodegen<'a> {
 
     /// Generates the `fabrique::Delete` trait implementation as a token stream.
     ///
-    /// The implementation delegates to either `SoftDelete` or `HardDelete` based
-    /// on whether the model has a soft delete field.
+    /// The implementation delegates to either `SoftDelete` or `HardDelete`
+    /// based on whether the model has a soft delete field.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
         let fn_delete = self.generate_fn_delete();

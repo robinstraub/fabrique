@@ -82,7 +82,5 @@ pub fn derive_factory(input: TokenStream) -> TokenStream {
         }
     };
 
-    FactoryCodegen::new(&analysis)
-        .generate_factory()
-        .into()
+    FactoryCodegen::new(&analysis).generate_factory().into()
 }

@@ -85,7 +85,8 @@ mod tests {
         // Arrange
         let input = parse_quote! { struct Anvil { id: String } };
         let analysis = Analysis::from(&input).unwrap();
-        let query_builder_ident = syn::Ident::new("AnvilQueryBuilder", proc_macro2::Span::call_site());
+        let query_builder_ident =
+            syn::Ident::new("AnvilQueryBuilder", proc_macro2::Span::call_site());
         let codegen = QueryCodegen::new(&analysis, &query_builder_ident);
 
         // Act
@@ -123,7 +124,8 @@ mod tests {
             }
         };
         let analysis = Analysis::from(&input).unwrap();
-        let query_builder_ident = syn::Ident::new("AnvilQueryBuilder", proc_macro2::Span::call_site());
+        let query_builder_ident =
+            syn::Ident::new("AnvilQueryBuilder", proc_macro2::Span::call_site());
         let codegen = QueryCodegen::new(&analysis, &query_builder_ident);
 
         // Act

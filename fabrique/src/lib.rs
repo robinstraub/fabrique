@@ -2,29 +2,30 @@
 //!
 //! Fluent ORM for Rust with type-safe queries and integrated testing tools.
 //!
-//! Fabrique is an object-relational mapper (ORM) that makes it enjoyable to interact
-//! with your database. It provides a fluent, type-safe API for defining models,
-//! querying data, and generating test fixtures.
+//! Fabrique is an object-relational mapper (ORM) that makes it enjoyable to
+//! interact with your database. It provides a fluent, type-safe API for
+//! defining models, querying data, and generating test fixtures.
 //!
 //! ## Core Features
 //!
 //! ### Models
 //!
-//! Define database models using the `#[derive(Model)]` macro. Models automatically
-//! map to database tables and provide methods for CRUD operations, soft deletes,
-//! and more. See the [`model`] module for detailed documentation.
+//! Define database models using the `#[derive(Model)]` macro. Models
+//! automatically map to database tables and provide methods for CRUD
+//! operations, soft deletes, and more. See the [`model`] module for detailed
+//! documentation.
 //!
 //! ### Query Builder
 //!
-//! Build type-safe database queries with a fluent API. The query builder provides
-//! methods for filtering, ordering, limiting results, and more. See the
-//! [`query_builder`] module for details.
+//! Build type-safe database queries with a fluent API. The query builder
+//! provides methods for filtering, ordering, limiting results, and more. See
+//! the [`query_builder`] module for details.
 //!
 //! ### Factories
 //!
-//! Generate test data easily with the `#[derive(Factory)]` macro. Factories help
-//! you create model instances for testing without manually specifying every field.
-//! See the [`factory`] module for more information.
+//! Generate test data easily with the `#[derive(Factory)]` macro. Factories
+//! help you create model instances for testing without manually specifying
+//! every field. See the [`factory`] module for more information.
 //!
 //! ## Quick Example
 //!
