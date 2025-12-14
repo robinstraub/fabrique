@@ -1,33 +1,33 @@
-//! Procedural macros for generating factory and persistence code.
+//! Procedural macros for generating factory and model code.
 //!
 //! This crate provides two derive macros:
 //! - `#[derive(Factory)]` - Generates factory structs with optional fields for
 //!   flexible object creation
-//! - `#[derive(Persistable)]` - Generates persistence implementations for data
-//!   storage
+//! - `#[derive(Model)]` - Generates model implementations with database
+//!   operations
 
-use crate::{
-    analysis::Analysis, delete::DeleteCodegen, factory::FactoryCodegen,
-    soft_delete::SoftDeleteCodegen,
-};
 use proc_macro::TokenStream;
 use syn::{DeriveInput, parse_macro_input};
 
 mod analysis;
-mod delete;
+mod codegen;
 mod error;
-mod factory;
-mod persistable;
-mod query_builder;
-mod soft_delete;
 
-/// Derives a `Persistable` implementation for the annotated struct.
-#[proc_macro_derive(Persistable, attributes(fabrique))]
-pub fn derive_persistable(input: TokenStream) -> TokenStream {
-    use crate::{
-        analysis::Analysis, persistable::PersistableCodegen, query_builder::QueryBuilderCodegen,
-    };
+use crate::analysis::Analysis;
+use crate::codegen::*;
 
+/// Derives a `Model` implementation for the annotated struct.
+///
+/// This generates implementations for:
+/// - `Database` trait (connection and error types)
+/// - `Model` trait (primary key and table name)
+/// - `Query` trait (query building and retrieval)
+/// - `Persist` trait (creation operations)
+/// - `Delete` trait (delete and destroy operations)
+/// - `HardDelete` trait (permanent deletion)
+/// - `SoftDelete` trait (conditional, if soft delete field is present)
+#[proc_macro_derive(Model, attributes(fabrique))]
+pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     let analysis = match Analysis::from(&input) {
@@ -38,20 +38,32 @@ pub fn derive_persistable(input: TokenStream) -> TokenStream {
         }
     };
 
-    let delete_codegen = DeleteCodegen::new(&analysis);
-    let soft_delete_codegen = SoftDeleteCodegen::new(&analysis);
+    // Query builder codegen
     let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
-    let persistable_codegen = PersistableCodegen::new(&analysis, &query_builder_codegen);
+    let query_builder_ident = &query_builder_codegen.query_builder_ident;
 
-    let delete = delete_codegen.generate();
-    let soft_delete = soft_delete_codegen.generate();
-    let persistable = persistable_codegen.generate();
+    // Trait implementations
+    let from_row = FromRowCodegen::new(&analysis).generate();
+    let database = DatabaseCodegen::new(&analysis).generate();
+    let model = ModelCodegen::new(&analysis).generate();
+    let query = QueryCodegen::new(&analysis, query_builder_ident).generate();
+    let persist = PersistCodegen::new(&analysis).generate();
+    let delete = DeleteCodegen::new(&analysis).generate();
+    let hard_delete = HardDeleteCodegen::new(&analysis).generate();
+    let soft_delete = SoftDeleteCodegen::new(&analysis).generate();
+    let columns = ColumnsCodegen::new(&analysis).generate();
     let query_builder = query_builder_codegen.generate();
 
     quote::quote! {
+        #from_row
+        #database
+        #model
+        #query
+        #persist
         #delete
+        #hard_delete
         #soft_delete
-        #persistable
+        #columns
         #query_builder
     }
     .into()

@@ -1,9 +1,9 @@
-use fabrique::{Factory, Persistable, SoftDelete};
+use fabrique::prelude::*;
 use sqlx::{Pool, Postgres};
 use uuid::Uuid;
 
 // Simple struct to test derive macro compilation
-#[derive(Clone, Debug, Default, Factory, PartialEq, Persistable)]
+#[derive(Clone, Debug, Default, Factory, PartialEq, Model)]
 #[allow(dead_code)]
 pub struct Anvil {
     pub id: Uuid,

@@ -2,11 +2,11 @@ use crate::{Analysis, analysis::ast::ModelField};
 use proc_macro2::TokenStream;
 use quote::quote;
 
-pub struct DeleteCodegen<'a> {
+pub struct HardDeleteCodegen<'a> {
     analysis: &'a Analysis<'a>,
 }
 
-impl<'a> DeleteCodegen<'a> {
+impl<'a> HardDeleteCodegen<'a> {
     /// Creates a new code generator for the `fabrique::HardDelete` trait
     /// implementation.
     pub fn new(analysis: &'a Analysis<'a>) -> Self {
@@ -108,7 +108,7 @@ mod tests {
         // Arrange the codegen
         let input = parse_quote! { struct Anvil { id: String } };
         let analysis = Analysis::from(&input).unwrap();
-        let codegen = DeleteCodegen::new(&analysis);
+        let codegen = HardDeleteCodegen::new(&analysis);
 
         // Act the call to the generate method
         let result = codegen.generate();
@@ -146,7 +146,7 @@ mod tests {
             }
         };
         let analysis = Analysis::from(&input).unwrap();
-        let codegen = DeleteCodegen::new(&analysis);
+        let codegen = HardDeleteCodegen::new(&analysis);
 
         // Act the call to the generate method
         let result = codegen.generate();

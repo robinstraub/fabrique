@@ -1,6 +1,5 @@
+use crate::{database::Database, model::Model};
 use std::{future::Future, pin::Pin};
-
-use crate::Model;
 
 /// Trait representing a factory that can create model instances.
 ///
@@ -18,7 +17,7 @@ pub trait Factory {
 
 /// Type alias for the future returned by `into_key`.
 pub type IntoKeyFuture<'a, M> = Pin<
-    Box<dyn Future<Output = Result<<M as Model>::PrimaryKey, <M as Model>::Error>> + Send + 'a>,
+    Box<dyn Future<Output = Result<<M as Model>::PrimaryKey, <M as Database>::Error>> + Send + 'a>,
 >;
 
 /// Trait for types that can establish factory belongs-to relationships.

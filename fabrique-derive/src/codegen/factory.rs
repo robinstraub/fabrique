@@ -150,7 +150,7 @@ impl<'a> FactoryCodegen<'a> {
         });
 
         quote! {
-            pub async fn create(mut self, connection: &<#struct_ident as fabrique::Model>::Connection) -> Result<#struct_ident, <#struct_ident as fabrique::Model>::Error>
+            pub async fn create(mut self, connection: &<#struct_ident as fabrique::Database>::Connection) -> Result<#struct_ident, <#struct_ident as fabrique::Database>::Error>
             {
                 #(#relations_create)*
 
@@ -158,7 +158,7 @@ impl<'a> FactoryCodegen<'a> {
                     #(#struct_fields,)*
                 };
 
-                instance.create(connection).await
+                <#struct_ident as fabrique::Persist>::create(instance, connection).await
             }
         }
     }
@@ -253,7 +253,7 @@ impl<'a> FactoryCodegen<'a> {
             {
                 fn into_key<'a>(
                     self: Box<Self>,
-                    connection: &'a <#model_ident as fabrique::Model>::Connection,
+                    connection: &'a <#model_ident as fabrique::Database>::Connection,
                 ) -> fabrique::IntoKeyFuture<'a, #model_ident> {
                     Box::pin(async move {
                         let instance = (*self).create(connection).await?;
@@ -327,7 +327,7 @@ mod tests {
                 {
                     fn into_key<'a>(
                         self: Box<Self>,
-                        connection: &'a <Anvil as fabrique::Model>::Connection,
+                        connection: &'a <Anvil as fabrique::Database>::Connection,
                     ) -> fabrique::IntoKeyFuture<'a, Anvil> {
                         Box::pin(async move {
                             let instance = (*self).create(connection).await?;
@@ -347,7 +347,7 @@ mod tests {
                         }
                     }
 
-                    pub async fn create(mut self, connection: &<Anvil as fabrique::Model>::Connection) -> Result<Anvil, <Anvil as fabrique::Model>::Error> {
+                    pub async fn create(mut self, connection: &<Anvil as fabrique::Database>::Connection) -> Result<Anvil, <Anvil as fabrique::Database>::Error> {
                         if let Some(relation) = self.hammer_relation {
                             let key = relation.into_key(connection).await?;
                             self.hammer_id = Some(key);
@@ -359,7 +359,7 @@ mod tests {
                             hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
                             weight: self.weight.unwrap_or(<u32 as Default>::default()),
                         };
-                        instance.create(connection).await
+                        <Anvil as fabrique::Persist>::create(instance, connection).await
                     }
 
                     pub fn id(mut self, id: u32) -> Self {
@@ -468,7 +468,7 @@ mod tests {
         assert_eq!(
             generated.to_string(),
             quote! {
-                pub async fn create(mut self, connection: &<Anvil as fabrique::Model>::Connection) -> Result<Anvil, <Anvil as fabrique::Model>::Error> {
+                pub async fn create(mut self, connection: &<Anvil as fabrique::Database>::Connection) -> Result<Anvil, <Anvil as fabrique::Database>::Error> {
                     if let Some(relation) = self.hammer_relation {
                         let key = relation.into_key(connection).await?;
                         self.hammer_id = Some(key);
@@ -480,7 +480,7 @@ mod tests {
                         hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
                         weight: self.weight.unwrap_or(<u32 as Default>::default()),
                     };
-                    instance.create(connection).await
+                    <Anvil as fabrique::Persist>::create(instance, connection).await
                 }
             }
             .to_string()
