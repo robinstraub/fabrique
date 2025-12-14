@@ -11,6 +11,9 @@ pub trait Model: Database {
 
     /// Returns the table name for this model
     fn table_name() -> &'static str;
+
+    /// Returns whether this model uses soft delete
+    fn uses_soft_delete() -> bool;
 }
 
 /// Query building and retrieval operations
@@ -26,21 +29,30 @@ pub trait Query: Model {
     ) -> impl Future<Output = Result<Vec<Self>, Self::Error>> + Send;
 }
 
-/// Create and delete operations
+/// Create operations
 pub trait Persist: Model {
     /// Creates and persists this model instance
     fn create(
         self,
         connection: &Self::Connection,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send;
+}
 
+/// Delete operations
+pub trait Delete: Model {
     /// Deletes this model instance
+    ///
+    /// If the model uses soft delete, this will perform a soft delete.
+    /// Otherwise, it will permanently delete the record.
     fn delete(
         self,
         connection: &Self::Connection,
     ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
     /// Destroys a model by its primary key
+    ///
+    /// If the model uses soft delete, this will perform a soft destroy.
+    /// Otherwise, it will permanently delete the record.
     fn destroy(
         connection: &Self::Connection,
         id: Self::PrimaryKey,
