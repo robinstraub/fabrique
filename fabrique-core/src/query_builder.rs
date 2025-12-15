@@ -47,14 +47,15 @@ impl From<&'static str> for Operator {
     ///
     /// Panics if the string is not a recognized operator.
     ///
-    /// This implementation accepts panics for invalid input as the expected use case
-    /// involves developer-written compile-time string literals that will be validated
-    /// by tests. Result-based error handling would require propagating errors through
-    /// the builder's state machine, adding significant complexity.
+    /// This implementation accepts panics for invalid input as the expected use
+    /// case involves developer-written compile-time string literals that
+    /// will be validated by tests. Result-based error handling would
+    /// require propagating errors through the builder's state machine,
+    /// adding significant complexity.
     ///
-    /// If runtime validation of user input becomes necessary, `TryFrom` can be added
-    /// alongside this implementation without breaking the public API, with errors
-    /// surfacing at query execution (`.await`).
+    /// If runtime validation of user input becomes necessary, `TryFrom` can be
+    /// added alongside this implementation without breaking the public API,
+    /// with errors surfacing at query execution (`.await`).
     fn from(s: &'static str) -> Self {
         match s {
             "=" => Operator::Eq,
@@ -99,14 +100,15 @@ impl From<&'static str> for Direction {
     ///
     /// Panics if the string is not a recognized direction.
     ///
-    /// This implementation accepts panics for invalid input as the expected use case
-    /// involves developer-written compile-time string literals that will be validated
-    /// by tests. Result-based error handling would require propagating errors through
-    /// the builder's state machine, adding significant complexity.
+    /// This implementation accepts panics for invalid input as the expected use
+    /// case involves developer-written compile-time string literals that
+    /// will be validated by tests. Result-based error handling would
+    /// require propagating errors through the builder's state machine,
+    /// adding significant complexity.
     ///
-    /// If runtime validation of user input becomes necessary, `TryFrom` can be added
-    /// alongside this implementation without breaking the public API, with errors
-    /// surfacing at query execution (`.await`).
+    /// If runtime validation of user input becomes necessary, `TryFrom` can be
+    /// added alongside this implementation without breaking the public API,
+    /// with errors surfacing at query execution (`.await`).
     fn from(s: &'static str) -> Self {
         match s.to_uppercase().as_str() {
             "ASC" => Direction::Asc,
@@ -194,5 +196,25 @@ mod tests {
     #[should_panic(expected = "Unknown operator")]
     fn test_operator_from_str_invalid() {
         let _ = Operator::from("INVALID");
+    }
+
+    #[test]
+    fn test_direction_as_str() {
+        assert_eq!(Direction::Asc.as_str(), "ASC");
+        assert_eq!(Direction::Desc.as_str(), "DESC");
+    }
+
+    #[test]
+    fn test_direction_from_str() {
+        assert_eq!(Direction::from("ASC"), Direction::Asc);
+        assert_eq!(Direction::from("asc"), Direction::Asc);
+        assert_eq!(Direction::from("DESC"), Direction::Desc);
+        assert_eq!(Direction::from("desc"), Direction::Desc);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unknown direction")]
+    fn test_direction_from_str_invalid() {
+        let _ = Direction::from("INVALID");
     }
 }

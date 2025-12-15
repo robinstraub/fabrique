@@ -286,6 +286,7 @@ mod tests {
             .r#where("weight", "<=", 99)
             .order_by("weight", "ASC")
             .limit(10)
+            .offset(20)
             .fetch_all(&connection)
             .await;
 
