@@ -41,7 +41,6 @@ impl<'a> FactoryCodegen<'a> {
         let base_struct_ident = &self.analysis.ident;
         let factory_ident = &self.ident;
         let factory_fields = self.generate_factory_fields();
-        let factory_method_create = self.generate_factory_method_create();
         let factory_method_new = self.generate_factory_method_new();
         let factory_method_fields = self.generate_factory_method_fields();
         let factory_methods_for_relation = self.generate_factory_methods_for_relation();
@@ -67,8 +66,6 @@ impl<'a> FactoryCodegen<'a> {
 
             impl #factory_ident {
                 #factory_method_new
-
-                #factory_method_create
 
                 #(#factory_method_fields)*
 
@@ -132,7 +129,7 @@ impl<'a> FactoryCodegen<'a> {
 
             quote! {
                 if let Some(relation) = self.#factory_field {
-                    let key = relation.into_key(connection).await?;
+                    let key = relation.into_key(&executor).await?;
                     self.#field = Some(key);
                 }
             }
@@ -150,15 +147,22 @@ impl<'a> FactoryCodegen<'a> {
         });
 
         quote! {
-            pub async fn create(mut self, connection: &<#struct_ident as fabrique::Database>::Connection) -> Result<#struct_ident, <#struct_ident as fabrique::Database>::Error>
+            fn create<E>(
+                mut self,
+                executor: E,
+            ) -> impl ::std::future::Future<Output = Result<#struct_ident, <#struct_ident as fabrique::DatabaseAware>::Error>> + Send
+            where
+                E: for<'e> ::sqlx::Executor<'e, Database = <#struct_ident as fabrique::DatabaseAware>::Database>,
             {
-                #(#relations_create)*
+                async move {
+                    #(#relations_create)*
 
-                let instance = #struct_ident {
-                    #(#struct_fields,)*
-                };
+                    let instance = #struct_ident {
+                        #(#struct_fields,)*
+                    };
 
-                <#struct_ident as fabrique::Persist>::create(instance, connection).await
+                    <#struct_ident as fabrique::Persist>::create(instance, executor).await
+                }
             }
         }
     }
@@ -233,10 +237,13 @@ impl<'a> FactoryCodegen<'a> {
     fn generate_impl_factory_trait(&self) -> TokenStream {
         let factory_ident = &self.ident;
         let model_ident = &self.analysis.ident;
+        let factory_method_create = self.generate_factory_method_create();
 
         quote! {
             impl fabrique::Factory for #factory_ident {
                 type Model = #model_ident;
+
+                #factory_method_create
             }
         }
     }
@@ -251,12 +258,15 @@ impl<'a> FactoryCodegen<'a> {
             where
                 Self: 'static,
             {
-                fn into_key<'a>(
+                fn into_key<E>(
                     self: Box<Self>,
-                    connection: &'a <#model_ident as fabrique::Database>::Connection,
-                ) -> fabrique::IntoKeyFuture<'a, #model_ident> {
+                    executor: E,
+                ) -> fabrique::IntoKeyFuture<#model_ident>
+                where
+                    E: for<'e> ::sqlx::Executor<'e, Database = <#model_ident as fabrique::DatabaseAware>::Database>,
+                {
                     Box::pin(async move {
-                        let instance = (*self).create(connection).await?;
+                        let instance = <Self as fabrique::Factory>::create(*self, executor).await?;
                         Ok(<#model_ident as fabrique::Model>::primary_key(&instance))
                     })
                 }
@@ -319,18 +329,44 @@ mod tests {
 
                 impl fabrique::Factory for AnvilFactory {
                     type Model = Anvil;
+
+                    fn create<E>(
+                        mut self,
+                        executor: E,
+                    ) -> impl ::std::future::Future<Output = Result<Anvil, <Anvil as fabrique::DatabaseAware>::Error>> + Send
+                    where
+                        E: for<'e> ::sqlx::Executor<'e, Database = <Anvil as fabrique::DatabaseAware>::Database>,
+                    {
+                        async move {
+                            if let Some(relation) = self.hammer_relation {
+                                let key = relation.into_key(&executor).await?;
+                                self.hammer_id = Some(key);
+                            }
+
+                            let instance = Anvil {
+                                id: self.id.unwrap_or(<u32 as Default>::default()),
+                                hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
+                                hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
+                                weight: self.weight.unwrap_or(<u32 as Default>::default()),
+                            };
+                            <Anvil as fabrique::Persist>::create(instance, executor).await
+                        }
+                    }
                 }
 
                 impl fabrique::ForRelation<Anvil> for AnvilFactory
                 where
                     Self: 'static,
                 {
-                    fn into_key<'a>(
+                    fn into_key<E>(
                         self: Box<Self>,
-                        connection: &'a <Anvil as fabrique::Database>::Connection,
-                    ) -> fabrique::IntoKeyFuture<'a, Anvil> {
+                        executor: E,
+                    ) -> fabrique::IntoKeyFuture<Anvil>
+                    where
+                        E: for<'e> ::sqlx::Executor<'e, Database = <Anvil as fabrique::DatabaseAware>::Database>,
+                    {
                         Box::pin(async move {
-                            let instance = (*self).create(connection).await?;
+                            let instance = <Self as fabrique::Factory>::create(*self, executor).await?;
                             Ok(<Anvil as fabrique::Model>::primary_key(&instance))
                         })
                     }
@@ -345,21 +381,6 @@ mod tests {
                             weight: None,
                             hammer_relation: None,
                         }
-                    }
-
-                    pub async fn create(mut self, connection: &<Anvil as fabrique::Database>::Connection) -> Result<Anvil, <Anvil as fabrique::Database>::Error> {
-                        if let Some(relation) = self.hammer_relation {
-                            let key = relation.into_key(connection).await?;
-                            self.hammer_id = Some(key);
-                        }
-
-                        let instance = Anvil {
-                            id: self.id.unwrap_or(<u32 as Default>::default()),
-                            hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
-                            hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
-                            weight: self.weight.unwrap_or(<u32 as Default>::default()),
-                        };
-                        <Anvil as fabrique::Persist>::create(instance, connection).await
                     }
 
                     pub fn id(mut self, id: u32) -> Self {
@@ -468,19 +489,27 @@ mod tests {
         assert_eq!(
             generated.to_string(),
             quote! {
-                pub async fn create(mut self, connection: &<Anvil as fabrique::Database>::Connection) -> Result<Anvil, <Anvil as fabrique::Database>::Error> {
-                    if let Some(relation) = self.hammer_relation {
-                        let key = relation.into_key(connection).await?;
-                        self.hammer_id = Some(key);
-                    }
+                fn create<E>(
+                    mut self,
+                    executor: E,
+                ) -> impl ::std::future::Future<Output = Result<Anvil, <Anvil as fabrique::DatabaseAware>::Error>> + Send
+                where
+                    E: for<'e> ::sqlx::Executor<'e, Database = <Anvil as fabrique::DatabaseAware>::Database>,
+                {
+                    async move {
+                        if let Some(relation) = self.hammer_relation {
+                            let key = relation.into_key(&executor).await?;
+                            self.hammer_id = Some(key);
+                        }
 
-                    let instance = Anvil {
-                        id: self.id.unwrap_or(<u32 as Default>::default()),
-                        hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
-                        hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
-                        weight: self.weight.unwrap_or(<u32 as Default>::default()),
-                    };
-                    <Anvil as fabrique::Persist>::create(instance, connection).await
+                        let instance = Anvil {
+                            id: self.id.unwrap_or(<u32 as Default>::default()),
+                            hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
+                            hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
+                            weight: self.weight.unwrap_or(<u32 as Default>::default()),
+                        };
+                        <Anvil as fabrique::Persist>::create(instance, executor).await
+                    }
                 }
             }
             .to_string()

@@ -19,7 +19,7 @@ use crate::codegen::*;
 /// Derives a `Model` implementation for the annotated struct.
 ///
 /// This generates implementations for:
-/// - `Database` trait (connection and error types)
+/// - `DatabaseAware` trait (database and error types)
 /// - `Model` trait (primary key and table name)
 /// - `Query` trait (query building and retrieval)
 /// - `Persist` trait (creation operations)
@@ -38,25 +38,20 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         }
     };
 
-    // Query builder codegen
-    let query_builder_codegen = QueryBuilderCodegen::new(&analysis);
-    let query_builder_ident = &query_builder_codegen.query_builder_ident;
-
     // Trait implementations
     let from_row = FromRowCodegen::new(&analysis).generate();
-    let database = DatabaseCodegen::new(&analysis).generate();
+    let database_aware = DatabaseAwareCodegen::new(&analysis).generate();
     let model = ModelCodegen::new(&analysis).generate();
-    let query = QueryCodegen::new(&analysis, query_builder_ident).generate();
+    let query = QueryCodegen::new(&analysis).generate();
     let persist = PersistCodegen::new(&analysis).generate();
     let delete = DeleteCodegen::new(&analysis).generate();
     let hard_delete = HardDeleteCodegen::new(&analysis).generate();
     let soft_delete = SoftDeleteCodegen::new(&analysis).generate();
     let columns = ColumnsCodegen::new(&analysis).generate();
-    let query_builder = query_builder_codegen.generate();
 
     quote::quote! {
         #from_row
-        #database
+        #database_aware
         #model
         #query
         #persist
@@ -64,7 +59,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         #hard_delete
         #soft_delete
         #columns
-        #query_builder
     }
     .into()
 }

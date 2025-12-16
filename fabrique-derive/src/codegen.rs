@@ -11,7 +11,7 @@ pub mod query_builder;
 pub mod soft_delete;
 
 pub use columns::ColumnsCodegen;
-pub use database::DatabaseCodegen;
+pub use database::DatabaseAwareCodegen;
 pub use delete::DeleteCodegen;
 pub use factory::FactoryCodegen;
 pub use from_row::FromRowCodegen;

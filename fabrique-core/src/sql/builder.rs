@@ -26,7 +26,7 @@
 //!
 //! ```rust,ignore
 //! use fabrique::sql::Builder;
-//! use fabrique::query_builder::Direction;
+//! use fabrique::sql::operators::Direction;
 //! use sqlx::Postgres;
 //!
 //! // Full query with all clauses
@@ -50,7 +50,7 @@
 //! tx.commit().await?;
 //! ```
 
-use crate::query_builder::{Direction, Operator};
+use crate::sql::operators::{Direction, Operator};
 use sqlx::{Database, Executor, FromRow, IntoArguments};
 use std::marker::PhantomData;
 
@@ -60,7 +60,7 @@ use std::marker::PhantomData;
 macro_rules! impl_order_by {
     ($($state:ty),+ $(,)?) => {
         $(
-            impl<'a, DB: Database> Builder<'a, DB, $state> {
+            impl< DB: Database> Builder<DB, $state> {
                 /// Adds an `ORDER BY` clause to the query.
                 ///
                 /// Transitions to [`Ordered`] state, allowing `LIMIT` or execution.
@@ -68,7 +68,7 @@ macro_rules! impl_order_by {
                     mut self,
                     column: &str,
                     direction: impl Into<Direction>,
-                ) -> Builder<'a, DB, Ordered> {
+                ) -> Builder< DB, Ordered> {
                     let direction: Direction = direction.into();
                     self.inner.push(" ORDER BY ");
                     self.inner.push(column);
@@ -92,11 +92,11 @@ macro_rules! impl_order_by {
 macro_rules! impl_limit {
     ($($state:ty),+ $(,)?) => {
         $(
-            impl<'a, DB: Database> Builder<'a, DB, $state> {
+            impl<DB: Database> Builder< DB, $state> {
                 /// Adds a `LIMIT` clause to the query.
                 ///
                 /// Transitions to [`Limited`] state, allowing `OFFSET` or execution.
-                pub fn limit(mut self, count: i64) -> Builder<'a, DB, Limited>
+                pub fn limit<'a>(mut self, count: i64) -> Builder< DB, Limited>
                 where
                     i64: sqlx::Encode<'a, DB> + sqlx::Type<DB>,
                 {
@@ -118,17 +118,16 @@ macro_rules! impl_limit {
 macro_rules! impl_fetch_all {
     ($($state:ty),+ $(,)?) => {
         $(
-            impl<'a, DB: Database> Builder<'a, DB, $state> {
+            impl< DB: Database> Builder< DB, $state> {
                 /// Executes the query and returns all matching rows.
                 ///
                 /// Supports both connection pools and transactions via the `Executor`
                 /// trait.
-                pub async fn fetch_all<'s, T, E>(&'s mut self, executor: E) -> Result<Vec<T>, sqlx::Error>
+                pub async fn fetch_all<T, E>(mut self, executor: E) -> Result<Vec<T>, sqlx::Error>
                 where
-                    E: Executor<'a, Database = DB>,
+                    E: for<'e> Executor<'e, Database = DB>,
                     T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
-                    for<'q> <DB as Database>::Arguments<'q>: IntoArguments<'q, DB>,
-                    's: 'a,
+                    <DB as Database>::Arguments: IntoArguments<DB>,
                 {
                     self.inner.build_query_as::<T>().fetch_all(executor).await
                 }
@@ -147,8 +146,8 @@ macro_rules! impl_fetch_all {
 ///
 /// Generic over database type `DB`, supporting any sqlx database backend
 /// (Postgres, MySQL, SQLite, etc.).
-pub struct Builder<'a, DB: Database, S = Initial> {
-    inner: sqlx::QueryBuilder<'a, DB>,
+pub struct Builder<DB: Database, S = Initial> {
+    inner: sqlx::QueryBuilder<DB>,
     table: String,
     _state: PhantomData<(S, DB)>,
 }
@@ -169,7 +168,7 @@ pub struct Ordered;
 /// Limited state - LIMIT added, can offset or execute.
 pub struct Limited;
 
-impl<'a, DB: Database> Builder<'a, DB, Initial> {
+impl<DB: Database> Builder<DB, Initial> {
     /// Creates a new query builder for the specified table.
     pub fn table(table: impl Into<String>) -> Self {
         Self {
@@ -183,7 +182,7 @@ impl<'a, DB: Database> Builder<'a, DB, Initial> {
     ///
     /// Transitions to [`Selected`] state, allowing WHERE, ORDER BY, LIMIT, or
     /// execution.
-    pub fn select(mut self, columns: &[&str]) -> Builder<'a, DB, Selected> {
+    pub fn select(mut self, columns: &[&str]) -> Builder<DB, Selected> {
         let columns = columns.join(", ");
         let query = format!("SELECT {} FROM {}", columns, &self.table);
         self.inner.push(query);
@@ -196,12 +195,12 @@ impl<'a, DB: Database> Builder<'a, DB, Initial> {
     }
 }
 
-impl<'a, DB: Database> Builder<'a, DB, Selected> {
+impl<DB: Database> Builder<DB, Selected> {
     /// Adds a WHERE clause to the query.
     ///
     /// Transitions to [`Filtered`] state. Use additional `where()` calls to add
     /// AND conditions.
-    pub fn r#where<T, O>(mut self, column: &str, operator: O, value: T) -> Builder<'a, DB, Filtered>
+    pub fn r#where<'a, T, O>(mut self, column: &str, operator: O, value: T) -> Builder<DB, Filtered>
     where
         T: 'a + sqlx::Encode<'a, DB> + sqlx::Type<DB>,
         O: Into<Operator>,
@@ -221,12 +220,12 @@ impl<'a, DB: Database> Builder<'a, DB, Selected> {
     }
 }
 
-impl<'a, DB: Database> Builder<'a, DB, Filtered> {
+impl<DB: Database> Builder<DB, Filtered> {
     /// Adds an additional WHERE clause using AND.
     ///
     /// Chains multiple conditions together. Remains in the [`Filtered`] state,
     /// allowing additional conditions, ORDER BY, LIMIT, or execution.
-    pub fn r#where<T, O>(mut self, column: &str, operator: O, value: T) -> Builder<'a, DB, Filtered>
+    pub fn r#where<'a, T, O>(mut self, column: &str, operator: O, value: T) -> Builder<DB, Filtered>
     where
         T: 'a + sqlx::Encode<'a, DB> + sqlx::Type<DB>,
         O: Into<Operator>,
@@ -246,13 +245,13 @@ impl<'a, DB: Database> Builder<'a, DB, Filtered> {
     }
 }
 
-impl<'a, DB: Database> Builder<'a, DB, Ordered> {}
+impl<DB: Database> Builder<DB, Ordered> {}
 
-impl<'a, DB: Database> Builder<'a, DB, Limited> {
+impl<DB: Database> Builder<DB, Limited> {
     /// Adds an `OFFSET` clause to the query.
     ///
     /// Remains in [`Limited`] state, allowing execution.
-    pub fn offset(mut self, count: i64) -> Builder<'a, DB, Limited>
+    pub fn offset<'a>(mut self, count: i64) -> Builder<DB, Limited>
     where
         i64: sqlx::Encode<'a, DB> + sqlx::Type<DB>,
     {

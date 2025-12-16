@@ -59,10 +59,14 @@ impl<'a> SoftDeleteCodegen<'a> {
         let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
 
         quote! {
-            async fn soft_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                sqlx::query(#query)#(.bind(#bindings))*.execute(connection).await?;
-
-                Ok(())
+            fn soft_delete<E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send
+            where
+                E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+            {
+                async move {
+                    ::sqlx::query(#query)#(.bind(#bindings))*.execute(executor).await?;
+                    Ok(())
+                }
             }
         }
     }
@@ -96,12 +100,17 @@ impl<'a> SoftDeleteCodegen<'a> {
         };
 
         quote! {
-            async fn soft_destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                sqlx::query(#query)
-                    #binds
-                    .execute(connection)
-                    .await?;
-                Ok(())
+            fn soft_destroy<E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send
+            where
+                E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+            {
+                async move {
+                    ::sqlx::query(#query)
+                        #binds
+                        .execute(executor)
+                        .await?;
+                    Ok(())
+                }
             }
         }
     }
@@ -128,10 +137,14 @@ impl<'a> SoftDeleteCodegen<'a> {
         let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
 
         quote! {
-            async fn restore(&self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                sqlx::query(#query)#(.bind(#bindings))*.execute(connection).await?;
-
-                Ok(())
+            fn restore<E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>>
+            where
+                E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+            {
+                async move {
+                    ::sqlx::query(#query)#(.bind(#bindings))*.execute(executor).await?;
+                    Ok(())
+                }
             }
         }
     }
@@ -158,8 +171,13 @@ impl<'a> SoftDeleteCodegen<'a> {
         let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
 
         quote! {
-            async fn trashed(&self, connection: &Self::Connection) -> Result<bool, Self::Error> {
-                sqlx::query_scalar(#query)#(.bind(#bindings))*.fetch_one(connection).await
+            fn trashed<E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<bool, Self::Error>>
+            where
+                E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+            {
+                async move {
+                    ::sqlx::query_scalar(#query)#(.bind(#bindings))*.fetch_one(executor).await.map_err(Into::into)
+                }
             }
         }
     }
@@ -206,22 +224,22 @@ mod tests {
             result.unwrap().to_string(),
             quote! {
                 impl ::fabrique::SoftDelete for Anvil {
-                    async fn soft_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                    async fn soft_delete(self, connection: &Self::Database) -> Result<(), Self::Error> {
                         sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(self.id).execute(connection).await?;
                         Ok(())
                     }
 
-                    async fn soft_destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                    async fn soft_destroy(connection: &Self::Database, id: Self::PrimaryKey) -> Result<(), Self::Error> {
                         sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(id).execute(connection).await?;
                         Ok(())
                     }
 
-                    async fn restore(&self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                    async fn restore(&self, connection: &Self::Database) -> Result<(), Self::Error> {
                         sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE id = $1").bind(self.id).execute(connection).await?;
                         Ok(())
                     }
 
-                    async fn trashed(&self, connection: &Self::Connection) -> Result<bool, Self::Error> {
+                    async fn trashed(&self, connection: &Self::Database) -> Result<bool, Self::Error> {
                         sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE id = $1").bind(self.id).fetch_one(connection).await
                     }
                 }
@@ -256,22 +274,22 @@ mod tests {
             result.unwrap().to_string(),
             quote! {
                 impl ::fabrique::SoftDelete for Anvil {
-                    async fn soft_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                    async fn soft_delete(self, connection: &Self::Database) -> Result<(), Self::Error> {
                         sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(connection).await?;
                         Ok(())
                     }
 
-                    async fn soft_destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
+                    async fn soft_destroy(connection: &Self::Database, id: Self::PrimaryKey) -> Result<(), Self::Error> {
                         sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(id.0).bind(id.1).execute(connection).await?;
                         Ok(())
                     }
 
-                    async fn restore(&self, connection: &Self::Connection) -> Result<(), Self::Error> {
+                    async fn restore(&self, connection: &Self::Database) -> Result<(), Self::Error> {
                         sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(connection).await?;
                         Ok(())
                     }
 
-                    async fn trashed(&self, connection: &Self::Connection) -> Result<bool, Self::Error> {
+                    async fn trashed(&self, connection: &Self::Database) -> Result<bool, Self::Error> {
                         sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).fetch_one(connection).await
                     }
                 }

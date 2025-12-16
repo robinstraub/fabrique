@@ -1,5 +1,3 @@
-use crate::database::{ColumnMarker, Database};
-
 /// SQL comparison operators for query building.
 ///
 /// This enum provides type-safe SQL operators that can be used in WHERE
@@ -121,49 +119,9 @@ impl From<&'static str> for Direction {
     }
 }
 
-/// Trait for building type-safe database queries.
-///
-/// Query builders enable constructing SQL queries with compile-time safety by
-/// requiring column names to be static strings. This prevents dynamic column
-/// name injection while providing a fluent, chainable API for building complex
-/// queries.
-pub trait QueryBuilder: Database {
-    /// The model type that this query builder queries
-    type Model;
-
-    /// Adds a WHERE clause to the query.
-    ///
-    /// This method appends a condition to the query using the specified column,
-    /// operator, and value. Multiple where clauses can be chained together
-    /// to build complex queries.
-    ///
-    /// The operator can be either an `Operator` enum variant or a string
-    /// literal that will be converted to an operator at runtime.
-    fn r#where<T, O>(self, column: ColumnMarker<T>, operator: O, value: T) -> Self
-    where
-        T: 'static + for<'q> sqlx::Encode<'q, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
-        O: Into<Operator>;
-
-    /// Executes the query and returns all matching rows.
-    ///
-    /// This method finalizes the query and executes it against the database,
-    /// returning a vector of model instances that match the query criteria.
-    fn fetch_all(
-        self,
-        connection: &Self::Connection,
-    ) -> impl Future<Output = Result<Vec<Self::Model>, Self::Error>>;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_column_marker_new() {
-        // Test ColumnMarker::new() in a runtime context to ensure coverage
-        let column: ColumnMarker<String> = ColumnMarker::new("test_column");
-        assert_eq!(column.name, "test_column");
-    }
 
     #[test]
     fn test_operator_as_str() {

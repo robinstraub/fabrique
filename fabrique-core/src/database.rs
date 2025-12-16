@@ -1,35 +1,28 @@
-use std::marker::PhantomData;
+/// Database awareness for models.
+///
+/// This trait marks types that are aware of and connected to a database,
+/// providing the database type and error handling. Models extend this trait
+/// to add persistence operations.
+pub trait DatabaseAware: Sized {
+    /// The database connection type.
+    type Database;
 
-/// Database configuration and types
-pub trait Database: Sized {
-    /// The connection type (e.g., PgPool, MySqlPool)
-    type Connection: Clone + Sync;
-
-    /// The error type for database operations
+    /// The error type returned by database operations.
     type Error;
 }
 
-/// Marker type that associates a column name with its value type.
+/// Represents a type-safe column from a specific model.
 ///
-/// This type is used to provide compile-time type safety when building queries,
-/// ensuring that the value passed to a where clause matches the expected type
-/// for that column. Column markers are typically generated as constants by the
-/// derive macro.
-pub struct ColumnMarker<T> {
-    /// The name of the database column
-    pub name: &'static str,
-    _phantom: PhantomData<T>,
-}
+/// This trait is implemented by zero-sized types generated for each model
+/// column, providing compile-time guarantees that columns belong to the correct
+/// model and carry their value type information.
+///
+/// The derive macro generates one implementation per column, ensuring type
+/// safety when building queries.
+pub trait Column<M> {
+    /// The Rust type of values stored in this column.
+    type Type;
 
-impl<T> ColumnMarker<T> {
-    /// Creates a new column marker with the specified name.
-    ///
-    /// This is a const function to allow generating column constants at compile
-    /// time.
-    pub const fn new(name: &'static str) -> Self {
-        Self {
-            name,
-            _phantom: PhantomData,
-        }
-    }
+    /// Returns the database column name.
+    fn name(&self) -> &'static str;
 }

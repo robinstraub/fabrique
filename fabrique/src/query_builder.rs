@@ -72,4 +72,4 @@
 //! #     Ok(())
 //! # }
 //! ```
-pub use fabrique_core::query_builder::*;
+pub use fabrique_core::query::builder::*;

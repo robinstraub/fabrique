@@ -19,6 +19,7 @@ impl<'a> ModelCodegen<'a> {
         let ty_primary_key = self.generate_ty_primary_key();
         let fn_primary_key = self.generate_fn_primary_key();
         let fn_table_name = self.generate_fn_table_name();
+        let fn_columns = self.generate_fn_columns();
         let fn_uses_soft_delete = self.generate_fn_uses_soft_delete();
 
         quote! {
@@ -28,6 +29,8 @@ impl<'a> ModelCodegen<'a> {
                 #fn_primary_key
 
                 #fn_table_name
+
+                #fn_columns
 
                 #fn_uses_soft_delete
             }
@@ -90,6 +93,21 @@ impl<'a> ModelCodegen<'a> {
         quote! {
             fn table_name() -> &'static str {
                 #table_name
+            }
+        }
+    }
+
+    fn generate_fn_columns(&self) -> TokenStream {
+        let columns: Vec<_> = self
+            .analysis
+            .fields
+            .iter()
+            .map(|field| field.column.as_str())
+            .collect();
+
+        quote! {
+            fn columns() -> &'static [&'static str] {
+                &[#(#columns),*]
             }
         }
     }

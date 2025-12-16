@@ -57,11 +57,17 @@ impl<'a> PersistCodegen<'a> {
         });
 
         quote! {
-            async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
-                sqlx::query_as::<_, Self>(#query)
-                    #(.bind(#field_bindings))*
-                    .fetch_one(connection)
-                    .await
+            fn create<E>(self, executor: E) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send
+            where
+                E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+            {
+                async move {
+                    ::sqlx::query_as::<_, Self>(#query)
+                        #(.bind(#field_bindings))*
+                        .fetch_one(executor)
+                        .await
+                        .map_err(Into::into)
+                }
             }
         }
     }
@@ -87,7 +93,7 @@ mod tests {
             result.to_string(),
             quote! {
                 impl ::fabrique::Persist for Anvil {
-                    async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
+                    async fn create(self, connection: &Self::Database) -> Result<Self, Self::Error> {
                         sqlx::query_as::<_, Self>("INSERT INTO anvils (id) VALUES ($1) RETURNING id")
                             .bind(self.id)
                             .fetch_one(connection)

@@ -2,25 +2,25 @@ use crate::Analysis;
 use proc_macro2::TokenStream;
 use quote::quote;
 
-/// Code generator for Database trait implementation.
-pub struct DatabaseCodegen<'a> {
+/// Code generator for DatabaseAware trait implementation.
+pub struct DatabaseAwareCodegen<'a> {
     analysis: &'a Analysis<'a>,
 }
 
-impl<'a> DatabaseCodegen<'a> {
-    /// Creates a new code generator for Database trait implementation.
+impl<'a> DatabaseAwareCodegen<'a> {
+    /// Creates a new code generator for DatabaseAware trait implementation.
     pub fn new(analysis: &'a Analysis<'a>) -> Self {
         Self { analysis }
     }
 
-    /// Generates the `Database` trait implementation.
+    /// Generates the `DatabaseAware` trait implementation.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
 
         quote! {
-            impl ::fabrique::Database for #base_struct_ident {
-                type Connection = sqlx::Pool<sqlx::Postgres>;
-                type Error = sqlx::Error;
+            impl ::fabrique::DatabaseAware for #base_struct_ident {
+                type Database = ::sqlx::Postgres;
+                type Error = ::sqlx::Error;
             }
         }
     }
@@ -32,11 +32,11 @@ mod tests {
     use syn::parse_quote;
 
     #[test]
-    fn test_generate_database() {
+    fn test_generate_database_aware() {
         // Arrange
         let input = parse_quote! { struct Anvil { id: String } };
         let analysis = Analysis::from(&input).unwrap();
-        let codegen = DatabaseCodegen::new(&analysis);
+        let codegen = DatabaseAwareCodegen::new(&analysis);
 
         // Act
         let result = codegen.generate();
@@ -45,9 +45,9 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                impl ::fabrique::Database for Anvil {
-                    type Connection = sqlx::Pool<sqlx::Postgres>;
-                    type Error = sqlx::Error;
+                impl ::fabrique::DatabaseAware for Anvil {
+                    type Database = ::sqlx::Postgres;
+                    type Error = ::sqlx::Error;
                 }
             }
             .to_string()

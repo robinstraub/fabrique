@@ -44,8 +44,8 @@ impl<'a> QueryBuilderCodegen<'a> {
                 #fn_new
             }
 
-            impl ::fabrique::Database for #ident {
-                type Connection = ::sqlx::Pool<::sqlx::Postgres>;
+            impl ::fabrique::DatabaseAware for #ident {
+                type Database = ::sqlx::Pool<::sqlx::Postgres>;
                 type Error = ::sqlx::Error;
             }
 
@@ -64,7 +64,7 @@ impl<'a> QueryBuilderCodegen<'a> {
         quote! {
             fn r#where<T, O>(mut self, column: ::fabrique::ColumnMarker<T>, operator: O, value: T) -> Self
             where
-                T: 'static + for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>,
+                T: ::sqlx::Encode<::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>,
                 O: Into<::fabrique::Operator>
             {
                 let operator: ::fabrique::Operator = operator.into();
@@ -98,7 +98,7 @@ impl<'a> QueryBuilderCodegen<'a> {
         let ident = &self.query_builder_ident;
         quote! {
             pub struct #ident {
-                builder: ::sqlx::query_builder::QueryBuilder<'static, ::sqlx::Postgres>,
+                builder: ::sqlx::query_builder::QueryBuilder<::sqlx::Postgres>,
                 has_where: bool,
             }
         }
@@ -107,7 +107,7 @@ impl<'a> QueryBuilderCodegen<'a> {
     /// Generates the `fetch_all()` function.
     fn generate_fetch_all(&self) -> TokenStream {
         quote! {
-            async fn fetch_all(mut self, connection: &Self::Connection) -> Result<Vec<Self::Model>, Self::Error> {
+            async fn fetch_all(mut self, connection: &Self::Database) -> Result<Vec<Self::Model>, Self::Error> {
                 self.builder
                     .build_query_as::<Self::Model>()
                     .fetch_all(connection)
@@ -163,7 +163,7 @@ mod tests {
             result.to_string(),
             quote! {
                 pub struct AnvilQueryBuilder {
-                    builder: ::sqlx::query_builder::QueryBuilder<'static, ::sqlx::Postgres>,
+                    builder: ::sqlx::query_builder::QueryBuilder<::sqlx::Postgres>,
                     has_where: bool,
                 }
 
@@ -177,8 +177,8 @@ mod tests {
                     }
                 }
 
-                impl ::fabrique::Database for AnvilQueryBuilder {
-                    type Connection = ::sqlx::Pool<::sqlx::Postgres>;
+                impl ::fabrique::DatabaseAware for AnvilQueryBuilder {
+                    type Database = ::sqlx::Pool<::sqlx::Postgres>;
                     type Error = ::sqlx::Error;
                 }
 
@@ -187,7 +187,7 @@ mod tests {
 
                     fn r#where<T, O>(mut self, column: ::fabrique::ColumnMarker<T>, operator: O, value: T) -> Self
                     where
-                        T: 'static + for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>,
+                        T: ::sqlx::Encode<::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>,
                         O: Into<::fabrique::Operator>
                     {
                         let operator: ::fabrique::Operator = operator.into();
@@ -210,7 +210,7 @@ mod tests {
 
                     async fn fetch_all(
                         mut self,
-                        connection: &Self::Connection
+                        connection: &Self::Database
                     ) -> Result<Vec<Self::Model>, Self::Error> {
                         self.builder
                             .build_query_as::<Self::Model>()
@@ -239,7 +239,7 @@ mod tests {
             quote! {
                 fn r#where<T, O>(mut self, column: ::fabrique::ColumnMarker<T>, operator: O, value: T) -> Self
                 where
-                    T: 'static + for<'q> ::sqlx::Encode<'q, ::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>,
+                    T: ::sqlx::Encode<::sqlx::Postgres> + ::sqlx::Type<::sqlx::Postgres>,
                     O: Into<::fabrique::Operator>
                 {
                     let operator: ::fabrique::Operator = operator.into();
@@ -293,7 +293,7 @@ mod tests {
             result.to_string(),
             quote! {
                 pub struct AnvilQueryBuilder {
-                    builder: ::sqlx::query_builder::QueryBuilder<'static, ::sqlx::Postgres>,
+                    builder: ::sqlx::query_builder::QueryBuilder<::sqlx::Postgres>,
                     has_where: bool,
                 }
             }
