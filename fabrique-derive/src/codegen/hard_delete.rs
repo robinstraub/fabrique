@@ -50,9 +50,9 @@ impl<'a> HardDeleteCodegen<'a> {
         let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
 
         quote! {
-            fn hard_delete<E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send
+            fn hard_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
             where
-                E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
             {
                 async move {
                     ::sqlx::query(#query)#(.bind(#bindings))*.execute(executor).await?;
@@ -91,9 +91,9 @@ impl<'a> HardDeleteCodegen<'a> {
         };
 
         quote! {
-            fn hard_destroy<E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send
+            fn hard_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
             where
-                E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
             {
                 async move {
                     ::sqlx::query(#query)

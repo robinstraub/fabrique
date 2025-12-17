@@ -123,9 +123,9 @@ macro_rules! impl_fetch_all {
                 ///
                 /// Supports both connection pools and transactions via the `Executor`
                 /// trait.
-                pub async fn fetch_all<T, E>(mut self, executor: E) -> Result<Vec<T>, sqlx::Error>
+                pub async fn fetch_all<'e, T, E>(mut self, executor: E) -> Result<Vec<T>, sqlx::Error>
                 where
-                    E: for<'e> Executor<'e, Database = DB>,
+                    E:  Executor<'e, Database = DB>,
                     T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
                     <DB as Database>::Arguments: IntoArguments<DB>,
                 {

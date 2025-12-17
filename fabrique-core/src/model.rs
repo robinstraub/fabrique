@@ -32,11 +32,11 @@ where
     }
 
     /// Retrieves all instances of this model from the database
-    fn all<E>(executor: E) -> impl Future<Output = Result<Vec<Self>, Self::Error>> + Send
+    fn all<'e, E>(executor: E) -> impl Future<Output = Result<Vec<Self>, Self::Error>> + Send + 'e
     where
-        E: for<'e> sqlx::Executor<'e, Database = Self::Database>,
+        E: sqlx::Executor<'e, Database = Self::Database> + 'e,
     {
-        async {
+        async move {
             Builder::default()
                 .fetch_all(executor)
                 .await
@@ -48,9 +48,12 @@ where
 /// Create operations
 pub trait Persist: Model {
     /// Creates and persists this model instance
-    fn create<E>(self, executor: E) -> impl Future<Output = Result<Self, Self::Error>> + Send
+    fn create<'e, E>(
+        self,
+        executor: E,
+    ) -> impl Future<Output = Result<Self, Self::Error>> + Send + 'e
     where
-        E: for<'e> sqlx::Executor<'e, Database = Self::Database>;
+        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
 }
 
 /// Delete operations
@@ -59,66 +62,75 @@ pub trait Delete: Model {
     ///
     /// If the model uses soft delete, this will perform a soft delete.
     /// Otherwise, it will permanently delete the record.
-    fn delete<E>(self, executor: E) -> impl Future<Output = Result<(), Self::Error>> + Send
+    fn delete<'e, E>(
+        self,
+        executor: E,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: for<'e> sqlx::Executor<'e, Database = Self::Database>;
+        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
 
     /// Destroys a model by its primary key
     ///
     /// If the model uses soft delete, this will perform a soft destroy.
     /// Otherwise, it will permanently delete the record.
-    fn destroy<E>(
+    fn destroy<'e, E>(
         executor: E,
         id: Self::PrimaryKey,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: for<'e> sqlx::Executor<'e, Database = Self::Database>;
+        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
 }
 
 /// Soft delete operations
 pub trait SoftDelete: Model {
     /// Soft deletes this model instance
-    fn soft_delete<E>(
+    fn soft_delete<'e, E>(
         self,
         executor: E,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: for<'e> sqlx::Executor<'e, Database = Self::Database>;
+        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
 
     /// Soft destroys a model by its primary key
-    fn soft_destroy<E>(
+    fn soft_destroy<'e, E>(
         executor: E,
         id: Self::PrimaryKey,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: for<'e> sqlx::Executor<'e, Database = Self::Database>;
+        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
 
     /// Restores a soft-deleted model instance
-    fn restore<E>(&self, executor: E) -> impl Future<Output = Result<(), Self::Error>>
+    fn restore<'e, E>(
+        &self,
+        executor: E,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: for<'e> sqlx::Executor<'e, Database = Self::Database>;
+        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
 
     /// Checks if this model instance is soft-deleted
-    fn trashed<E>(&self, executor: E) -> impl Future<Output = Result<bool, Self::Error>>
+    fn trashed<'e, E>(
+        &self,
+        executor: E,
+    ) -> impl Future<Output = Result<bool, Self::Error>> + Send + 'e
     where
-        E: for<'e> sqlx::Executor<'e, Database = Self::Database>;
+        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
 }
 
 /// Hard delete operations for soft-deletable models
 pub trait HardDelete: Model {
     /// Permanently deletes this model instance (bypassing soft delete)
-    fn hard_delete<E>(
+    fn hard_delete<'e, E>(
         self,
         executor: E,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: for<'e> sqlx::Executor<'e, Database = Self::Database>;
+        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
 
     /// Permanently destroys a model by its primary key
-    fn hard_destroy<E>(
+    fn hard_destroy<'e, E>(
         executor: E,
         id: Self::PrimaryKey,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: for<'e> sqlx::Executor<'e, Database = Self::Database>;
+        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
 }

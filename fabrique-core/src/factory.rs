@@ -1,5 +1,3 @@
-use sqlx::Database;
-
 use crate::{database::DatabaseAware, model::Model};
 use std::{future::Future, pin::Pin};
 
@@ -16,12 +14,12 @@ pub trait Factory: Sized {
     /// The model type this factory produces
     type Model: Model;
 
-    fn create<E>(
+    fn create<'a, A>(
         self,
-        executor: E,
-    ) -> impl Future<Output = Result<Self::Model, <Self::Model as DatabaseAware>::Error>> + Send
+        executor: A,
+    ) -> impl Future<Output = Result<Self::Model, <Self::Model as DatabaseAware>::Error>> + Send + 'a
     where
-        E: for<'e> sqlx::Executor<'e, Database = <Self::Model as DatabaseAware>::Database>;
+        A: sqlx::Acquire<'a, Database = <Self::Model as DatabaseAware>::Database> + Send + 'a;
 }
 
 /// Type alias for the future returned by `into_key`.

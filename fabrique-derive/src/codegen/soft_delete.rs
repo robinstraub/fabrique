@@ -59,9 +59,9 @@ impl<'a> SoftDeleteCodegen<'a> {
         let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
 
         quote! {
-            fn soft_delete<E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send
+            fn soft_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
             where
-                E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
             {
                 async move {
                     ::sqlx::query(#query)#(.bind(#bindings))*.execute(executor).await?;
@@ -100,9 +100,9 @@ impl<'a> SoftDeleteCodegen<'a> {
         };
 
         quote! {
-            fn soft_destroy<E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send
+            fn soft_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
             where
-                E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
             {
                 async move {
                     ::sqlx::query(#query)
@@ -116,14 +116,15 @@ impl<'a> SoftDeleteCodegen<'a> {
     }
 
     fn generate_fn_restore(&self, soft_delete_field: &ModelField) -> TokenStream {
-        let primary_key = self
+        let primary_key: Vec<_> = self
             .analysis
             .fields
             .iter()
-            .filter(|field| field.primary_key);
+            .filter(|field| field.primary_key)
+            .collect();
 
         let clause = primary_key
-            .clone()
+            .iter()
             .enumerate()
             .map(|(i, field)| format!("{} = ${}", field.ident, i + 1))
             .collect::<Vec<_>>()
@@ -134,13 +135,22 @@ impl<'a> SoftDeleteCodegen<'a> {
             self.analysis.model.table_name, soft_delete_field.ident, clause
         );
 
-        let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
+        let pk_captures = primary_key.iter().map(|field| {
+            let ident = &field.ident;
+            quote! { let #ident = self.#ident.clone(); }
+        });
+
+        let bindings = primary_key.iter().map(|field| {
+            let ident = &field.ident;
+            quote! { #ident }
+        });
 
         quote! {
-            fn restore<E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>>
+            fn restore<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
             where
-                E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
             {
+                #(#pk_captures)*
                 async move {
                     ::sqlx::query(#query)#(.bind(#bindings))*.execute(executor).await?;
                     Ok(())
@@ -150,14 +160,15 @@ impl<'a> SoftDeleteCodegen<'a> {
     }
 
     fn generate_fn_trashed(&self, soft_delete_field: &ModelField) -> TokenStream {
-        let primary_key = self
+        let primary_key: Vec<_> = self
             .analysis
             .fields
             .iter()
-            .filter(|field| field.primary_key);
+            .filter(|field| field.primary_key)
+            .collect();
 
         let clause = primary_key
-            .clone()
+            .iter()
             .enumerate()
             .map(|(i, field)| format!("{} = ${}", field.ident, i + 1))
             .collect::<Vec<_>>()
@@ -168,13 +179,22 @@ impl<'a> SoftDeleteCodegen<'a> {
             soft_delete_field.ident, self.analysis.model.table_name, clause
         );
 
-        let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
+        let pk_captures = primary_key.iter().map(|field| {
+            let ident = &field.ident;
+            quote! { let #ident = self.#ident.clone(); }
+        });
+
+        let bindings = primary_key.iter().map(|field| {
+            let ident = &field.ident;
+            quote! { #ident }
+        });
 
         quote! {
-            fn trashed<E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<bool, Self::Error>>
+            fn trashed<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
             where
-                E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
             {
+                #(#pk_captures)*
                 async move {
                     ::sqlx::query_scalar(#query)#(.bind(#bindings))*.fetch_one(executor).await.map_err(Into::into)
                 }

@@ -57,9 +57,9 @@ impl<'a> PersistCodegen<'a> {
         });
 
         quote! {
-            fn create<E>(self, executor: E) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send
+            fn create<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
             where
-                E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
             {
                 async move {
                     ::sqlx::query_as::<_, Self>(#query)

@@ -7,7 +7,6 @@ pub mod hard_delete;
 pub mod model;
 pub mod persist;
 pub mod query;
-pub mod query_builder;
 pub mod soft_delete;
 
 pub use columns::ColumnsCodegen;
@@ -19,5 +18,4 @@ pub use hard_delete::HardDeleteCodegen;
 pub use model::ModelCodegen;
 pub use persist::PersistCodegen;
 pub use query::QueryCodegen;
-pub use query_builder::QueryBuilderCodegen;
 pub use soft_delete::SoftDeleteCodegen;

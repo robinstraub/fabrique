@@ -35,17 +35,17 @@ impl<'a> DeleteCodegen<'a> {
 
         match soft_delete {
             Some(_) => quote! {
-                fn delete<E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send
+                fn delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
                 where
-                    E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+                    E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
                 {
                     <Self as ::fabrique::SoftDelete>::soft_delete(self, executor)
                 }
             },
             None => quote! {
-                fn delete<E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send
+                fn delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
                 where
-                    E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+                    E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
                 {
                     <Self as ::fabrique::HardDelete>::hard_delete(self, executor)
                 }
@@ -58,17 +58,17 @@ impl<'a> DeleteCodegen<'a> {
 
         match soft_delete {
             Some(_) => quote! {
-                fn destroy<E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send
+                fn destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
                 where
-                    E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+                    E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
                 {
                     <Self as ::fabrique::SoftDelete>::soft_destroy(executor, id)
                 }
             },
             None => quote! {
-                fn destroy<E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send
+                fn destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
                 where
-                    E: for<'e> ::sqlx::Executor<'e, Database = Self::Database>,
+                    E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
                 {
                     <Self as ::fabrique::HardDelete>::hard_destroy(executor, id)
                 }

@@ -46,9 +46,9 @@ where
         }
     }
 
-    pub async fn fetch_all<'s, E>(self, executor: E) -> Result<Vec<M>, sqlx::Error>
+    pub async fn fetch_all<'e, E>(self, executor: E) -> Result<Vec<M>, sqlx::Error>
     where
-        E: for<'e> sqlx::Executor<'e, Database = M::Database>,
+        E: sqlx::Executor<'e, Database = M::Database>,
         M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
         <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
     {
