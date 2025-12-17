@@ -38,7 +38,7 @@ where
     {
         async move {
             Builder::default()
-                .fetch_all(executor)
+                .get(executor)
                 .await
                 .map_err(Into::into)
         }

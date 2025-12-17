@@ -4,6 +4,79 @@ use crate::sql::builder::{Builder as SqlBuilder, Initial};
 use crate::sql::builder::{Filtered, Selected};
 use crate::sql::operators::Operator;
 
+/// Implements the `get` method for multiple builder states.
+macro_rules! impl_get {
+    ($($state:ty),+ $(,)?) => {
+        $(
+            impl<M> Builder<M, $state>
+            where
+                M: Model,
+                M::Database: sqlx::Database,
+            {
+                /// Executes the query and returns all matching rows.
+                pub async fn get<'e, E>(self, executor: E) -> Result<Vec<M>, sqlx::Error>
+                where
+                    E: sqlx::Executor<'e, Database = M::Database>,
+                    M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
+                    <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
+                {
+                    self.inner.get(executor).await
+                }
+            }
+        )+
+    };
+}
+
+/// Implements the `first` method for multiple builder states.
+macro_rules! impl_first {
+    ($($state:ty),+ $(,)?) => {
+        $(
+            impl<M> Builder<M, $state>
+            where
+                M: Model,
+                M::Database: sqlx::Database,
+            {
+                /// Retrieves the first row from the query result.
+                ///
+                /// Returns `None` if no rows match the query.
+                pub async fn first<'e, E>(self, executor: E) -> Result<Option<M>, sqlx::Error>
+                where
+                    E: sqlx::Executor<'e, Database = M::Database>,
+                    M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
+                    <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
+                {
+                    self.inner.first(executor).await
+                }
+            }
+        )+
+    };
+}
+
+/// Implements the `first_or_fail` method for multiple builder states.
+macro_rules! impl_first_or_fail {
+    ($($state:ty),+ $(,)?) => {
+        $(
+            impl<M> Builder<M, $state>
+            where
+                M: Model,
+                M::Database: sqlx::Database,
+            {
+                /// Retrieves the first row from the query result, or fails if none exists.
+                ///
+                /// Returns an error if no rows match the query.
+                pub async fn first_or_fail<'e, E>(self, executor: E) -> Result<M, sqlx::Error>
+                where
+                    E: sqlx::Executor<'e, Database = M::Database>,
+                    M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
+                    <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
+                {
+                    self.inner.first_or_fail(executor).await
+                }
+            }
+        )+
+    };
+}
+
 pub struct Builder<M, S = Selected>
 where
     M: Model,
@@ -45,28 +118,9 @@ where
             inner: self.inner.r#where(column.name(), operator, value),
         }
     }
-
-    pub async fn fetch_all<'e, E>(self, executor: E) -> Result<Vec<M>, sqlx::Error>
-    where
-        E: sqlx::Executor<'e, Database = M::Database>,
-        M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
-        <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
-    {
-        self.inner.fetch_all(executor).await
-    }
 }
 
-impl<M> Builder<M, Filtered>
-where
-    M: Model,
-    M::Database: sqlx::Database,
-{
-    pub async fn fetch_all<'s, E>(self, executor: E) -> Result<Vec<M>, sqlx::Error>
-    where
-        E: for<'e> sqlx::Executor<'e, Database = M::Database>,
-        M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
-        <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
-    {
-        self.inner.fetch_all(executor).await
-    }
-}
+// Use macros to implement query execution methods across multiple states
+impl_get!(Selected, Filtered);
+impl_first!(Selected, Filtered);
+impl_first_or_fail!(Selected, Filtered);

@@ -1,53 +1,88 @@
-//! Type-safe SQL query builder with compile-time state enforcement.
+//! # Database: Query Builder
 //!
-//! This module implements a query builder using the typestate pattern to
-//! enforce correct SQL clause ordering at compile time. The builder consumes
-//! itself with each method call, transitioning to a new state. State
-//! transitions are one-way, preventing invalid SQL clause sequences.
+//! ## Introduction
 //!
-//! # State Transition Matrix
+//! Fabrique's database query builder provides a convenient, fluent interface to
+//! creating and running database queries. It can be used to perform most
+//! database operations in your application and works perfectly with all of
+//! Fabrique's supported database systems.
 //!
-//! The table shows which methods are available on each builder state.
-//! Checkmarks indicate available methods. Methods transition to new states
-//! (shown in return types), and these transitions cannot be reversed. Optional
-//! clauses can be skipped by calling methods that jump to later states.
+//! The Fabrique query builder uses the [sqlx::QueryBuilder] parameter binding
+//! to protect your application against SQL injection attacks. There is no need
+//! to clean or sanitize strings passed to the query builder as query bindings.
 //!
-//! ```text
-//! State      │ select │ where │ order_by │ limit │ offset │ fetch_*
-//! ───────────┼────────┼───────┼──────────┼───────┼────────┼────────
-//! Initial    │   ✓    │       │          │   ✓   │        │
-//! Selected   │        │   ✓   │    ✓     │   ✓   │        │   ✓
-//! Filtered   │        │   ✓   │    ✓     │   ✓   │        │   ✓
-//! Ordered    │        │       │          │   ✓   │        │   ✓
-//! Limited    │        │       │          │       │   ✓    │   ✓
+//! ## Running Database Queries
+//!
+//! ### Retrieving All Rows From a Table
+//!
+//! You may use the [table][Builder::table] method provided by the [Builder]
+//! struct to begin a query. The [table][Builder::table] method returns a fluent
+//! query builder instance for the given table, allowing you to chain more
+//! constraints onto the query and then finally retrieve the results of the
+//! query using the [get][Builder::get] method:
+//!
+//! ```rust,no_run
+//! # use sqlx::{Pool, Postgres, Database};
+//! #
+//! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
+//! let rows: Vec<<Postgres as Database>::Row> = Builder::table("anvils")
+//!     .get(&connection)
+//!     .await?;
+//! #     Ok(())
+//! # }
 //! ```
 //!
-//! # Example
+//! The [get][Builder::get] method returns a `Vec` of database rows.
+//! You may access each column's value by using the [Row::get] method, which
+//! requires you to specify the expected type for each column:
 //!
-//! ```rust,ignore
-//! use fabrique::sql::Builder;
-//! use fabrique::sql::operators::Direction;
-//! use sqlx::Postgres;
+//! ```rust,no_run
+//! # use sqlx::{Pool, Postgres, Row, Database};
+//! #
+//! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
+//! # let rows: Vec<<Postgres as Database>::Row> = Builder::table("anvils")
+//! #     .get(&connection)
+//! #     .await?;
+//! #
+//! for row in rows {
+//!     let name: String = row.get("name");
+//!     let weight: i16 = row.get("weight");
+//!     println!("Anvil {} weighs {}", name, weight);
+//! }
+//! #     Ok(())
+//! # }
+//! ```
 //!
-//! // Full query with all clauses
-//! let query = Builder::<Postgres>::table("anvils")
-//!     .select(&["id", "name", "weight"])
-//!     .where("weight", ">=", 100)
-//!     .order_by("name", Direction::Asc)
-//!     .limit(10)
-//!     .fetch_all(&pool)
+//! ### Retrieving a Single Row From a Table
+//!
+//! If you just need to retrieve a single row from a database table, you may use
+//! the [Builder][Builder] [first][Builder::first] method. This method will
+//! return a single [Row][sqlx::Row] object:
+//!
+//! ```rust,no_run
+//! # use sqlx::{Pool, Postgres, Database};
+//! #
+//! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
+//! let row: Option<<Postgres as Database>::Row> = Builder::table("anvils")
+//!     .first(&connection)
 //!     .await?;
+//! #     Ok(())
+//! # }
+//! ```
 //!
-//! // With transactions
-//! let mut tx = pool.begin().await?;
+//! If you would like to retrieve a single row from a database table, but throw
+//! an error if no matching row is found, you may use the
+//! [first_or_fail][Builder::first_or_fail] method:
 //!
-//! Builder::<Postgres>::table("anvils")
-//!     .select(&["id"])
-//!     .limit(10)
-//!     .fetch_all(&mut tx)
+//! ```rust,no_run
+//! # use sqlx::{Pool, Postgres, Database};
+//! #
+//! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
+//! let row: <Postgres as Database>::Row = Builder::table("anvils")
+//!     .first_or_fail(&connection)
 //!     .await?;
-//!
-//! tx.commit().await?;
+//! #     Ok(())
+//! # }
 //! ```
 
 use crate::sql::operators::{Direction, Operator};
@@ -114,8 +149,8 @@ macro_rules! impl_limit {
     };
 }
 
-/// Implements the `fetch_all` method for multiple builder states.
-macro_rules! impl_fetch_all {
+/// Implements the `get` method for multiple builder states.
+macro_rules! impl_get {
     ($($state:ty),+ $(,)?) => {
         $(
             impl< DB: Database> Builder< DB, $state> {
@@ -123,7 +158,7 @@ macro_rules! impl_fetch_all {
                 ///
                 /// Supports both connection pools and transactions via the `Executor`
                 /// trait.
-                pub async fn fetch_all<'e, T, E>(mut self, executor: E) -> Result<Vec<T>, sqlx::Error>
+                pub async fn get<'e, T, E>(mut self, executor: E) -> Result<Vec<T>, sqlx::Error>
                 where
                     E:  Executor<'e, Database = DB>,
                     T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
@@ -136,16 +171,78 @@ macro_rules! impl_fetch_all {
     };
 }
 
+/// Implements the `first` method for multiple builder states.
+macro_rules! impl_first {
+    ($($state:ty),+ $(,)?) => {
+        $(
+            impl<DB: Database> Builder<DB, $state> {
+                /// Retrieves the first row from the query result.
+                ///
+                /// Returns `None` if no rows match the query. Automatically adds
+                /// `LIMIT 1` to the query.
+                pub async fn first<'e, T, E>(mut self, executor: E) -> Result<Option<T>, sqlx::Error>
+                where
+                    E: Executor<'e, Database = DB>,
+                    T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
+                    <DB as Database>::Arguments: IntoArguments<DB>,
+                {
+                    self.inner.push(" LIMIT 1");
+                    self.inner.build_query_as::<T>().fetch_optional(executor).await
+                }
+            }
+        )+
+    };
+}
+
+/// Implements the `first_or_fail` method for multiple builder states.
+macro_rules! impl_first_or_fail {
+    ($($state:ty),+ $(,)?) => {
+        $(
+            impl<DB: Database> Builder<DB, $state> {
+                /// Retrieves the first row from the query result, or fails if none exists.
+                ///
+                /// Returns an error if no rows match the query. Automatically adds
+                /// `LIMIT 1` to the query.
+                pub async fn first_or_fail<'e, T, E>(mut self, executor: E) -> Result<T, sqlx::Error>
+                where
+                    E: Executor<'e, Database = DB>,
+                    T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
+                    <DB as Database>::Arguments: IntoArguments<DB>,
+                {
+                    self.inner.push(" LIMIT 1");
+                    self.inner.build_query_as::<T>().fetch_one(executor).await
+                }
+            }
+        )+
+    };
+}
+
 /// Type-safe SQL query builder using the typestate pattern.
 ///
-/// Enforces correct SQL clause ordering at compile time by transitioning
-/// through states: [`Initial`] → [`Selected`] → [`Filtered`] → [`Ordered`] →
-/// [`Limited`]
+/// Enforces correct SQL clause ordering at compile time by consuming itself
+/// with each method call and transitioning to a new state. State transitions
+/// are one-way, preventing invalid SQL clause sequences.
 ///
-/// Wraps `sqlx::QueryBuilder` for safe parameterized query construction.
+/// The builder wraps [`sqlx::QueryBuilder`] for safe parameterized query
+/// construction, supporting any sqlx database backend (Postgres, MySQL, SQLite,
+/// etc.).
 ///
-/// Generic over database type `DB`, supporting any sqlx database backend
-/// (Postgres, MySQL, SQLite, etc.).
+/// # State Transition Matrix
+///
+/// The table shows which methods are available on each builder state.
+/// Checkmarks indicate available methods. Methods transition to new states
+/// (shown in return types), and these transitions cannot be reversed. Optional
+/// clauses can be skipped by calling methods that jump to later states.
+///
+/// ```text
+/// State      │ select │ where │ order_by │ limit │ offset │ query
+/// ───────────┼────────┼───────┼──────────┼───────┼────────┼──────
+/// Initial    │   ✓    │       │          │       │        │   ✓
+/// Selected   │        │   ✓   │    ✓     │   ✓   │        │   ✓
+/// Filtered   │        │   ✓   │    ✓     │   ✓   │        │   ✓
+/// Ordered    │        │       │          │   ✓   │        │   ✓
+/// Limited    │        │       │          │       │   ✓    │   ✓
+/// ```
 pub struct Builder<DB: Database, S = Initial> {
     inner: sqlx::QueryBuilder<DB>,
     table: String,
@@ -192,6 +289,54 @@ impl<DB: Database> Builder<DB, Initial> {
             table: self.table,
             _state: PhantomData,
         }
+    }
+
+    /// Executes `SELECT * FROM {table}` and returns all matching rows.
+    ///
+    /// Automatically selects all columns from the table.
+    pub async fn get<'e, T, E>(mut self, executor: E) -> Result<Vec<T>, sqlx::Error>
+    where
+        E: Executor<'e, Database = DB>,
+        T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
+        <DB as Database>::Arguments: IntoArguments<DB>,
+    {
+        let query = format!("SELECT * FROM {}", &self.table);
+        self.inner.push(query);
+        self.inner.build_query_as::<T>().fetch_all(executor).await
+    }
+
+    /// Executes `SELECT * FROM {table} LIMIT 1` and returns the first row.
+    ///
+    /// Returns `None` if no rows exist. Automatically selects all columns.
+    pub async fn first<'e, T, E>(mut self, executor: E) -> Result<Option<T>, sqlx::Error>
+    where
+        E: Executor<'e, Database = DB>,
+        T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
+        <DB as Database>::Arguments: IntoArguments<DB>,
+    {
+        let query = format!("SELECT * FROM {}", &self.table);
+        self.inner.push(query);
+        self.inner.push(" LIMIT 1");
+        self.inner
+            .build_query_as::<T>()
+            .fetch_optional(executor)
+            .await
+    }
+
+    /// Executes `SELECT * FROM {table} LIMIT 1` and returns the first row, or
+    /// fails.
+    ///
+    /// Returns an error if no rows exist. Automatically selects all columns.
+    pub async fn first_or_fail<'e, T, E>(mut self, executor: E) -> Result<T, sqlx::Error>
+    where
+        E: Executor<'e, Database = DB>,
+        T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
+        <DB as Database>::Arguments: IntoArguments<DB>,
+    {
+        let query = format!("SELECT * FROM {}", &self.table);
+        self.inner.push(query);
+        self.inner.push(" LIMIT 1");
+        self.inner.build_query_as::<T>().fetch_one(executor).await
     }
 }
 
@@ -269,7 +414,9 @@ impl<DB: Database> Builder<DB, Limited> {
 // Use macros to implement common methods across multiple states
 impl_order_by!(Selected, Filtered);
 impl_limit!(Selected, Filtered, Ordered);
-impl_fetch_all!(Selected, Filtered, Ordered, Limited);
+impl_get!(Selected, Filtered, Ordered, Limited);
+impl_first!(Selected, Filtered, Ordered, Limited);
+impl_first_or_fail!(Selected, Filtered, Ordered, Limited);
 
 #[cfg(test)]
 mod tests {
@@ -286,7 +433,7 @@ mod tests {
             .order_by("weight", "ASC")
             .limit(10)
             .offset(20)
-            .fetch_all(&connection)
+            .get(&connection)
             .await;
 
         assert!(result.is_ok());
