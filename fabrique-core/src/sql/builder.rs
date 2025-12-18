@@ -276,6 +276,38 @@ impl<DB: Database> Builder<DB, Selected> {
             _state: PhantomData,
         }
     }
+
+    /// Adds a WHERE NULL clause to the query.
+    ///
+    /// Transitions to [`Filtered`] state. Use additional `where()` calls to add
+    /// AND conditions.
+    pub fn where_null(mut self, column: &str) -> Builder<DB, Filtered> {
+        self.inner.push(" WHERE ");
+        self.inner.push(column);
+        self.inner.push(" IS NULL");
+
+        Builder {
+            inner: self.inner,
+            table: self.table,
+            _state: PhantomData,
+        }
+    }
+
+    /// Adds a WHERE NOT NULL clause to the query.
+    ///
+    /// Transitions to [`Filtered`] state. Use additional `where()` calls to add
+    /// AND conditions.
+    pub fn where_not_null(mut self, column: &str) -> Builder<DB, Filtered> {
+        self.inner.push(" WHERE ");
+        self.inner.push(column);
+        self.inner.push(" IS NOT NULL");
+
+        Builder {
+            inner: self.inner,
+            table: self.table,
+            _state: PhantomData,
+        }
+    }
 }
 
 impl<DB: Database> Builder<DB, Filtered> {
@@ -294,6 +326,38 @@ impl<DB: Database> Builder<DB, Filtered> {
         self.inner.push(operator.into().as_str());
         self.inner.push(" ");
         self.inner.push_bind(value);
+
+        Builder {
+            inner: self.inner,
+            table: self.table,
+            _state: PhantomData,
+        }
+    }
+
+    /// Adds an additional WHERE NULL clause using AND.
+    ///
+    /// Chains multiple conditions together. Remains in the [`Filtered`] state,
+    /// allowing additional conditions, ORDER BY, LIMIT, or execution.
+    pub fn where_null(mut self, column: &str) -> Builder<DB, Filtered> {
+        self.inner.push(" AND ");
+        self.inner.push(column);
+        self.inner.push(" IS NULL");
+
+        Builder {
+            inner: self.inner,
+            table: self.table,
+            _state: PhantomData,
+        }
+    }
+
+    /// Adds an additional WHERE NOT NULL clause using AND.
+    ///
+    /// Chains multiple conditions together. Remains in the [`Filtered`] state,
+    /// allowing additional conditions, ORDER BY, LIMIT, or execution.
+    pub fn where_not_null(mut self, column: &str) -> Builder<DB, Filtered> {
+        self.inner.push(" AND ");
+        self.inner.push(column);
+        self.inner.push(" IS NOT NULL");
 
         Builder {
             inner: self.inner,

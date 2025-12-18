@@ -1,9 +1,15 @@
-use crate::{database::DatabaseAware, query::builder::Builder};
+use crate::{
+    database::{Column, DatabaseAware},
+    query::builder::Builder,
+};
 
 /// Model metadata and identity
 pub trait Model: DatabaseAware {
     /// Primary key type (single value or tuple for composite keys)
     type PrimaryKey: Send;
+
+    /// Soft delete column type (unit type if soft deletes are not enabled).
+    type SoftDeleteColumn: Column<Self> + Send;
 
     /// Returns the primary key value of this model instance
     fn primary_key(&self) -> Self::PrimaryKey;
@@ -14,8 +20,13 @@ pub trait Model: DatabaseAware {
     /// Returns the column names for this model
     fn columns() -> &'static [&'static str];
 
-    /// Returns whether this model uses soft delete
-    fn uses_soft_delete() -> bool;
+    /// Returns the soft delete column if this model uses soft deletes.
+    fn soft_delete_column() -> Option<Self::SoftDeleteColumn>
+    where
+        Self: Sized,
+    {
+        None
+    }
 }
 
 /// Query building and retrieval operations
@@ -31,12 +42,23 @@ where
         Builder::default()
     }
 
-    /// Retrieves all instances of this model from the database
+    /// Retrieves all instances of this model from the database.
     fn all<'e, E>(executor: E) -> impl Future<Output = Result<Vec<Self>, Self::Error>> + Send + 'e
     where
         E: sqlx::Executor<'e, Database = Self::Database> + 'e,
+        for<'q> <Self::SoftDeleteColumn as Column<Self>>::Type:
+            sqlx::Encode<'q, Self::Database> + sqlx::Type<Self::Database>,
     {
-        async move { Builder::default().get(executor).await.map_err(Into::into) }
+        async move {
+            match Self::soft_delete_column() {
+                Some(column) => Builder::default()
+                    .where_null(column)
+                    .get(executor)
+                    .await
+                    .map_err(Into::into),
+                None => Builder::default().get(executor).await.map_err(Into::into),
+            }
+        }
     }
 }
 

@@ -19,10 +19,21 @@ pub trait DatabaseAware: Sized {
 ///
 /// The derive macro generates one implementation per column, ensuring type
 /// safety when building queries.
-pub trait Column<M> {
+pub trait Column<M>: Sized {
     /// The Rust type of values stored in this column.
     type Type;
 
     /// Returns the database column name.
     fn name(&self) -> &'static str;
+}
+
+/// Implement Column for () to serve as a "null" column placeholder.
+/// This allows the type system to work uniformly, though actually using it
+/// will panic.
+impl<M> Column<M> for () {
+    type Type = ();
+
+    fn name(&self) -> &'static str {
+        panic!("Attempted to use () as a column")
+    }
 }

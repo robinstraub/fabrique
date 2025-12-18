@@ -146,9 +146,8 @@ where
     M::Database: sqlx::Database,
 {
     fn default() -> Self {
-        Self {
-            inner: SqlBuilder::<M::Database, Initial>::table(M::table_name()).select(M::columns()),
-        }
+        let inner = SqlBuilder::<M::Database, Initial>::table(M::table_name()).select(M::columns());
+        Self { inner }
     }
 }
 
@@ -171,6 +170,19 @@ where
     {
         Builder {
             inner: self.inner.r#where(column.name(), operator, value),
+        }
+    }
+
+    /// Adds a WHERE IS NULL clause to the query.
+    ///
+    /// Transitions to `Filtered` state.
+    pub fn r#where_null<C>(self, column: C) -> Builder<M, Filtered>
+    where
+        C: Column<M>,
+        for<'q> C::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
+    {
+        Builder {
+            inner: self.inner.where_null(column.name()),
         }
     }
 }
