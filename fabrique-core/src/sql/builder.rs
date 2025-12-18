@@ -148,13 +148,14 @@ macro_rules! impl_first_or_fail {
 /// clauses can be skipped by calling methods that jump to later states.
 ///
 /// ```text
-/// State      │ select │ where │ order_by │ limit │ offset │ query
-/// ───────────┼────────┼───────┼──────────┼───────┼────────┼──────
-/// Initial    │   ✓    │       │          │       │        │   ✓
-/// Selected   │        │   ✓   │    ✓     │   ✓   │        │   ✓
-/// Filtered   │        │   ✓   │    ✓     │   ✓   │        │   ✓
-/// Ordered    │        │       │          │   ✓   │        │   ✓
-/// Limited    │        │       │          │       │   ✓    │   ✓
+/// State      │ select │ where │ order_by │ limit │ offset │ get │ first
+/// ───────────┼────────┼───────┼──────────┼───────┼────────┼─────┼──────
+/// Initial    │   ✓    │       │          │       │        │  ✓  │   ✓
+/// Selected   │        │   ✓   │    ✓     │   ✓   │        │  ✓  │   ✓
+/// Filtered   │        │   ✓   │    ✓     │   ✓   │        │  ✓  │   ✓
+/// Ordered    │        │       │          │   ✓   │        │  ✓  │   ✓
+/// Limited    │        │       │          │       │   ✓    │  ✓  │
+/// Offsetted  │        │       │          │       │        │  ✓  │
 /// ```
 pub struct Builder<DB: Database, S = Initial> {
     inner: sqlx::QueryBuilder<DB>,
@@ -177,6 +178,9 @@ pub struct Ordered;
 
 /// Limited state - LIMIT added, can offset or execute.
 pub struct Limited;
+
+/// 0ffsetted state - OFFSET added, can execute.
+pub struct Offsetted;
 
 impl<DB: Database> Builder<DB, Initial> {
     /// Creates a new query builder for the specified table.
@@ -373,7 +377,7 @@ impl<DB: Database> Builder<DB, Limited> {
     /// Adds an `OFFSET` clause to the query.
     ///
     /// Remains in [`Limited`] state, allowing execution.
-    pub fn offset<'a>(mut self, count: i64) -> Builder<DB, Limited>
+    pub fn offset<'a>(mut self, count: i64) -> Builder<DB, Offsetted>
     where
         i64: sqlx::Encode<'a, DB> + sqlx::Type<DB>,
     {
@@ -391,9 +395,9 @@ impl<DB: Database> Builder<DB, Limited> {
 // Use macros to implement common methods across multiple states
 impl_order_by!(Selected, Filtered);
 impl_limit!(Selected, Filtered, Ordered);
-impl_get!(Selected, Filtered, Ordered, Limited);
-impl_first!(Selected, Filtered, Ordered, Limited);
-impl_first_or_fail!(Selected, Filtered, Ordered, Limited);
+impl_get!(Selected, Filtered, Ordered, Limited, Offsetted);
+impl_first!(Selected, Filtered, Ordered);
+impl_first_or_fail!(Selected, Filtered, Ordered);
 
 #[cfg(test)]
 mod tests {
@@ -402,18 +406,252 @@ mod tests {
     use uuid::Uuid;
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn test(connection: Pool<Postgres>) {
+    async fn test_where(connection: Pool<Postgres>) {
         let result: Result<Vec<(Uuid, String, i16)>, sqlx::Error> = Builder::table("anvils")
             .select(&["id", "name", "weight"])
+            // Call where on `Selected`, transitionning to `Filtered`
             .r#where("weight", ">=", 10)
-            .r#where("weight", "<=", 99)
-            .order_by("weight", "ASC")
-            .limit(10)
-            .offset(20)
+            // Call where on `Filtered`, allowing chains
+            .r#where("weight", ">=", 10)
+            .r#where("weight", ">=", 10)
+            // Ensure the generated query can be executed
             .get(&connection)
             .await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), vec![]);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_where_null(connection: Pool<Postgres>) {
+        let result: Result<Vec<(Uuid, String, i16)>, sqlx::Error> = Builder::table("anvils")
+            .select(&["id", "name", "weight"])
+            // Call `where_null` on `Selected`, transitionning to `Filtered`
+            .r#where_null("weight")
+            // Call `where_null` on `Filtered`, allowing chains
+            .r#where_null("weight")
+            .r#where_null("weight")
+            // Ensure the generated query can be executed
+            .get(&connection)
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), vec![]);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_where_not_null(connection: Pool<Postgres>) {
+        let result: Result<Vec<(Uuid, String, i16)>, sqlx::Error> = Builder::table("anvils")
+            .select(&["id", "name", "weight"])
+            // Call `where_not_null` on `Selected`, transitionning to `Filtered`
+            .r#where_not_null("weight")
+            // Call `where_null` on `Filtered`, allowing chains
+            .r#where_not_null("weight")
+            .r#where_not_null("weight")
+            // Ensure the generated query can be executed
+            .get(&connection)
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), vec![]);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_order_by(connection: Pool<Postgres>) {
+        // `order_by` can be called on `Selected`;
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .order_by("weight", Direction::Asc)
+                .get::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+
+        // `order_by` can be called on `Filtered`;
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .where_not_null("weight")
+                .order_by("weight", Direction::Asc)
+                .get::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_limit(connection: Pool<Postgres>) {
+        // `limit` can be called on `Selected`;
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .limit(10)
+                .get::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+
+        // `limit` can be called on `Filtered`;
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .where_not_null("weight")
+                .limit(10)
+                .get::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+
+        // `limit` can be called on `Ordered`;
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .order_by("weight", Direction::Asc)
+                .limit(10)
+                .get::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_offset(connection: Pool<Postgres>) {
+        let result: Result<Vec<(Uuid, String, i16)>, sqlx::Error> = Builder::table("anvils")
+            .select(&["id", "name", "weight"])
+            // Call `limit` on `Selected`, transitionning to `Limited`
+            .limit(10)
+            // Call `offset` on `Limited`, transitionning to `Offsetted`
+            .offset(20)
+            // Ensure the generated query can be executed
+            .get(&connection)
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), vec![]);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_get(connection: Pool<Postgres>) {
+        // `get` can be called on `Selected`;
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .get::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+
+        // `get` can be called on `Filtered`;
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .r#where("weight", ">=", 0)
+                .get::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+
+        // `get` can be called on `Ordered`;
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .r#where("weight", ">=", 0)
+                .order_by("weight", Direction::Asc)
+                .get::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+
+        // `get` can be called on `Limited`;
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .r#where("weight", ">=", 0)
+                .order_by("weight", Direction::Asc)
+                .limit(10)
+                .get::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+
+        // `get` can be called on `Offsetted`;
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .r#where("weight", ">=", 0)
+                .order_by("weight", Direction::Asc)
+                .limit(10)
+                .offset(20)
+                .get::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_first(connection: Pool<Postgres>) {
+        // `first` can be called on `Selected`
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .first::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+
+        // `first` can be called on `Filtered`
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .r#where("weight", ">=", 0)
+                .first::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+
+        // `first` can be called on `Ordered`
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .r#where("weight", ">=", 0)
+                .order_by("weight", Direction::Asc)
+                .first::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_first_or_fail(connection: Pool<Postgres>) {
+        // `first_or_fail` can be called on `Selected`
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .first_or_fail::<(), _>(&connection)
+                .await
+                .is_err() // No rows exist, so this should fail
+        );
+
+        // `first_or_fail` can be called on `Filtered`
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .r#where("weight", ">=", 0)
+                .first_or_fail::<(), _>(&connection)
+                .await
+                .is_err() // No rows exist, so this should fail
+        );
+
+        // `first_or_fail` can be called on `Ordered`
+        assert!(
+            Builder::table("anvils")
+                .select(&["id", "name", "weight"])
+                .r#where("weight", ">=", 0)
+                .order_by("weight", Direction::Asc)
+                .first_or_fail::<(), _>(&connection)
+                .await
+                .is_err() // No rows exist, so this should fail
+        );
     }
 }
