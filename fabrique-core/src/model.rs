@@ -36,12 +36,7 @@ where
     where
         E: sqlx::Executor<'e, Database = Self::Database> + 'e,
     {
-        async move {
-            Builder::default()
-                .get(executor)
-                .await
-                .map_err(Into::into)
-        }
+        async move { Builder::default().get(executor).await.map_err(Into::into) }
     }
 }
 

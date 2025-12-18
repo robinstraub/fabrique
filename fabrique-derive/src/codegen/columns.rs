@@ -69,10 +69,8 @@ impl<'a> ColumnsCodegen<'a> {
 
     fn generate_column_constants(&self) -> TokenStream {
         let constants = self.analysis.fields.iter().map(|field| {
-            let const_name = syn::Ident::new(
-                &field.ident.to_string().to_uppercase(),
-                field.ident.span(),
-            );
+            let const_name =
+                syn::Ident::new(&field.ident.to_string().to_uppercase(), field.ident.span());
             let type_name = self.column_type_name(&field.ident);
 
             quote! {
