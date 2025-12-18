@@ -41,13 +41,13 @@ impl<'a> FactoryCodegen<'a> {
         let base_struct_ident = &self.analysis.ident;
         let factory_ident = &self.ident;
         let factory_fields = self.generate_factory_fields();
-        let factory_method_create = self.generate_factory_method_create();
         let factory_method_new = self.generate_factory_method_new();
         let factory_method_fields = self.generate_factory_method_fields();
         let factory_methods_for_relation = self.generate_factory_methods_for_relation();
         let factory_relation_fields = self.generate_factory_relation_fields();
         let factory_trait_impl = self.generate_impl_factory_trait();
-        let for_relation_factory_impl = self.generate_impl_for_relation_factory();
+        let relation_enums = self.generate_relation_enums();
+        let relation_from_impls = self.generate_relation_from_impls();
 
         quote! {
             impl #base_struct_ident {
@@ -56,6 +56,10 @@ impl<'a> FactoryCodegen<'a> {
                 }
             }
 
+            #(#relation_enums)*
+
+            #(#relation_from_impls)*
+
             pub struct #factory_ident {
                 #(#factory_fields,)*
                 #(#factory_relation_fields,)*
@@ -63,12 +67,8 @@ impl<'a> FactoryCodegen<'a> {
 
             #factory_trait_impl
 
-            #for_relation_factory_impl
-
             impl #factory_ident {
                 #factory_method_new
-
-                #factory_method_create
 
                 #(#factory_method_fields)*
 
@@ -109,12 +109,77 @@ impl<'a> FactoryCodegen<'a> {
     fn generate_factory_relation_fields(&self) -> impl Iterator<Item = TokenStream> {
         self.relations().map(|relation| {
             let factory_field = relation.factory_field;
-            let referenced_type = relation.referenced_type;
+            let enum_ident = Self::relation_enum_ident(relation.name);
 
             quote! {
-                #factory_field: std::option::Option<Box<dyn fabrique::ForRelation<#referenced_type>>>
+                #factory_field: std::option::Option<#enum_ident>
             }
         })
+    }
+
+    /// Generates relation enum types.
+    fn generate_relation_enums(&self) -> impl Iterator<Item = TokenStream> + '_ {
+        self.relations().map(|relation| {
+            let enum_ident = Self::relation_enum_ident(relation.name);
+            let referenced_type = relation.referenced_type;
+            let factory_type = Ident::new(
+                &format!("{}Factory", referenced_type),
+                referenced_type.span(),
+            );
+
+            quote! {
+                pub enum #enum_ident {
+                    Model(#referenced_type),
+                    Factory(#factory_type),
+                }
+            }
+        })
+    }
+
+    /// Generates From implementations for relation enums.
+    fn generate_relation_from_impls(&self) -> impl Iterator<Item = TokenStream> + '_ {
+        self.relations().flat_map(|relation| {
+            let enum_ident = Self::relation_enum_ident(relation.name);
+            let referenced_type = relation.referenced_type;
+            let factory_type = Ident::new(
+                &format!("{}Factory", referenced_type),
+                referenced_type.span(),
+            );
+
+            vec![
+                quote! {
+                    impl From<#referenced_type> for #enum_ident {
+                        fn from(model: #referenced_type) -> Self {
+                            #enum_ident::Model(model)
+                        }
+                    }
+                },
+                quote! {
+                    impl From<#factory_type> for #enum_ident {
+                        fn from(factory: #factory_type) -> Self {
+                            #enum_ident::Factory(factory)
+                        }
+                    }
+                },
+            ]
+        })
+    }
+
+    /// Helper to generate relation enum identifier.
+    fn relation_enum_ident(relation_name: &str) -> Ident {
+        let enum_name = format!(
+            "{}Relation",
+            relation_name
+                .chars()
+                .enumerate()
+                .map(|(i, c)| if i == 0 {
+                    c.to_uppercase().to_string()
+                } else {
+                    c.to_string()
+                })
+                .collect::<String>()
+        );
+        Ident::new(&enum_name, proc_macro2::Span::call_site())
     }
 
     /// Generates the `create()` method for the factory struct.
@@ -124,22 +189,10 @@ impl<'a> FactoryCodegen<'a> {
     /// 2. Creates the main object with all field values
     /// 3. Persists the object using the Persistable trait
     fn generate_factory_method_create(&self) -> TokenStream {
-        // Generate relation creation code - related objects are created first
-        // to establish the dependency graph before creating the main object
-        let relations_create = self.relations().map(|relation| {
-            let field = &relation.base_ident;
-            let factory_field = relation.factory_field;
-
-            quote! {
-                if let Some(relation) = self.#factory_field {
-                    let key = relation.into_key(connection).await?;
-                    self.#field = Some(key);
-                }
-            }
-        });
+        let struct_ident = &self.analysis.ident;
+        let has_relations = self.relations().count() > 0;
 
         // Generate struct field initialization - use provided values or defaults
-        let struct_ident = &self.analysis.ident;
         let struct_fields = self.analysis.fields.iter().map(|field| {
             let name = &field.ident;
             let ty = &field.ty;
@@ -149,16 +202,72 @@ impl<'a> FactoryCodegen<'a> {
             }
         });
 
-        quote! {
-            pub async fn create(mut self, connection: &<#struct_ident as fabrique::Database>::Connection) -> Result<#struct_ident, <#struct_ident as fabrique::Database>::Error>
-            {
-                #(#relations_create)*
+        if has_relations {
+            // Generate relation creation code - related objects are created first
+            let relations_create = self.relations().map(|relation| {
+                let field = &relation.base_ident;
+                let factory_field = relation.factory_field;
+                let enum_ident = Self::relation_enum_ident(relation.name);
 
-                let instance = #struct_ident {
-                    #(#struct_fields,)*
-                };
+                quote! {
+                    if let Some(relation) = self.#factory_field.take() {
+                        let key = match relation {
+                            #enum_ident::Model(model) => {
+                                fabrique::Model::primary_key(&model)
+                            }
+                            #enum_ident::Factory(factory) => {
+                                let instance = fabrique::Factory::create(factory, &mut *conn).await?;
+                                fabrique::Model::primary_key(&instance)
+                            }
+                        };
+                        self.#field = Some(key);
+                    }
+                }
+            });
 
-                <#struct_ident as fabrique::Persist>::create(instance, connection).await
+            quote! {
+                fn create<'a, A>(
+                    mut self,
+                    executor: A,
+                ) -> impl ::std::future::Future<Output = Result<#struct_ident, <#struct_ident as fabrique::DatabaseAware>::Error>> + Send + 'a
+                where
+                    A: ::sqlx::Acquire<'a, Database = <#struct_ident as fabrique::DatabaseAware>::Database> + Send + 'a,
+                {
+                    async move {
+                        let mut conn = executor.acquire().await
+                            .map_err(|e| <#struct_ident as fabrique::DatabaseAware>::Error::from(e))?;
+
+                        #(#relations_create)*
+
+                        let instance = #struct_ident {
+                            #(#struct_fields,)*
+                        };
+
+                        <#struct_ident as fabrique::Persist>::create(instance, &mut *conn).await
+                    }
+                }
+            }
+        } else {
+            // No relations - simpler implementation
+            quote! {
+                fn create<'a, A>(
+                    mut self,
+                    executor: A,
+                ) -> impl ::std::future::Future<Output = Result<#struct_ident, <#struct_ident as fabrique::DatabaseAware>::Error>> + Send + 'a
+                where
+                    A: ::sqlx::Acquire<'a, Database = <#struct_ident as fabrique::DatabaseAware>::Database> + Send + 'a,
+                {
+                    async move {
+                        let mut conn = executor.acquire().await
+                            .map_err(|e| <#struct_ident as fabrique::DatabaseAware>::Error::from(e))?;
+
+                        let instance = #struct_ident {
+                            #(#struct_fields,)*
+                        };
+
+                        <#struct_ident as fabrique::Persist>::create(instance, &mut *conn).await
+                    }
+                }
             }
         }
     }
@@ -217,12 +326,12 @@ impl<'a> FactoryCodegen<'a> {
             let method_name =
                 Ident::new(&format!("for_{}", &relation.name), referenced_type.span());
             let field_ident = &relation.factory_field;
+            let enum_ident = Self::relation_enum_ident(relation.name);
 
             quote! {
-                pub fn #method_name<R>(mut self, input: R) -> Self
-                where R: fabrique::ForRelation<#referenced_type> + 'static
+                pub fn #method_name(mut self, input: impl Into<#enum_ident>) -> Self
                 {
-                    self.#field_ident = Some(Box::new(input));
+                    self.#field_ident = Some(input.into());
                     self
                 }
             }
@@ -233,33 +342,13 @@ impl<'a> FactoryCodegen<'a> {
     fn generate_impl_factory_trait(&self) -> TokenStream {
         let factory_ident = &self.ident;
         let model_ident = &self.analysis.ident;
+        let factory_method_create = self.generate_factory_method_create();
 
         quote! {
             impl fabrique::Factory for #factory_ident {
                 type Model = #model_ident;
-            }
-        }
-    }
 
-    /// Generates ForRelation implementation for the Factory type.
-    fn generate_impl_for_relation_factory(&self) -> TokenStream {
-        let factory_ident = &self.ident;
-        let model_ident = &self.analysis.ident;
-
-        quote! {
-            impl fabrique::ForRelation<#model_ident> for #factory_ident
-            where
-                Self: 'static,
-            {
-                fn into_key<'a>(
-                    self: Box<Self>,
-                    connection: &'a <#model_ident as fabrique::Database>::Connection,
-                ) -> fabrique::IntoKeyFuture<'a, #model_ident> {
-                    Box::pin(async move {
-                        let instance = (*self).create(connection).await?;
-                        Ok(<#model_ident as fabrique::Model>::primary_key(&instance))
-                    })
-                }
+                #factory_method_create
             }
         }
     }
@@ -308,31 +397,68 @@ mod tests {
                         AnvilFactory::new()
                     }
                 }
+
+                pub enum HammerRelation {
+                    Model(Hammer),
+                    Factory(HammerFactory),
+                }
+
+                impl From<Hammer> for HammerRelation {
+                    fn from(model: Hammer) -> Self {
+                        HammerRelation::Model(model)
+                    }
+                }
+
+                impl From<HammerFactory> for HammerRelation {
+                    fn from(factory: HammerFactory) -> Self {
+                        HammerRelation::Factory(factory)
+                    }
+                }
+
                 pub struct AnvilFactory {
                     id: std::option::Option<u32>,
                     hammer_id: std::option::Option<u32>,
                     hardness: std::option::Option<u32>,
                     weight: std::option::Option<u32>,
-
-                    hammer_relation: std::option::Option<Box<dyn fabrique::ForRelation<Hammer>>>,
+                    hammer_relation: std::option::Option<HammerRelation>,
                 }
 
                 impl fabrique::Factory for AnvilFactory {
                     type Model = Anvil;
-                }
 
-                impl fabrique::ForRelation<Anvil> for AnvilFactory
-                where
-                    Self: 'static,
-                {
-                    fn into_key<'a>(
-                        self: Box<Self>,
-                        connection: &'a <Anvil as fabrique::Database>::Connection,
-                    ) -> fabrique::IntoKeyFuture<'a, Anvil> {
-                        Box::pin(async move {
-                            let instance = (*self).create(connection).await?;
-                            Ok(<Anvil as fabrique::Model>::primary_key(&instance))
-                        })
+                    fn create<'a, A>(
+                        mut self,
+                        executor: A,
+                    ) -> impl ::std::future::Future<Output = Result<Anvil, <Anvil as fabrique::DatabaseAware>::Error>> + Send + 'a
+                    where
+                        A: ::sqlx::Acquire<'a, Database = <Anvil as fabrique::DatabaseAware>::Database> + Send + 'a,
+                    {
+                        async move {
+                            let mut conn = executor.acquire().await
+                                .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
+
+                            if let Some(relation) = self.hammer_relation.take() {
+                                let key = match relation {
+                                    HammerRelation::Model(model) => {
+                                        fabrique::Model::primary_key(&model)
+                                    }
+                                    HammerRelation::Factory(factory) => {
+                                        let instance = fabrique::Factory::create(factory, &mut *conn).await?;
+                                        fabrique::Model::primary_key(&instance)
+                                    }
+                                };
+                                self.hammer_id = Some(key);
+                            }
+
+                            let instance = Anvil {
+                                id: self.id.unwrap_or(<u32 as Default>::default()),
+                                hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
+                                hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
+                                weight: self.weight.unwrap_or(<u32 as Default>::default()),
+                            };
+
+                            <Anvil as fabrique::Persist>::create(instance, &mut *conn).await
+                        }
                     }
                 }
 
@@ -345,21 +471,6 @@ mod tests {
                             weight: None,
                             hammer_relation: None,
                         }
-                    }
-
-                    pub async fn create(mut self, connection: &<Anvil as fabrique::Database>::Connection) -> Result<Anvil, <Anvil as fabrique::Database>::Error> {
-                        if let Some(relation) = self.hammer_relation {
-                            let key = relation.into_key(connection).await?;
-                            self.hammer_id = Some(key);
-                        }
-
-                        let instance = Anvil {
-                            id: self.id.unwrap_or(<u32 as Default>::default()),
-                            hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
-                            hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
-                            weight: self.weight.unwrap_or(<u32 as Default>::default()),
-                        };
-                        <Anvil as fabrique::Persist>::create(instance, connection).await
                     }
 
                     pub fn id(mut self, id: u32) -> Self {
@@ -382,10 +493,8 @@ mod tests {
                         self
                     }
 
-                    pub fn for_hammer<R>(mut self, input: R) -> Self
-                    where R: fabrique::ForRelation<Hammer> + 'static
-                    {
-                        self.hammer_relation = Some(Box::new(input));
+                    pub fn for_hammer(mut self, input: impl Into<HammerRelation>) -> Self {
+                        self.hammer_relation = Some(input.into());
                         self
                     }
                 }
@@ -440,7 +549,7 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                explosive_relation: std::option::Option<Box<dyn fabrique::ForRelation<Explosive>>>
+                explosive_relation: std::option::Option<ExplosiveRelation>
             }
             .to_string()
         );
@@ -468,19 +577,39 @@ mod tests {
         assert_eq!(
             generated.to_string(),
             quote! {
-                pub async fn create(mut self, connection: &<Anvil as fabrique::Database>::Connection) -> Result<Anvil, <Anvil as fabrique::Database>::Error> {
-                    if let Some(relation) = self.hammer_relation {
-                        let key = relation.into_key(connection).await?;
-                        self.hammer_id = Some(key);
-                    }
+                fn create<'a, A>(
+                    mut self,
+                    executor: A,
+                ) -> impl ::std::future::Future<Output = Result<Anvil, <Anvil as fabrique::DatabaseAware>::Error>> + Send + 'a
+                where
+                    A: ::sqlx::Acquire<'a, Database = <Anvil as fabrique::DatabaseAware>::Database> + Send + 'a,
+                {
+                    async move {
+                        let mut conn = executor.acquire().await
+                            .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
 
-                    let instance = Anvil {
-                        id: self.id.unwrap_or(<u32 as Default>::default()),
-                        hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
-                        hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
-                        weight: self.weight.unwrap_or(<u32 as Default>::default()),
-                    };
-                    <Anvil as fabrique::Persist>::create(instance, connection).await
+                        if let Some(relation) = self.hammer_relation.take() {
+                            let key = match relation {
+                                HammerRelation::Model(model) => {
+                                    fabrique::Model::primary_key(&model)
+                                }
+                                HammerRelation::Factory(factory) => {
+                                    let instance = fabrique::Factory::create(factory, &mut *conn).await?;
+                                    fabrique::Model::primary_key(&instance)
+                                }
+                            };
+                            self.hammer_id = Some(key);
+                        }
+
+                        let instance = Anvil {
+                            id: self.id.unwrap_or(<u32 as Default>::default()),
+                            hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
+                            hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
+                            weight: self.weight.unwrap_or(<u32 as Default>::default()),
+                        };
+
+                        <Anvil as fabrique::Persist>::create(instance, &mut *conn).await
+                    }
                 }
             }
             .to_string()
@@ -578,10 +707,8 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                pub fn for_explosive<R>(mut self, input: R) -> Self
-                where R: fabrique::ForRelation<Explosive> + 'static
-                {
-                    self.explosive_relation = Some(Box::new(input));
+                pub fn for_explosive(mut self, input: impl Into<ExplosiveRelation>) -> Self {
+                    self.explosive_relation = Some(input.into());
                     self
                 }
             }

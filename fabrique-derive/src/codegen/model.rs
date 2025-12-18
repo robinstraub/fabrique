@@ -17,17 +17,22 @@ impl<'a> ModelCodegen<'a> {
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
         let ty_primary_key = self.generate_ty_primary_key();
+        let ty_soft_delete_column = self.generate_ty_soft_delete_column();
         let fn_primary_key = self.generate_fn_primary_key();
         let fn_table_name = self.generate_fn_table_name();
-        let fn_uses_soft_delete = self.generate_fn_uses_soft_delete();
+        let fn_columns = self.generate_fn_columns();
+        let fn_uses_soft_delete = self.generate_fn_soft_delete_column();
 
         quote! {
             impl ::fabrique::Model for #base_struct_ident {
                 type PrimaryKey = #ty_primary_key;
+                type SoftDeleteColumn = #ty_soft_delete_column;
 
                 #fn_primary_key
 
                 #fn_table_name
+
+                #fn_columns
 
                 #fn_uses_soft_delete
             }
@@ -51,6 +56,16 @@ impl<'a> ModelCodegen<'a> {
                 let tys = composite.iter().map(|field| &field.ty);
                 quote! { (#(#tys),*) }
             }
+        }
+    }
+
+    fn generate_ty_soft_delete_column(&self) -> TokenStream {
+        match self.analysis.fields.iter().find(|field| field.soft_delete) {
+            Some(field) => {
+                let ty = &field.column_type;
+                quote! { #ty }
+            }
+            None => quote! { ::fabrique::Nil },
         }
     }
 
@@ -94,13 +109,39 @@ impl<'a> ModelCodegen<'a> {
         }
     }
 
-    fn generate_fn_uses_soft_delete(&self) -> TokenStream {
-        let has_soft_delete = self.analysis.fields.iter().any(|field| field.soft_delete);
+    fn generate_fn_columns(&self) -> TokenStream {
+        let columns: Vec<_> = self
+            .analysis
+            .fields
+            .iter()
+            .map(|field| field.column.as_str())
+            .collect();
 
         quote! {
-            fn uses_soft_delete() -> bool {
-                #has_soft_delete
+            fn columns() -> &'static [&'static str] {
+                &[#(#columns),*]
             }
+        }
+    }
+
+    fn generate_fn_soft_delete_column(&self) -> TokenStream {
+        let soft_delete = self
+            .analysis
+            .fields
+            .iter()
+            .find(|field| field.soft_delete)
+            .map(|field| {
+                let const_column_name = &field.const_column_name;
+                quote! { Some(Self::#const_column_name) }
+            });
+
+        match soft_delete {
+            Some(soft_delete) => quote! {
+                fn soft_delete_column() -> Option<Self::SoftDeleteColumn> {
+                    #soft_delete
+                }
+            },
+            None => quote! {},
         }
     }
 }
@@ -126,6 +167,7 @@ mod tests {
             quote! {
                 impl ::fabrique::Model for Anvil {
                     type PrimaryKey = String;
+                    type SoftDeleteColumn = ::fabrique::Nil;
 
                     fn primary_key(&self) -> Self::PrimaryKey {
                         self.id.clone()
@@ -135,8 +177,8 @@ mod tests {
                         "anvils"
                     }
 
-                    fn uses_soft_delete() -> bool {
-                        false
+                    fn columns() ->  &'static [&'static str] {
+                        &["id"]
                     }
                 }
             }
@@ -167,6 +209,7 @@ mod tests {
             quote! {
                 impl ::fabrique::Model for Anvil {
                     type PrimaryKey = String;
+                    type SoftDeleteColumn = AnvilDeletedAtColumn;
 
                     fn primary_key(&self) -> Self::PrimaryKey {
                         self.id.clone()
@@ -176,8 +219,12 @@ mod tests {
                         "anvils"
                     }
 
-                    fn uses_soft_delete() -> bool {
-                        true
+                    fn columns() ->  &'static [&'static str] {
+                        &["id", "deleted_at"]
+                    }
+
+                    fn soft_delete_column() -> Option<Self::SoftDeleteColumn> {
+                        Some(Self::DELETED_AT)
                     }
                 }
             }

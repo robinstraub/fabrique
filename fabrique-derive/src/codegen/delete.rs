@@ -35,13 +35,19 @@ impl<'a> DeleteCodegen<'a> {
 
         match soft_delete {
             Some(_) => quote! {
-                async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                    <Self as ::fabrique::SoftDelete>::soft_delete(self, connection).await
+                fn delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                where
+                    E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                {
+                    <Self as ::fabrique::SoftDelete>::soft_delete(self, executor)
                 }
             },
             None => quote! {
-                async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                    <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
+                fn delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                where
+                    E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                {
+                    <Self as ::fabrique::HardDelete>::hard_delete(self, executor)
                 }
             },
         }
@@ -52,13 +58,19 @@ impl<'a> DeleteCodegen<'a> {
 
         match soft_delete {
             Some(_) => quote! {
-                async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                    <Self as ::fabrique::SoftDelete>::soft_destroy(connection, id).await
+                fn destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                where
+                    E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                {
+                    <Self as ::fabrique::SoftDelete>::soft_destroy(executor, id)
                 }
             },
             None => quote! {
-                async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                    <Self as ::fabrique::HardDelete>::hard_destroy(connection, id).await
+                fn destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                where
+                    E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                {
+                    <Self as ::fabrique::HardDelete>::hard_destroy(executor, id)
                 }
             },
         }
@@ -85,12 +97,18 @@ mod tests {
             result.to_string(),
             quote! {
                 impl ::fabrique::Delete for Anvil {
-                    async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                        <Self as ::fabrique::HardDelete>::hard_delete(self, connection).await
+                    fn delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        <Self as ::fabrique::HardDelete>::hard_delete(self, executor)
                     }
 
-                    async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                        <Self as ::fabrique::HardDelete>::hard_destroy(connection, id).await
+                    fn destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        <Self as ::fabrique::HardDelete>::hard_destroy(executor, id)
                     }
                 }
             }
@@ -120,12 +138,18 @@ mod tests {
             result.to_string(),
             quote! {
                 impl ::fabrique::Delete for Anvil {
-                    async fn delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                        <Self as ::fabrique::SoftDelete>::soft_delete(self, connection).await
+                    fn delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        <Self as ::fabrique::SoftDelete>::soft_delete(self, executor)
                     }
 
-                    async fn destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                        <Self as ::fabrique::SoftDelete>::soft_destroy(connection, id).await
+                    fn destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        <Self as ::fabrique::SoftDelete>::soft_destroy(executor, id)
                     }
                 }
             }

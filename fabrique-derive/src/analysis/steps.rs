@@ -106,7 +106,7 @@ impl<'a> ParsedStruct<'a> {
             .map(|field| {
                 let attrs = ModelFieldAttrs::from_field(field)
                     .map_err(|e| Error::from_darling(e, field.span()))?;
-                ModelField::try_from(attrs)
+                ModelField::try_from(attrs, self.ident.to_string())
             })
             .collect::<Result<Vec<_>, Error>>()?;
 

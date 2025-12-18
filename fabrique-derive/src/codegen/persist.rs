@@ -57,11 +57,17 @@ impl<'a> PersistCodegen<'a> {
         });
 
         quote! {
-            async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
-                sqlx::query_as::<_, Self>(#query)
-                    #(.bind(#field_bindings))*
-                    .fetch_one(connection)
-                    .await
+            fn create<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+            where
+                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+            {
+                async move {
+                    ::sqlx::query_as::<_, Self>(#query)
+                        #(.bind(#field_bindings))*
+                        .fetch_one(executor)
+                        .await
+                        .map_err(Into::into)
+                }
             }
         }
     }
@@ -87,11 +93,17 @@ mod tests {
             result.to_string(),
             quote! {
                 impl ::fabrique::Persist for Anvil {
-                    async fn create(self, connection: &Self::Connection) -> Result<Self, Self::Error> {
-                        sqlx::query_as::<_, Self>("INSERT INTO anvils (id) VALUES ($1) RETURNING id")
-                            .bind(self.id)
-                            .fetch_one(connection)
-                            .await
+                    fn create<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        async move {
+                            ::sqlx::query_as::<_, Self>("INSERT INTO anvils (id) VALUES ($1) RETURNING id")
+                                .bind(self.id)
+                                .fetch_one(executor)
+                                .await
+                                .map_err(Into::into)
+                        }
                     }
                 }
             }

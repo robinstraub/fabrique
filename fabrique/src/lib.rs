@@ -45,7 +45,7 @@
 //! // Query the database
 //! let heavy_anvils: Vec<Anvil> = Anvil::query()
 //!     .r#where(Anvil::WEIGHT, ">=", 100)
-//!     .fetch_all(db)
+//!     .get(db)
 //!     .await?;
 //!
 //! // Create a new record
@@ -77,10 +77,10 @@
 pub use database::*;
 pub use factory::*;
 pub use model::*;
-pub use query_builder::*;
+pub use query::*;
 
 pub mod database;
 pub mod factory;
 pub mod model;
 pub mod prelude;
-pub mod query_builder;
+pub mod query;

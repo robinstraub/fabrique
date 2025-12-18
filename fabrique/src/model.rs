@@ -100,14 +100,14 @@
 //!
 //! ```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::PgPool;
+//! # use sqlx::{Pool, Postgres};
 //! #
 //! # #[derive(Factory, Model)]
 //! # pub struct Anvil {
 //! #     id: uuid::Uuid,
 //! # }
 //! #
-//! # async fn example(connection: &PgPool) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
 //! let anvils: Vec<Anvil> = Anvil::all(&connection).await?;
 //! #     Ok(())
 //! # }
@@ -122,7 +122,7 @@
 //!
 //! ```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::PgPool;
+//! # use sqlx::{Pool, Postgres};
 //! #
 //! # #[derive(Factory, Model)]
 //! # pub struct Anvil {
@@ -130,10 +130,10 @@
 //! #     weight: i32,
 //! # }
 //! #
-//! # async fn example(connection: &PgPool) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
 //! let anvils: Vec<Anvil> = Anvil::query()
 //!     .r#where(Anvil::WEIGHT, ">=", 42)
-//!     .fetch_all(&connection)
+//!     .get(&connection)
 //!     .await?;
 //! #     Ok(())
 //! # }
@@ -149,14 +149,14 @@
 //!
 //! ```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::PgPool;
+//! # use sqlx::{Pool, Postgres};
 //! #
 //! # #[derive(Factory, Model)]
 //! # pub struct Anvil {
 //! #     id: uuid::Uuid,
 //! # }
 //! #
-//! # async fn example(connection: &PgPool, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), sqlx::Error> {
 //! anvil.create(&connection).await?;
 //! #     Ok(())
 //! # }
@@ -169,14 +169,14 @@
 //!
 //! ```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::PgPool;
+//! # use sqlx::{Pool, Postgres};
 //! #
 //! # #[derive(Factory, Model)]
 //! # pub struct Anvil {
 //! #     id: uuid::Uuid,
 //! # }
 //! #
-//! # async fn example(connection: &PgPool, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), sqlx::Error> {
 //! anvil.delete(&connection).await?;
 //! #     Ok(())
 //! # }
@@ -191,7 +191,7 @@
 //!
 //! ```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::PgPool;
+//! # use sqlx::{Pool, Postgres};
 //! # use uuid::Uuid;
 //! #
 //! # #[derive(Factory, Model)]
@@ -199,7 +199,7 @@
 //! #     id: uuid::Uuid,
 //! # }
 //! #
-//! # async fn example(connection: &PgPool, id: Uuid) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>, id: Uuid) -> Result<(), sqlx::Error> {
 //! Anvil::destroy(&connection, id).await?;
 //! #     Ok(())
 //! # }
@@ -217,7 +217,6 @@
 //!
 //! ```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::PgPool;
 //! # use uuid::Uuid;
 //! use chrono::{DateTime, Utc};
 //!
@@ -241,7 +240,7 @@
 //!
 //! ```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::PgPool;
+//! # use sqlx::{Pool, Postgres};
 //! # use uuid::Uuid;
 //! # use chrono::{DateTime, Utc};
 //!
@@ -253,7 +252,7 @@
 //! #    deleted_at: Option<DateTime<Utc>>
 //! # }
 //! #
-//! # async fn example(connection: &PgPool, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), sqlx::Error> {
 //! if anvil.trashed(&connection).await? {
 //!     // --snip--
 //! }
@@ -270,7 +269,7 @@
 //!
 //! ```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::PgPool;
+//! # use sqlx::{Pool, Postgres};
 //! # use uuid::Uuid;
 //! # use chrono::{DateTime, Utc};
 //!
@@ -282,7 +281,7 @@
 //! #    deleted_at: Option<DateTime<Utc>>
 //! # }
 //! #
-//! # async fn example(connection: &PgPool, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), sqlx::Error> {
 //! anvil.restore(&connection).await?;
 //! #     Ok(())
 //! # }
@@ -296,7 +295,7 @@
 //!
 //! ```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::PgPool;
+//! # use sqlx::{Pool, Postgres};
 //! # use uuid::Uuid;
 //! # use chrono::{DateTime, Utc};
 //!
@@ -308,7 +307,7 @@
 //! #    deleted_at: Option<DateTime<Utc>>
 //! # }
 //! #
-//! # async fn example(connection: &PgPool, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), sqlx::Error> {
 //! anvil.hard_delete(&connection).await?;
 //! #     Ok(())
 //! # }

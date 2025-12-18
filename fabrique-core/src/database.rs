@@ -1,35 +1,95 @@
-use std::marker::PhantomData;
+/// Database awareness for models.
+///
+/// This trait marks types that are aware of and connected to a database,
+/// providing the database type and error handling. Models extend this trait
+/// to add persistence operations.
+pub trait DatabaseAware: Sized {
+    /// The database connection type.
+    type Database;
 
-/// Database configuration and types
-pub trait Database: Sized {
-    /// The connection type (e.g., PgPool, MySqlPool)
-    type Connection: Clone + Sync;
-
-    /// The error type for database operations
+    /// The error type returned by database operations.
     type Error;
 }
 
-/// Marker type that associates a column name with its value type.
+/// Represents a type-safe column from a specific model.
 ///
-/// This type is used to provide compile-time type safety when building queries,
-/// ensuring that the value passed to a where clause matches the expected type
-/// for that column. Column markers are typically generated as constants by the
-/// derive macro.
-pub struct ColumnMarker<T> {
-    /// The name of the database column
-    pub name: &'static str,
-    _phantom: PhantomData<T>,
+/// This trait is implemented by zero-sized types generated for each model
+/// column, providing compile-time guarantees that columns belong to the correct
+/// model and carry their value type information.
+///
+/// The derive macro generates one implementation per column, ensuring type
+/// safety when building queries.
+pub trait Column<M>: Sized {
+    /// The Rust type of values stored in this column.
+    type Type;
+
+    /// Returns the database column name.
+    fn name(&self) -> &'static str;
 }
 
-impl<T> ColumnMarker<T> {
-    /// Creates a new column marker with the specified name.
-    ///
-    /// This is a const function to allow generating column constants at compile
-    /// time.
-    pub const fn new(name: &'static str) -> Self {
-        Self {
-            name,
-            _phantom: PhantomData,
-        }
+/// A zero-sized type used as a placeholder column for models without soft
+/// deletes. This type is never actually instantiated or used, but exists to
+/// satisfy the type system's trait bounds.
+#[derive(Debug, Clone, Copy)]
+pub struct Nil;
+
+/// Implement Column for Nil to serve as a placeholder for models without soft
+/// deletes. This allows the type system to work uniformly. Actually attempting
+/// to use this column will panic.
+impl<M> Column<M> for Nil {
+    type Type = Nil;
+
+    fn name(&self) -> &'static str {
+        panic!("Attempted to use Nil as a column")
+    }
+}
+
+// Implement sqlx traits for Nil to satisfy trait bounds
+// These implementations will never actually be called since models without
+// soft deletes don't use the soft delete code path
+impl<DB: sqlx::Database> sqlx::Type<DB> for Nil {
+    fn type_info() -> <DB as sqlx::Database>::TypeInfo {
+        panic!("Nil should never be used as a column type")
+    }
+}
+
+impl<'q, DB: sqlx::Database> sqlx::Encode<'q, DB> for Nil {
+    fn encode_by_ref(
+        &self,
+        _buf: &mut <DB as sqlx::Database>::ArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
+        panic!("Nil should never be encoded")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "Attempted to use Nil as a column")]
+    fn test_nil_column_name_panics() {
+        let nil = Nil;
+        let _ = Column::<()>::name(&nil);
+    }
+
+    #[test]
+    #[should_panic(expected = "Nil should never be used as a column type")]
+    fn test_nil_type_info_panics() {
+        let _ = <Nil as sqlx::Type<sqlx::Postgres>>::type_info();
+    }
+
+    #[test]
+    #[should_panic(expected = "Nil should never be encoded")]
+    fn test_nil_encode_panics() {
+        use sqlx::Encode;
+        let nil = Nil;
+        // Create a properly-sized buffer allocation
+        // We're just testing that the panic occurs before the buffer is actually used
+        use std::mem::MaybeUninit;
+        let mut storage: MaybeUninit<<sqlx::Postgres as sqlx::Database>::ArgumentBuffer> =
+            MaybeUninit::uninit();
+        let buf_ref = unsafe { storage.assume_init_mut() };
+        let _ = <Nil as Encode<sqlx::Postgres>>::encode_by_ref(&nil, buf_ref);
     }
 }

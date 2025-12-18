@@ -50,10 +50,14 @@ impl<'a> HardDeleteCodegen<'a> {
         let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
 
         quote! {
-            async fn hard_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                sqlx::query(#query)#(.bind(#bindings))*.execute(connection).await?;
-
-                Ok(())
+            fn hard_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+            where
+                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+            {
+                async move {
+                    ::sqlx::query(#query)#(.bind(#bindings))*.execute(executor).await?;
+                    Ok(())
+                }
             }
         }
     }
@@ -87,12 +91,17 @@ impl<'a> HardDeleteCodegen<'a> {
         };
 
         quote! {
-            async fn hard_destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                sqlx::query(#query)
-                    #binds
-                    .execute(connection)
-                    .await?;
-                Ok(())
+            fn hard_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+            where
+                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+            {
+                async move {
+                    ::sqlx::query(#query)
+                        #binds
+                        .execute(executor)
+                        .await?;
+                    Ok(())
+                }
             }
         }
     }
@@ -118,14 +127,24 @@ mod tests {
             result.to_string(),
             quote! {
                 impl ::fabrique::HardDelete for Anvil {
-                    async fn hard_destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                        sqlx::query("DELETE FROM anvils WHERE id = $1").bind(id).execute(connection).await?;
-                        Ok(())
+                    fn hard_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        async move {
+                            ::sqlx::query("DELETE FROM anvils WHERE id = $1").bind(id).execute(executor).await?;
+                            Ok(())
+                        }
                     }
 
-                    async fn hard_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                        sqlx::query("DELETE FROM anvils WHERE id = $1").bind(self.id).execute(connection).await?;
-                        Ok(())
+                    fn hard_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        async move {
+                            ::sqlx::query("DELETE FROM anvils WHERE id = $1").bind(self.id).execute(executor).await?;
+                            Ok(())
+                        }
                     }
                 }
             }
@@ -156,14 +175,24 @@ mod tests {
             result.to_string(),
             quote! {
                 impl ::fabrique::HardDelete for Anvil {
-                    async fn hard_destroy(connection: &Self::Connection, id: Self::PrimaryKey) -> Result<(), Self::Error> {
-                        sqlx::query("DELETE FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(id.0).bind(id.1).execute(connection).await?;
-                        Ok(())
+                    fn hard_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        async move {
+                            ::sqlx::query("DELETE FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(id.0).bind(id.1).execute(executor).await?;
+                            Ok(())
+                        }
                     }
 
-                    async fn hard_delete(self, connection: &Self::Connection) -> Result<(), Self::Error> {
-                        sqlx::query("DELETE FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(connection).await?;
-                        Ok(())
+                    fn hard_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        async move {
+                            ::sqlx::query("DELETE FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(executor).await?;
+                            Ok(())
+                        }
                     }
                 }
             }

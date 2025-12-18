@@ -18,11 +18,7 @@ fabrique-core = { path = "../fabrique-core", version = "0.1.1" }
 heck = "0.5"
 proc-macro2 = "1.0"
 quote = "1.0"
-sqlx = { version = "0.8", features = [
-  "postgres",
-  "runtime-tokio-rustls",
-  "uuid",
-] }
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio", "uuid"] }
 syn = { version = "2.0", features = ["extra-traits"] }
 thiserror = "2.0"
 

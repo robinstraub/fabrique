@@ -15,7 +15,7 @@
 //!
 //!```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::PgPool;
+//! # use sqlx::{Pool, Postgres};
 //! # use uuid::Uuid;
 //! #
 //! #[derive(Factory, Model)]
@@ -25,7 +25,7 @@
 //!     weight: i32,
 //! }
 //!
-//! # async fn example(connection: &PgPool, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), sqlx::Error> {
 //! Anvil::factory()
 //!     .material("Iron".to_owned())
 //!     .weight(42)
@@ -48,7 +48,7 @@
 //!
 //!```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::PgPool;
+//! # use sqlx::{Pool, Postgres};
 //! # use uuid::Uuid;
 //!
 //! # #[derive(Factory, Model)]
@@ -64,7 +64,7 @@
 //!     user_id: Uuid,
 //! }
 //!
-//! # async fn example(connection: &PgPool, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), sqlx::Error> {
 //! Anvil::factory()
 //!     .for_user(User::factory())
 //!     .create(&connection)
@@ -79,7 +79,7 @@
 //!
 //!```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::PgPool;
+//! # use sqlx::{Pool,Postgres};
 //! # use uuid::Uuid;
 //!
 //! # #[derive(Factory, Model)]
@@ -95,7 +95,7 @@
 //!     user_id: Uuid,
 //! }
 //!
-//! # async fn example(connection: &PgPool, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), sqlx::Error> {
 //! let user = User::factory().create(&connection).await?;
 //! Anvil::factory()
 //!     .for_user(user)
