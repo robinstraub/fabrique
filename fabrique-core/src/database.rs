@@ -78,4 +78,18 @@ mod tests {
     fn test_nil_type_info_panics() {
         let _ = <Nil as sqlx::Type<sqlx::Postgres>>::type_info();
     }
+
+    #[test]
+    #[should_panic(expected = "Nil should never be encoded")]
+    fn test_nil_encode_panics() {
+        use sqlx::Encode;
+        let nil = Nil;
+        // Create a properly-sized buffer allocation
+        // We're just testing that the panic occurs before the buffer is actually used
+        use std::mem::MaybeUninit;
+        let mut storage: MaybeUninit<<sqlx::Postgres as sqlx::Database>::ArgumentBuffer> =
+            MaybeUninit::uninit();
+        let buf_ref = unsafe { storage.assume_init_mut() };
+        let _ = <Nil as Encode<sqlx::Postgres>>::encode_by_ref(&nil, buf_ref);
+    }
 }
