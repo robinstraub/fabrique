@@ -1,8 +1,63 @@
 use crate::database::Column;
 use crate::model::Model;
 use crate::sql::builder::{Builder as SqlBuilder, Initial};
-use crate::sql::builder::{Filtered, Selected};
-use crate::sql::operators::Operator;
+use crate::sql::builder::{Filtered, Limited, Ordered, Selected};
+use crate::sql::operators::{Direction, Operator};
+
+/// Implements the `order_by` method for multiple builder states.
+///
+/// Always transitions to [`Ordered`] state.
+macro_rules! impl_order_by {
+    ($($state:ty),+ $(,)?) => {
+        $(
+            impl<M> Builder<M, $state>
+            where
+                M: Model,
+                M::Database: sqlx::Database,
+            {
+                /// Adds an `ORDER BY` clause to the query.
+                ///
+                /// Transitions to [`Ordered`] state, allowing `LIMIT` or execution.
+                pub fn order_by(
+                    self,
+                    column: &str,
+                    direction: impl Into<Direction>,
+                ) -> Builder<M, Ordered> {
+                    Builder {
+                        inner: self.inner.order_by(column, direction),
+                    }
+                }
+            }
+        )+
+    };
+}
+
+/// Implements the `limit` method for multiple builder states.
+///
+/// Always transitions to [`Limited`] state.
+macro_rules! impl_limit {
+    ($($state:ty),+ $(,)?) => {
+        $(
+            impl<M> Builder<M, $state>
+            where
+                M: Model,
+                M::Database: sqlx::Database,
+            {
+                /// Adds a `LIMIT` clause to the query.
+                ///
+                /// Transitions to [`Limited`] state, allowing `OFFSET` or execution.
+                pub fn limit<'a>(self, count: i64) -> Builder<M, Limited>
+                where
+                    i64: sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
+                {
+                    Builder {
+                        inner: self.inner.limit(count),
+                    }
+                }
+            }
+        )+
+    };
+}
 
 /// Implements the `get` method for multiple builder states.
 macro_rules! impl_get {
@@ -120,7 +175,27 @@ where
     }
 }
 
+impl<M> Builder<M, Limited>
+where
+    M: Model,
+    M::Database: sqlx::Database,
+{
+    /// Adds an `OFFSET` clause to the query.
+    ///
+    /// Remains in [`Limited`] state, allowing execution.
+    pub fn offset<'a>(self, count: i64) -> Builder<M, Limited>
+    where
+        i64: sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
+    {
+        Builder {
+            inner: self.inner.offset(count),
+        }
+    }
+}
+
 // Use macros to implement query execution methods across multiple states
-impl_get!(Selected, Filtered);
-impl_first!(Selected, Filtered);
-impl_first_or_fail!(Selected, Filtered);
+impl_order_by!(Selected, Filtered);
+impl_limit!(Selected, Filtered, Ordered);
+impl_get!(Selected, Filtered, Ordered, Limited);
+impl_first!(Selected, Filtered, Ordered, Limited);
+impl_first_or_fail!(Selected, Filtered, Ordered, Limited);

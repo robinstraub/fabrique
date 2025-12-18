@@ -1,4 +1,4 @@
 pub use crate::database::*;
 pub use crate::factory::*;
 pub use crate::model::*;
-pub use crate::query_builder::*;
+pub use crate::query::*;
