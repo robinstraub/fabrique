@@ -32,7 +32,7 @@ impl<'a> ColumnsCodegen<'a> {
 
     fn generate_column_types(&self) -> TokenStream {
         let types = self.analysis.fields.iter().map(|field| {
-            let type_name = self.column_type_name(&field.ident);
+            let type_name = &field.column_type;
 
             quote! {
                 pub struct #type_name;
@@ -47,7 +47,7 @@ impl<'a> ColumnsCodegen<'a> {
     fn generate_column_impls(&self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
         let impls = self.analysis.fields.iter().map(|field| {
-            let type_name = self.column_type_name(&field.ident);
+            let type_name = &field.column_type;
             let field_type = &field.ty;
             let column_name = field.ident.to_string();
 
@@ -69,9 +69,8 @@ impl<'a> ColumnsCodegen<'a> {
 
     fn generate_column_constants(&self) -> TokenStream {
         let constants = self.analysis.fields.iter().map(|field| {
-            let const_name =
-                syn::Ident::new(&field.ident.to_string().to_uppercase(), field.ident.span());
-            let type_name = self.column_type_name(&field.ident);
+            let const_name = &field.const_column_name;
+            let type_name = &field.column_type;
 
             quote! {
                 pub const #const_name: #type_name = #type_name;
@@ -81,26 +80,6 @@ impl<'a> ColumnsCodegen<'a> {
         quote! {
             #(#constants)*
         }
-    }
-
-    fn column_type_name(&self, field_ident: &syn::Ident) -> syn::Ident {
-        let struct_name = self.analysis.ident.to_string();
-        let field_name = field_ident.to_string();
-
-        // Convert snake_case to PascalCase
-        let pascal_case_field = field_name
-            .split('_')
-            .map(|word| {
-                let mut chars = word.chars();
-                match chars.next() {
-                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-                    None => String::new(),
-                }
-            })
-            .collect::<String>();
-
-        let type_name = format!("{}{}Column", struct_name, pascal_case_field);
-        syn::Ident::new(&type_name, field_ident.span())
     }
 }
 

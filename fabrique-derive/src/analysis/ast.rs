@@ -82,6 +82,12 @@ pub struct ModelField {
     /// The column name with its type marker.
     pub column: String,
 
+    /// The column type (e.g. AnvilId).
+    pub column_type: Ident,
+
+    /// The const column name (e.g. NAME).
+    pub const_column_name: Ident,
+
     /// True if the field is primary key.
     pub primary_key: bool,
 
@@ -92,13 +98,30 @@ pub struct ModelField {
 }
 
 impl ModelField {
-    pub fn try_from(attrs: ModelFieldAttrs) -> Result<Self, Error> {
+    pub fn try_from(attrs: ModelFieldAttrs, struct_name: String) -> Result<Self, Error> {
         let ident = attrs.ident.ok_or_else(|| {
             Error::new(attrs.span, ErrorKind::UnsupportedDataStructureTupleStruct)
         })?;
 
         // Simple column name without type annotations (for runtime queries)
         let column = ident.to_string();
+
+        let const_column_name = Ident::new(&ident.to_string().to_uppercase(), ident.span());
+
+        let pascal_case_field = ident
+            .to_string()
+            .split('_')
+            .map(|word| {
+                let mut chars = word.chars();
+                match chars.next() {
+                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                    None => String::new(),
+                }
+            })
+            .collect::<String>();
+
+        let type_name = format!("{}{}Column", struct_name, pascal_case_field);
+        let column_type = syn::Ident::new(&type_name, ident.span());
 
         let relation = attrs.relation.map(|referenced_type| Relation {
             name: referenced_type.to_string().to_snake_case(),
@@ -111,6 +134,8 @@ impl ModelField {
             ty: attrs.ty,
             r#as: attrs.r#as,
             column,
+            column_type,
+            const_column_name,
             primary_key: attrs.primary_key,
             relation,
             soft_delete: attrs.soft_delete,
@@ -138,7 +163,7 @@ mod tests {
         };
 
         // Act the call to the `ModelField::try_from` method
-        let result = ModelField::try_from(attrs);
+        let result = ModelField::try_from(attrs, "Anvil".to_owned());
 
         // Assert the error
         assert!(result.is_err());

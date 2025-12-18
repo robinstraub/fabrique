@@ -27,13 +27,37 @@ pub trait Column<M>: Sized {
     fn name(&self) -> &'static str;
 }
 
-/// Implement Column for () to serve as a "null" column placeholder.
-/// This allows the type system to work uniformly, though actually using it
-/// will panic.
-impl<M> Column<M> for () {
-    type Type = ();
+/// A zero-sized type used as a placeholder column for models without soft
+/// deletes. This type is never actually instantiated or used, but exists to
+/// satisfy the type system's trait bounds.
+#[derive(Debug, Clone, Copy)]
+pub struct Nil;
+
+/// Implement Column for Nil to serve as a placeholder for models without soft
+/// deletes. This allows the type system to work uniformly. Actually attempting
+/// to use this column will panic.
+impl<M> Column<M> for Nil {
+    type Type = Nil;
 
     fn name(&self) -> &'static str {
-        panic!("Attempted to use () as a column")
+        panic!("Attempted to use Nil as a column")
+    }
+}
+
+// Implement sqlx traits for Nil to satisfy trait bounds
+// These implementations will never actually be called since models without
+// soft deletes don't use the soft delete code path
+impl<DB: sqlx::Database> sqlx::Type<DB> for Nil {
+    fn type_info() -> <DB as sqlx::Database>::TypeInfo {
+        panic!("Nil should never be used as a column type")
+    }
+}
+
+impl<'q, DB: sqlx::Database> sqlx::Encode<'q, DB> for Nil {
+    fn encode_by_ref(
+        &self,
+        _buf: &mut <DB as sqlx::Database>::ArgumentBuffer,
+    ) -> Result<sqlx::encode::IsNull, sqlx::error::BoxDynError> {
+        panic!("Nil should never be encoded")
     }
 }
