@@ -397,28 +397,56 @@ mod tests {
                         AnvilFactory::new()
                     }
                 }
+
+                pub enum HammerRelation {
+                    Model(Hammer),
+                    Factory(HammerFactory),
+                }
+
+                impl From<Hammer> for HammerRelation {
+                    fn from(model: Hammer) -> Self {
+                        HammerRelation::Model(model)
+                    }
+                }
+
+                impl From<HammerFactory> for HammerRelation {
+                    fn from(factory: HammerFactory) -> Self {
+                        HammerRelation::Factory(factory)
+                    }
+                }
+
                 pub struct AnvilFactory {
                     id: std::option::Option<u32>,
                     hammer_id: std::option::Option<u32>,
                     hardness: std::option::Option<u32>,
                     weight: std::option::Option<u32>,
-
-                    hammer_relation: std::option::Option<Box<dyn fabrique::ForRelation<Hammer>>>,
+                    hammer_relation: std::option::Option<HammerRelation>,
                 }
 
                 impl fabrique::Factory for AnvilFactory {
                     type Model = Anvil;
 
-                    fn create<E>(
+                    fn create<'a, A>(
                         mut self,
-                        executor: E,
-                    ) -> impl ::std::future::Future<Output = Result<Anvil, <Anvil as fabrique::DatabaseAware>::Error>> + Send
+                        executor: A,
+                    ) -> impl ::std::future::Future<Output = Result<Anvil, <Anvil as fabrique::DatabaseAware>::Error>> + Send + 'a
                     where
-                        E: for<'e> ::sqlx::Executor<'e, Database = <Anvil as fabrique::DatabaseAware>::Database>,
+                        A: ::sqlx::Acquire<'a, Database = <Anvil as fabrique::DatabaseAware>::Database> + Send + 'a,
                     {
                         async move {
-                            if let Some(relation) = self.hammer_relation {
-                                let key = relation.into_key(&executor).await?;
+                            let mut conn = executor.acquire().await
+                                .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
+
+                            if let Some(relation) = self.hammer_relation.take() {
+                                let key = match relation {
+                                    HammerRelation::Model(model) => {
+                                        fabrique::Model::primary_key(&model)
+                                    }
+                                    HammerRelation::Factory(factory) => {
+                                        let instance = fabrique::Factory::create(factory, &mut *conn).await?;
+                                        fabrique::Model::primary_key(&instance)
+                                    }
+                                };
                                 self.hammer_id = Some(key);
                             }
 
@@ -428,26 +456,9 @@ mod tests {
                                 hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
                                 weight: self.weight.unwrap_or(<u32 as Default>::default()),
                             };
-                            <Anvil as fabrique::Persist>::create(instance, executor).await
-                        }
-                    }
-                }
 
-                impl fabrique::ForRelation<Anvil> for AnvilFactory
-                where
-                    Self: 'static,
-                {
-                    fn into_key<E>(
-                        self: Box<Self>,
-                        executor: E,
-                    ) -> fabrique::IntoKeyFuture<Anvil>
-                    where
-                        E: for<'e> ::sqlx::Executor<'e, Database = <Anvil as fabrique::DatabaseAware>::Database>,
-                    {
-                        Box::pin(async move {
-                            let instance = <Self as fabrique::Factory>::create(*self, executor).await?;
-                            Ok(<Anvil as fabrique::Model>::primary_key(&instance))
-                        })
+                            <Anvil as fabrique::Persist>::create(instance, &mut *conn).await
+                        }
                     }
                 }
 
@@ -482,10 +493,8 @@ mod tests {
                         self
                     }
 
-                    pub fn for_hammer<R>(mut self, input: R) -> Self
-                    where R: fabrique::ForRelation<Hammer> + 'static
-                    {
-                        self.hammer_relation = Some(Box::new(input));
+                    pub fn for_hammer(mut self, input: impl Into<HammerRelation>) -> Self {
+                        self.hammer_relation = Some(input.into());
                         self
                     }
                 }
@@ -540,7 +549,7 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                explosive_relation: std::option::Option<Box<dyn fabrique::ForRelation<Explosive>>>
+                explosive_relation: std::option::Option<ExplosiveRelation>
             }
             .to_string()
         );
@@ -568,16 +577,27 @@ mod tests {
         assert_eq!(
             generated.to_string(),
             quote! {
-                fn create<E>(
+                fn create<'a, A>(
                     mut self,
-                    executor: E,
-                ) -> impl ::std::future::Future<Output = Result<Anvil, <Anvil as fabrique::DatabaseAware>::Error>> + Send
+                    executor: A,
+                ) -> impl ::std::future::Future<Output = Result<Anvil, <Anvil as fabrique::DatabaseAware>::Error>> + Send + 'a
                 where
-                    E: for<'e> ::sqlx::Executor<'e, Database = <Anvil as fabrique::DatabaseAware>::Database>,
+                    A: ::sqlx::Acquire<'a, Database = <Anvil as fabrique::DatabaseAware>::Database> + Send + 'a,
                 {
                     async move {
-                        if let Some(relation) = self.hammer_relation {
-                            let key = relation.into_key(&executor).await?;
+                        let mut conn = executor.acquire().await
+                            .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
+
+                        if let Some(relation) = self.hammer_relation.take() {
+                            let key = match relation {
+                                HammerRelation::Model(model) => {
+                                    fabrique::Model::primary_key(&model)
+                                }
+                                HammerRelation::Factory(factory) => {
+                                    let instance = fabrique::Factory::create(factory, &mut *conn).await?;
+                                    fabrique::Model::primary_key(&instance)
+                                }
+                            };
                             self.hammer_id = Some(key);
                         }
 
@@ -587,7 +607,8 @@ mod tests {
                             hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
                             weight: self.weight.unwrap_or(<u32 as Default>::default()),
                         };
-                        <Anvil as fabrique::Persist>::create(instance, executor).await
+
+                        <Anvil as fabrique::Persist>::create(instance, &mut *conn).await
                     }
                 }
             }
@@ -686,10 +707,8 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                pub fn for_explosive<R>(mut self, input: R) -> Self
-                where R: fabrique::ForRelation<Explosive> + 'static
-                {
-                    self.explosive_relation = Some(Box::new(input));
+                pub fn for_explosive(mut self, input: impl Into<ExplosiveRelation>) -> Self {
+                    self.explosive_relation = Some(input.into());
                     self
                 }
             }
