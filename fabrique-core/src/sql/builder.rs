@@ -533,7 +533,15 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn test_get(connection: Pool<Postgres>) {
-        // `get` can be called on `Selected`;
+        // `get` can be called on `Initial`
+        assert!(
+            Builder::<Postgres, _>::table("anvils")
+                .get::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+
+        // `get` can be called on `Selected`
         assert!(
             Builder::table("anvils")
                 .select(&["id", "name", "weight"])
@@ -591,6 +599,14 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn test_first(connection: Pool<Postgres>) {
+        // `first` can be called on `Initial`
+        assert!(
+            Builder::<Postgres, _>::table("anvils")
+                .first::<(), _>(&connection)
+                .await
+                .is_ok()
+        );
+
         // `first` can be called on `Selected`
         assert!(
             Builder::table("anvils")
@@ -624,6 +640,14 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn test_first_or_fail(connection: Pool<Postgres>) {
+        // `first_or_fail` can be called on `Initial`
+        assert!(
+            Builder::<Postgres, _>::table("anvils")
+                .first_or_fail::<(), _>(&connection)
+                .await
+                .is_err() // No rows exist, so this should fail
+        );
+
         // `first_or_fail` can be called on `Selected`
         assert!(
             Builder::table("anvils")

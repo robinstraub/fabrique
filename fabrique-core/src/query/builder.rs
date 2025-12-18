@@ -260,6 +260,12 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_primary_key() {
+        let anvil = Anvil::default();
+        assert_eq!(anvil.primary_key(), Uuid::default());
+    }
+
     #[sqlx::test(migrations = "../migrations")]
     async fn test_where(connection: Pool<Postgres>) {
         let result: Result<Vec<Anvil>, sqlx::Error> = Builder::<Anvil>::default()
