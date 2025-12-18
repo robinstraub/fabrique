@@ -61,3 +61,21 @@ impl<'q, DB: sqlx::Database> sqlx::Encode<'q, DB> for Nil {
         panic!("Nil should never be encoded")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "Attempted to use Nil as a column")]
+    fn test_nil_column_name_panics() {
+        let nil = Nil;
+        let _ = Column::<()>::name(&nil);
+    }
+
+    #[test]
+    #[should_panic(expected = "Nil should never be used as a column type")]
+    fn test_nil_type_info_panics() {
+        let _ = <Nil as sqlx::Type<sqlx::Postgres>>::type_info();
+    }
+}
