@@ -1,5 +1,5 @@
 use darling::{FromDeriveInput, FromField};
-use heck::ToSnakeCase;
+use heck::{ToPascalCase, ToSnakeCase};
 use proc_macro2::Span;
 use syn::{Ident, Type};
 
@@ -108,17 +108,7 @@ impl ModelField {
 
         let const_column_name = Ident::new(&ident.to_string().to_uppercase(), ident.span());
 
-        let pascal_case_field = ident
-            .to_string()
-            .split('_')
-            .map(|word| {
-                let mut chars = word.chars();
-                match chars.next() {
-                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-                    None => String::new(),
-                }
-            })
-            .collect::<String>();
+        let pascal_case_field = ident.to_string().to_pascal_case();
 
         let type_name = format!("{}{}Column", struct_name, pascal_case_field);
         let column_type = syn::Ident::new(&type_name, ident.span());
