@@ -190,6 +190,30 @@ macro_rules! impl_first_or_fail {
     };
 }
 
+/// Implements the `execute` method for multiple builder states.
+///
+/// Executes the query without returning rows.
+macro_rules! impl_execute {
+    ($($state:ty),+ $(,)?) => {
+        $(
+            impl<M> QueryBuilder<M, $state>
+            where
+                M: Model,
+                M::Database: sqlx::Database,
+            {
+                /// Executes the statement without returning any rows.
+                pub async fn execute<'e, E>(self, executor: E) -> Result<(), sqlx::Error>
+                where
+                    E: sqlx::Executor<'e, Database = M::Database>,
+                    <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
+                {
+                    self.inner.execute(executor).await
+                }
+            }
+        )+
+    };
+}
+
 pub struct QueryBuilder<M, S = Initial>
 where
     M: Model,
@@ -293,6 +317,7 @@ impl_get!(Selected, Filtered<Selected>, Ordered, Limited, Offsetted);
 impl_first!(Selected, Filtered<Selected>, Ordered);
 impl_first_or_fail!(Selected, Filtered<Selected>, Ordered);
 impl_returning!(Updated, Filtered<Updated>);
+impl_execute!(Filtered<Updated>, Inserted<M::Database>, Upserted);
 
 impl<M> QueryBuilder<M, Updating>
 where
@@ -593,6 +618,20 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "../migrations")]
+    async fn test_where_not_null(connection: Pool<Postgres>) {
+        let result: Result<Vec<Anvil>, sqlx::Error> = QueryBuilder::<Anvil>::default()
+            .select()
+            // Call `where_null` on `Selected`, transitioning to `Filtered`
+            .where_not_null(WeightColumn)
+            // Ensure the generated query can be executed
+            .get(&connection)
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), vec![]);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
     async fn test_order_by(connection: Pool<Postgres>) {
         // `order_by` can be called on `Selected`
         assert!(
@@ -719,6 +758,18 @@ mod tests {
                 .order_by("weight", Direction::Asc)
                 .limit(10)
                 .offset(20)
+                .get(&connection)
+                .await
+                .is_ok()
+        );
+
+        // `get` can be called on `Returned`
+        assert!(
+            QueryBuilder::<Anvil>::default()
+                .update()
+                .set(WeightColumn, 0)
+                .r#where(WeightColumn, ">=", 0)
+                .returning(&[WeightColumn.name()])
                 .get(&connection)
                 .await
                 .is_ok()

@@ -15,11 +15,11 @@
 //!
 //! ### Retrieving All Rows From a Table
 //!
-//! You may use the [table][QueryBuilder::table] method provided by the [QueryBuilder]
-//! struct to begin a query. The [table][QueryBuilder::table] method returns a fluent
-//! query builder instance for the given table, allowing you to chain more
-//! constraints onto the query and then finally retrieve the results of the
-//! query using the [get][QueryBuilder::get] method:
+//! You may use the [table][QueryBuilder::table] method provided by the
+//! [QueryBuilder] struct to begin a query. The [table][QueryBuilder::table]
+//! method returns a fluent query builder instance for the given table, allowing
+//! you to chain more constraints onto the query and then finally retrieve the
+//! results of the query using the [get][QueryBuilder::get] method:
 //!
 //! ```rust,no_run
 //! # use fabrique::sql::QueryBuilder;
@@ -56,8 +56,8 @@
 //! ### Retrieving a Single Row From a Table
 //!
 //! If you just need to retrieve a single row from a database table, you may use
-//! the [QueryBuilder][QueryBuilder] [first][QueryBuilder::first] method. This method will
-//! return a single [Row][sqlx::Row] object:
+//! the [QueryBuilder][QueryBuilder] [first][QueryBuilder::first] method. This
+//! method will return a single [Row][sqlx::Row] object:
 //!
 //! ```rust,no_run
 //! # use fabrique::sql::QueryBuilder;

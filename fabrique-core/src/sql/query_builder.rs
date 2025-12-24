@@ -227,6 +227,30 @@ macro_rules! impl_first_or_fail {
     };
 }
 
+/// Implements the `execute` method for multiple builder states.
+///
+/// Executes the query without returning rows.
+macro_rules! impl_execute {
+    ($($state:ty),+ $(,)?) => {
+        $(
+            impl<DB: Database> QueryBuilder<DB, $state> {
+                /// Executes the statement without returning any rows.
+                pub async fn execute<'e, E>(mut self, executor: E) -> Result<(), sqlx::Error>
+                where
+                    E: Executor<'e, Database = DB>,
+                    <DB as Database>::Arguments: IntoArguments<DB>,
+                {
+                    self.inner
+                        .build()
+                        .execute(executor)
+                        .await
+                        .map(|_| ())
+                }
+            }
+        )+
+    };
+}
+
 /// Type-safe SQL query builder using the typestate pattern.
 ///
 /// Enforces correct SQL clause ordering at compile time by consuming itself
@@ -617,6 +641,34 @@ impl<DB: Database> QueryBuilder<DB, Inserted<DB>> {
             state: Returned,
         }
     }
+
+    /// Executes the INSERT statement without returning any rows.
+    ///
+    /// Flushes the accumulated INSERT data and executes.
+    pub async fn execute<'e, E>(mut self, executor: E) -> Result<(), sqlx::Error>
+    where
+        E: Executor<'e, Database = DB>,
+        <DB as Database>::Arguments: IntoArguments<DB>,
+    {
+        self.inner.push("INSERT INTO ");
+        self.inner.push(&self.table);
+        self.inner.push(" (");
+        self.inner.push(self.state.columns.join(", "));
+        self.inner.push(") VALUES (");
+
+        let mut first = true;
+        for bind_fn in self.state.bind_fns {
+            if !first {
+                self.inner.push(", ");
+            }
+            first = false;
+            bind_fn(&mut self.inner);
+        }
+
+        self.inner.push(")");
+
+        self.inner.build().execute(executor).await.map(|_| ())
+    }
 }
 
 impl<DB: Database> QueryBuilder<DB, Conflicted> {
@@ -790,6 +842,7 @@ impl_returning!(Updated);
 impl_get!(Selected, Filtered<Selected>, Ordered, Limited, Offsetted);
 impl_first!(Selected, Filtered<Selected>, Ordered);
 impl_first_or_fail!(Selected, Filtered<Selected>, Ordered);
+impl_execute!(Filtered<Updated>, Upserted);
 
 #[cfg(test)]
 mod tests {
@@ -837,7 +890,7 @@ mod tests {
             .select(&["id", "name", "weight"])
             // Call `where_not_null` on `Selected`, transitionning to `Filtered`
             .r#where_not_null("weight")
-            // Call `where_null` on `Filtered`, allowing chains
+            // Call `where_not_null` on `Filtered`, allowing chains
             .r#where_not_null("weight")
             .r#where_not_null("weight")
             // Ensure the generated query can be executed
