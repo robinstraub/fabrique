@@ -16,4 +16,4 @@ sqlx = { workspace = true }
 fabrique-derive = { path = "../fabrique-derive" }
 fabrique = { path = "../fabrique" }
 sqlx = { workspace = true, features = ["runtime-tokio", "uuid"] }
-uuid = "1"
+uuid = { version = "1", features = ["v4"] }

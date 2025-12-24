@@ -103,6 +103,7 @@ async fn test_query_builder(connection: Pool<Postgres>) {
         .unwrap();
 
     let result = Anvil::query()
+        .select()
         .r#where(Anvil::WEIGHT, ">=", 42)
         .get(&connection)
         .await;

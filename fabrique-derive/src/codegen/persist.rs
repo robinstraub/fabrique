@@ -17,10 +17,13 @@ impl<'a> PersistCodegen<'a> {
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
         let fn_create = self.generate_fn_create();
+        let fn_save = self.generate_fn_save();
 
         quote! {
             impl ::fabrique::Persist for #base_struct_ident {
                 #fn_create
+
+                #fn_save
             }
         }
     }
@@ -71,6 +74,38 @@ impl<'a> PersistCodegen<'a> {
             }
         }
     }
+
+    /// Generates the `save()` method using the Layer 2 query builder.
+    fn generate_fn_save(&self) -> TokenStream {
+        // Generate .set() calls for each field
+        let set_calls = self.analysis.fields.iter().map(|field| {
+            let const_name = &field.const_column_name;
+            let ident = &field.ident;
+            match &field.r#as {
+                Some(ty) => quote! { .set(Self::#const_name, <#ty>::from(self.#ident)) },
+                None => quote! { .set(Self::#const_name, self.#ident) },
+            }
+        });
+
+        quote! {
+            fn save<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+            where
+                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+            {
+                async move {
+                    ::fabrique::model::QueryBuilder::<Self>::default()
+                        .insert()
+                        #(#set_calls)*
+                        .on_conflict()
+                        .do_update()
+                        .returning()
+                        .first_or_fail(executor)
+                        .await
+                        .map_err(Into::into)
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -101,6 +136,23 @@ mod tests {
                             ::sqlx::query_as::<_, Self>("INSERT INTO anvils (id) VALUES ($1) RETURNING id")
                                 .bind(self.id)
                                 .fetch_one(executor)
+                                .await
+                                .map_err(Into::into)
+                        }
+                    }
+
+                    fn save<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        async move {
+                            ::fabrique::model::QueryBuilder::<Self>::default()
+                                .insert()
+                                .set(Self::ID, self.id)
+                                .on_conflict()
+                                .do_update()
+                                .returning()
+                                .first_or_fail(executor)
                                 .await
                                 .map_err(Into::into)
                         }

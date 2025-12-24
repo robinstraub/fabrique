@@ -44,6 +44,7 @@
 //! # async fn example(db: &PgPool) -> Result<(), sqlx::Error> {
 //! // Query the database
 //! let heavy_anvils: Vec<Anvil> = Anvil::query()
+//!     .select()
 //!     .r#where(Anvil::WEIGHT, ">=", 100)
 //!     .get(db)
 //!     .await?;
@@ -77,10 +78,9 @@
 pub use database::*;
 pub use factory::*;
 pub use model::*;
-pub use query::*;
 
 pub mod database;
 pub mod factory;
 pub mod model;
 pub mod prelude;
-pub mod query;
+pub mod sql;

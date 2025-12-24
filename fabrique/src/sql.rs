@@ -15,34 +15,34 @@
 //!
 //! ### Retrieving All Rows From a Table
 //!
-//! You may use the [table][Builder::table] method provided by the [Builder]
-//! struct to begin a query. The [table][Builder::table] method returns a fluent
-//! query builder instance for the given table, allowing you to chain more
-//! constraints onto the query and then finally retrieve the results of the
-//! query using the [get][Builder::get] method:
+//! You may use the [table][QueryBuilder::table] method provided by the
+//! [QueryBuilder] struct to begin a query. The [table][QueryBuilder::table]
+//! method returns a fluent query builder instance for the given table, allowing
+//! you to chain more constraints onto the query and then finally retrieve the
+//! results of the query using the [get][QueryBuilder::get] method:
 //!
 //! ```rust,no_run
-//! # use fabrique::prelude::*;
+//! # use fabrique::sql::QueryBuilder;
 //! # use sqlx::{Pool, Postgres};
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
-//! let rows: Vec<(uuid::Uuid, String, i16)> = Builder::table("anvils")
+//! let rows: Vec<(uuid::Uuid, String, i16)> = QueryBuilder::table("anvils")
 //!     .get(&connection)
 //!     .await?;
 //! #     Ok(())
 //! # }
 //! ```
 //!
-//! The [get][Builder::get] method returns a `Vec` of database rows.
+//! The [get][QueryBuilder::get] method returns a `Vec` of database rows.
 //! You may access each column's value by using the [Row::get] method, which
 //! requires you to specify the expected type for each column:
 //!
 //! ```rust,no_run
-//! # use fabrique::prelude::*;
+//! # use fabrique::sql::QueryBuilder;
 //! # use sqlx::{Pool, Postgres};
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
-//! # let rows: Vec<(uuid::Uuid, String, i16)> = Builder::table("anvils")
+//! # let rows: Vec<(uuid::Uuid, String, i16)> = QueryBuilder::table("anvils")
 //! #     .get(&connection)
 //! #     .await?;
 //! #
@@ -56,15 +56,15 @@
 //! ### Retrieving a Single Row From a Table
 //!
 //! If you just need to retrieve a single row from a database table, you may use
-//! the [Builder][Builder] [first][Builder::first] method. This method will
-//! return a single [Row][sqlx::Row] object:
+//! the [QueryBuilder][QueryBuilder] [first][QueryBuilder::first] method. This
+//! method will return a single [Row][sqlx::Row] object:
 //!
 //! ```rust,no_run
-//! # use fabrique::prelude::*;
+//! # use fabrique::sql::QueryBuilder;
 //! # use sqlx::{Pool, Postgres};
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
-//! let row: Option<(uuid::Uuid, String, i16)> = Builder::table("anvils")
+//! let row: Option<(uuid::Uuid, String, i16)> = QueryBuilder::table("anvils")
 //!     .first(&connection)
 //!     .await?;
 //! #     Ok(())
@@ -73,17 +73,18 @@
 //!
 //! If you would like to retrieve a single row from a database table, but throw
 //! an error if no matching row is found, you may use the
-//! [first_or_fail][Builder::first_or_fail] method:
+//! [first_or_fail][QueryBuilder::first_or_fail] method:
 //!
 //! ```rust,no_run
-//! # use fabrique::prelude::*;
+//! # use fabrique::sql::QueryBuilder;
 //! # use sqlx::{Pool, Postgres};
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
-//! let row: (uuid::Uuid, String, i16) = Builder::table("anvils")
+//! let row: (uuid::Uuid, String, i16) = QueryBuilder::table("anvils")
 //!     .first_or_fail(&connection)
 //!     .await?;
 //! #     Ok(())
 //! # }
 //! ```
-pub use fabrique_core::sql::builder::*;
+
+pub use fabrique_core::sql::*;

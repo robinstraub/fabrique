@@ -12,7 +12,6 @@ documentation = "https://docs.rs/fabrique-derive"
 proc-macro = true
 
 [dependencies]
-aquamarine = { workspace = true }
 darling = "0.21"
 fabrique-core = { path = "../fabrique-core", version = "0.1.1" }
 heck = "0.5"

@@ -48,7 +48,13 @@ impl<'a> ColumnsCodegen<'a> {
         let base_struct_ident = &self.analysis.ident;
         let impls = self.analysis.fields.iter().map(|field| {
             let type_name = &field.column_type;
-            let field_type = &field.ty;
+            let field_type = match &field.r#as {
+                Some(as_type) => quote! { #as_type },
+                None => {
+                    let ty = &field.ty;
+                    quote! { #ty }
+                }
+            };
             let column_name = field.ident.to_string();
 
             quote! {

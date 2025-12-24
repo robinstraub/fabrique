@@ -74,7 +74,7 @@
 //! `#[fabrique(primary_key)]` attributes:
 //!
 //! ```rust,no_run
-//! # use fabrique::{Model, Persist, Query};
+//! # use fabrique::{Model, Persist};
 //! # use uuid::Uuid;
 //!
 //! #[derive(Model)]
@@ -132,6 +132,7 @@
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
 //! let anvils: Vec<Anvil> = Anvil::query()
+//!     .select()
 //!     .r#where(Anvil::WEIGHT, ">=", 42)
 //!     .get(&connection)
 //!     .await?;
@@ -143,9 +144,40 @@
 //!
 //! ### Inserts
 //!
-//! To insert a new record into the database, you should instantiate a new model
-//! instance and set attributes on the model. Then, call the
-//! [`create`][Persist::create] method on the model instance:
+//! Of course, when using Fabrique, we don't only need to retrieve models from
+//! the database. We also need to insert new records. Thankfully, Fabrique
+//! makes it simple. To insert a new record into the database, you should
+//! instantiate a new model instance and set attributes on the model. Then,
+//! call the [`save`][Persist::save] method on the model instance:
+//!
+//! ```rust,no_run
+//! # use fabrique::prelude::*;
+//! # use sqlx::{Pool, Postgres};
+//! #
+//! # #[derive(Factory, Model)]
+//! # pub struct Anvil {
+//! #     id: uuid::Uuid,
+//! #     name: String,
+//! # }
+//! #
+//! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
+//! let anvil = Anvil {
+//!     id: uuid::Uuid::new_v4(),
+//!     name: "Heavy Duty".to_string(),
+//! };
+//!
+//! anvil.save(&connection).await?;
+//! #     Ok(())
+//! # }
+//! ```
+//!
+//! When we call the [`save`][Persist::save] method, a record will be inserted
+//! into the database. If a record with the same primary key already exists,
+//! it will be updated instead.
+//!
+//! Alternatively, you may use the [`create`][Persist::create] method to insert
+//! a new model. The [`create`][Persist::create] method will fail if a record
+//! with the same primary key already exists:
 //!
 //! ```rust,no_run
 //! # use fabrique::prelude::*;
@@ -158,6 +190,57 @@
 //! #
 //! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), sqlx::Error> {
 //! anvil.create(&connection).await?;
+//! #     Ok(())
+//! # }
+//! ```
+//!
+//! ### Updates
+//!
+//! The [`save`][Persist::save] method may also be used to update models that
+//! already exist in the database. To update a model, you should retrieve it
+//! and set any attributes you wish to update. Then, you should call the
+//! model's [`save`][Persist::save] method:
+//!
+//! ```rust,no_run
+//! # use fabrique::prelude::*;
+//! # use sqlx::{Pool, Postgres};
+//! #
+//! # #[derive(Factory, Model)]
+//! # pub struct Anvil {
+//! #     id: uuid::Uuid,
+//! #     name: String,
+//! # }
+//! #
+//! # async fn example(connection: Pool<Postgres>, mut anvil: Anvil) -> Result<(), sqlx::Error> {
+//! anvil.name = "Super Heavy Duty".to_string();
+//!
+//! anvil.save(&connection).await?;
+//! #     Ok(())
+//! # }
+//! ```
+//!
+//! ### Mass Updates
+//!
+//! Updates can also be performed against models that match a given query. In
+//! this example, all anvils that have a weight less than 50 will be updated to
+//! have a weight of 100:
+//!
+//! ```rust,no_run
+//! # use fabrique::prelude::*;
+//! # use sqlx::{Pool, Postgres};
+//! #
+//! # #[derive(Factory, Model)]
+//! # pub struct Anvil {
+//! #     id: uuid::Uuid,
+//! #     weight: i32,
+//! # }
+//! #
+//! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
+//! Anvil::update()
+//!     .set(Anvil::WEIGHT, 100)
+//!     .r#where(Anvil::WEIGHT, "<", 50)
+//!     .execute(&connection)
+//!     .await?;
 //! #     Ok(())
 //! # }
 //! ```
