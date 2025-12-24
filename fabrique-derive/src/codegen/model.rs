@@ -21,6 +21,7 @@ impl<'a> ModelCodegen<'a> {
         let fn_primary_key = self.generate_fn_primary_key();
         let fn_table_name = self.generate_fn_table_name();
         let fn_columns = self.generate_fn_columns();
+        let fn_primary_key_columns = self.generate_fn_primary_key_columns();
         let fn_uses_soft_delete = self.generate_fn_soft_delete_column();
 
         quote! {
@@ -33,6 +34,8 @@ impl<'a> ModelCodegen<'a> {
                 #fn_table_name
 
                 #fn_columns
+
+                #fn_primary_key_columns
 
                 #fn_uses_soft_delete
             }
@@ -124,6 +127,22 @@ impl<'a> ModelCodegen<'a> {
         }
     }
 
+    fn generate_fn_primary_key_columns(&self) -> TokenStream {
+        let pk_columns: Vec<_> = self
+            .analysis
+            .fields
+            .iter()
+            .filter(|field| field.primary_key)
+            .map(|field| field.column.as_str())
+            .collect();
+
+        quote! {
+            fn primary_key_columns() -> &'static [&'static str] {
+                &[#(#pk_columns),*]
+            }
+        }
+    }
+
     fn generate_fn_soft_delete_column(&self) -> TokenStream {
         let soft_delete = self
             .analysis
@@ -180,6 +199,10 @@ mod tests {
                     fn columns() ->  &'static [&'static str] {
                         &["id"]
                     }
+
+                    fn primary_key_columns() -> &'static [&'static str] {
+                        &["id"]
+                    }
                 }
             }
             .to_string()
@@ -221,6 +244,10 @@ mod tests {
 
                     fn columns() ->  &'static [&'static str] {
                         &["id", "deleted_at"]
+                    }
+
+                    fn primary_key_columns() -> &'static [&'static str] {
+                        &["id"]
                     }
 
                     fn soft_delete_column() -> Option<Self::SoftDeleteColumn> {

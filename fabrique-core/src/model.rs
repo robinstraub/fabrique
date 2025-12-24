@@ -1,6 +1,10 @@
+mod query_builder;
+
+pub use query_builder::QueryBuilder;
+
 use crate::{
     database::{Column, DatabaseAware},
-    query::builder::Builder,
+    sql::Updating,
 };
 
 /// Model metadata and identity
@@ -20,6 +24,9 @@ pub trait Model: DatabaseAware {
     /// Returns the column names for this model
     fn columns() -> &'static [&'static str];
 
+    /// Returns the primary key column names for this model
+    fn primary_key_columns() -> &'static [&'static str];
+
     /// Returns the soft delete column if this model uses soft deletes.
     fn soft_delete_column() -> Option<Self::SoftDeleteColumn>
     where
@@ -37,9 +44,16 @@ where
     <Self::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<Self::Database>,
     for<'r> Self: sqlx::FromRow<'r, <Self::Database as sqlx::Database>::Row>,
 {
-    /// Creates a new query builder for this model.
-    fn query() -> Builder<Self> {
-        Builder::default()
+    /// Creates a new SELECT query builder for this model.
+    fn query() -> QueryBuilder<Self> {
+        QueryBuilder::default()
+    }
+
+    /// Creates a new UPDATE query builder for this model.
+    ///
+    /// Returns a builder in the `Updating` state, ready for `.set()` calls.
+    fn update() -> QueryBuilder<Self, Updating> {
+        QueryBuilder::default().update()
     }
 
     /// Retrieves all instances of this model from the database.
@@ -51,21 +65,37 @@ where
     {
         async move {
             match Self::soft_delete_column() {
-                Some(column) => Builder::default()
+                Some(column) => QueryBuilder::<Self>::default()
+                    .select()
                     .where_null(column)
                     .get(executor)
                     .await
                     .map_err(Into::into),
-                None => Builder::default().get(executor).await.map_err(Into::into),
+                None => QueryBuilder::<Self>::default()
+                    .select()
+                    .get(executor)
+                    .await
+                    .map_err(Into::into),
             }
         }
     }
 }
 
-/// Create operations
+/// Create and update operations
 pub trait Persist: Model {
     /// Creates and persists this model instance
     fn create<'e, E>(
+        self,
+        executor: E,
+    ) -> impl Future<Output = Result<Self, Self::Error>> + Send + 'e
+    where
+        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+
+    /// Saves this model instance to the database.
+    ///
+    /// Performs an UPSERT: inserts the record if it doesn't exist,
+    /// or updates it if there's a conflict on the primary key.
+    fn save<'e, E>(
         self,
         executor: E,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send + 'e

@@ -74,7 +74,7 @@
 //! `#[fabrique(primary_key)]` attributes:
 //!
 //! ```rust,no_run
-//! # use fabrique::{Model, Persist, Query};
+//! # use fabrique::{Model, Persist};
 //! # use uuid::Uuid;
 //!
 //! #[derive(Model)]
@@ -132,6 +132,7 @@
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
 //! let anvils: Vec<Anvil> = Anvil::query()
+//!     .select()
 //!     .r#where(Anvil::WEIGHT, ">=", 42)
 //!     .get(&connection)
 //!     .await?;
