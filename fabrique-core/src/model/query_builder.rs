@@ -967,4 +967,148 @@ mod tests {
         assert_eq!(anvil.name, "Updated");
         assert_eq!(anvil.weight, 200);
     }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_returning(connection: Pool<Postgres>) {
+        // Setup: insert a row
+        let id = Uuid::new_v4();
+        SqlQueryBuilder::table("anvils")
+            .insert()
+            .set("id", id)
+            .set("material", "Iron")
+            .set("name", "Original")
+            .set("weight", 100i16)
+            .returning(&["id"])
+            .first_or_fail::<(Uuid,), _>(&connection)
+            .await
+            .unwrap();
+
+        // `returning` can be called on `Updated`
+        let result: Anvil = QueryBuilder::<Anvil>::default()
+            .update()
+            .set(NameColumn, "Updated".to_string())
+            .returning(&["id", "material", "name", "weight"])
+            .first_or_fail(&connection)
+            .await
+            .unwrap();
+        assert_eq!(result.name, "Updated");
+
+        // `returning` can be called on `Filtered<Updated>`
+        let result: Anvil = QueryBuilder::<Anvil>::default()
+            .update()
+            .set(NameColumn, "Filtered Update".to_string())
+            .r#where(IdColumn, "=", id)
+            .returning(&["id", "material", "name", "weight"])
+            .first_or_fail(&connection)
+            .await
+            .unwrap();
+        assert_eq!(result.name, "Filtered Update");
+
+        // `returning` can be called on `Inserted`
+        let new_id = Uuid::new_v4();
+        let result: Anvil = QueryBuilder::<Anvil>::default()
+            .insert()
+            .set(IdColumn, new_id)
+            .set(MaterialColumn, "Steel".to_string())
+            .set(NameColumn, "New Anvil".to_string())
+            .set(WeightColumn, 150i16)
+            .returning()
+            .first_or_fail(&connection)
+            .await
+            .unwrap();
+        assert_eq!(result.id, new_id);
+        assert_eq!(result.name, "New Anvil");
+
+        // `returning` can be called on `Upserted` (DO UPDATE)
+        let result: Anvil = QueryBuilder::<Anvil>::default()
+            .insert()
+            .set(IdColumn, id)
+            .set(MaterialColumn, "Bronze".to_string())
+            .set(NameColumn, "Upserted Name".to_string())
+            .set(WeightColumn, 200i16)
+            .on_conflict()
+            .do_update()
+            .returning()
+            .first_or_fail(&connection)
+            .await
+            .unwrap();
+        assert_eq!(result.name, "Upserted Name");
+        assert_eq!(result.weight, 200);
+
+        // `returning` can be called on `Upserted` (DO NOTHING)
+        let result: Option<Anvil> = QueryBuilder::<Anvil>::default()
+            .insert()
+            .set(IdColumn, id)
+            .set(MaterialColumn, "Ignored".to_string())
+            .set(NameColumn, "Ignored".to_string())
+            .set(WeightColumn, 999i16)
+            .on_conflict()
+            .do_nothing()
+            .returning()
+            .first(&connection)
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_execute(connection: Pool<Postgres>) {
+        // `execute` can be called on `Filtered<Updated>`
+        let id = Uuid::new_v4();
+        SqlQueryBuilder::table("anvils")
+            .insert()
+            .set("id", id)
+            .set("material", "Iron")
+            .set("name", "Original")
+            .set("weight", 100i16)
+            .returning(&["id"])
+            .first_or_fail::<(Uuid,), _>(&connection)
+            .await
+            .unwrap();
+
+        let result = QueryBuilder::<Anvil>::default()
+            .update()
+            .set(NameColumn, "Updated".to_string())
+            .r#where(IdColumn, "=", id)
+            .execute(&connection)
+            .await;
+        assert!(result.is_ok());
+
+        // `execute` can be called on `Inserted`
+        let result = QueryBuilder::<Anvil>::default()
+            .insert()
+            .set(IdColumn, Uuid::new_v4())
+            .set(MaterialColumn, "Steel".to_string())
+            .set(NameColumn, "New Anvil".to_string())
+            .set(WeightColumn, 150i16)
+            .execute(&connection)
+            .await;
+        assert!(result.is_ok());
+
+        // `execute` can be called on `Upserted` (DO UPDATE)
+        let result = QueryBuilder::<Anvil>::default()
+            .insert()
+            .set(IdColumn, id)
+            .set(MaterialColumn, "Bronze".to_string())
+            .set(NameColumn, "Upserted".to_string())
+            .set(WeightColumn, 200i16)
+            .on_conflict()
+            .do_update()
+            .execute(&connection)
+            .await;
+        assert!(result.is_ok());
+
+        // `execute` can be called on `Upserted` (DO NOTHING)
+        let result = QueryBuilder::<Anvil>::default()
+            .insert()
+            .set(IdColumn, id)
+            .set(MaterialColumn, "Ignored".to_string())
+            .set(NameColumn, "Ignored".to_string())
+            .set(WeightColumn, 999i16)
+            .on_conflict()
+            .do_nothing()
+            .execute(&connection)
+            .await;
+        assert!(result.is_ok());
+    }
 }

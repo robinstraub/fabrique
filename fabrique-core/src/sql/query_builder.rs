@@ -342,13 +342,16 @@ pub struct Offsetted;
 /// Inserting state - INSERT INTO added, waiting for at least one `.set()`.
 pub struct Inserting;
 
+/// Type alias for boxed bind functions used in INSERT statements.
+type BindFn<DB> = Box<dyn FnOnce(&mut sqlx::QueryBuilder<DB>) + Send>;
+
 /// Inserted state - at least one column set for INSERT.
 ///
 /// Accumulates columns and their bound values until the INSERT statement
 /// is finalized via `.on_conflict()`, `.returning()`, or execution.
 pub struct Inserted<DB: Database> {
     columns: Vec<String>,
-    bind_fns: Vec<Box<dyn FnOnce(&mut sqlx::QueryBuilder<DB>) + Send>>,
+    bind_fns: Vec<BindFn<DB>>,
 }
 
 /// Updating state - UPDATE added, waiting for at least one `.set()`.
@@ -547,7 +550,7 @@ impl<DB: Database> QueryBuilder<DB, Inserting> {
         T: 'a + sqlx::Encode<'a, DB> + sqlx::Type<DB> + Send + 'static,
     {
         let mut columns = Vec::new();
-        let mut bind_fns: Vec<Box<dyn FnOnce(&mut sqlx::QueryBuilder<DB>) + Send>> = Vec::new();
+        let mut bind_fns: Vec<BindFn<DB>> = Vec::new();
 
         columns.push(column.to_string());
         bind_fns.push(Box::new(move |builder: &mut sqlx::QueryBuilder<DB>| {
@@ -1199,5 +1202,149 @@ mod tests {
             .unwrap();
         assert_eq!(result.0, "Updated");
         assert_eq!(result.1, 200);
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_returning(connection: Pool<Postgres>) {
+        // Setup: insert a row
+        let id = Uuid::new_v4();
+        QueryBuilder::table("anvils")
+            .insert()
+            .set("id", id)
+            .set("material", "Iron")
+            .set("name", "Original")
+            .set("weight", 100i16)
+            .returning(&["id"])
+            .first_or_fail::<(Uuid,), _>(&connection)
+            .await
+            .unwrap();
+
+        // `returning` can be called on `Updated`
+        let result: (String,) = QueryBuilder::table("anvils")
+            .update()
+            .set("name", "Updated")
+            .returning(&["name"])
+            .first_or_fail(&connection)
+            .await
+            .unwrap();
+        assert_eq!(result.0, "Updated");
+
+        // `returning` can be called on `Filtered<Updated>`
+        let result: (String,) = QueryBuilder::table("anvils")
+            .update()
+            .set("name", "Filtered Update")
+            .r#where("id", "=", id)
+            .returning(&["name"])
+            .first_or_fail(&connection)
+            .await
+            .unwrap();
+        assert_eq!(result.0, "Filtered Update");
+
+        // `returning` can be called on `Inserted`
+        let new_id = Uuid::new_v4();
+        let result: (Uuid, String) = QueryBuilder::table("anvils")
+            .insert()
+            .set("id", new_id)
+            .set("material", "Steel")
+            .set("name", "New Anvil")
+            .set("weight", 150i16)
+            .returning(&["id", "name"])
+            .first_or_fail(&connection)
+            .await
+            .unwrap();
+        assert_eq!(result.0, new_id);
+        assert_eq!(result.1, "New Anvil");
+
+        // `returning` can be called on `Upserted` (DO UPDATE)
+        let result: (String, i16) = QueryBuilder::table("anvils")
+            .insert()
+            .set("id", id)
+            .set("material", "Bronze")
+            .set("name", "Upserted Name")
+            .set("weight", 200i16)
+            .on_conflict(&["id"])
+            .do_update(&["material", "name", "weight"])
+            .returning(&["name", "weight"])
+            .first_or_fail(&connection)
+            .await
+            .unwrap();
+        assert_eq!(result.0, "Upserted Name");
+        assert_eq!(result.1, 200);
+
+        // `returning` can be called on `Upserted` (DO NOTHING)
+        let result: Option<(Uuid,)> = QueryBuilder::table("anvils")
+            .insert()
+            .set("id", id)
+            .set("material", "Ignored")
+            .set("name", "Ignored")
+            .set("weight", 999i16)
+            .on_conflict(&["id"])
+            .do_nothing()
+            .returning(&["id"])
+            .first(&connection)
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn test_execute(connection: Pool<Postgres>) {
+        // `execute` can be called on `Filtered<Updated>`
+        let id = Uuid::new_v4();
+        QueryBuilder::table("anvils")
+            .insert()
+            .set("id", id)
+            .set("material", "Iron")
+            .set("name", "Original")
+            .set("weight", 100i16)
+            .returning(&["id"])
+            .first_or_fail::<(Uuid,), _>(&connection)
+            .await
+            .unwrap();
+
+        let result = QueryBuilder::table("anvils")
+            .update()
+            .set("name", "Updated")
+            .r#where("id", "=", id)
+            .execute(&connection)
+            .await;
+        assert!(result.is_ok());
+
+        // `execute` can be called on `Inserted`
+        let result = QueryBuilder::table("anvils")
+            .insert()
+            .set("id", Uuid::new_v4())
+            .set("material", "Steel")
+            .set("name", "New Anvil")
+            .set("weight", 150i16)
+            .execute(&connection)
+            .await;
+        assert!(result.is_ok());
+
+        // `execute` can be called on `Upserted` (DO UPDATE)
+        let result = QueryBuilder::table("anvils")
+            .insert()
+            .set("id", id)
+            .set("material", "Bronze")
+            .set("name", "Upserted")
+            .set("weight", 200i16)
+            .on_conflict(&["id"])
+            .do_update(&["material", "name", "weight"])
+            .execute(&connection)
+            .await;
+        assert!(result.is_ok());
+
+        // `execute` can be called on `Upserted` (DO NOTHING)
+        let result = QueryBuilder::table("anvils")
+            .insert()
+            .set("id", id)
+            .set("material", "Ignored")
+            .set("name", "Ignored")
+            .set("weight", 999i16)
+            .on_conflict(&["id"])
+            .do_nothing()
+            .execute(&connection)
+            .await;
+        assert!(result.is_ok());
     }
 }
