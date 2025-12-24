@@ -23,8 +23,7 @@ async fn test_save(connection: Pool<Postgres>) {
 #[sqlx::test(migrations = "../migrations")]
 async fn test_update(connection: Pool<Postgres>) {
     let anvil = Anvil::factory().create(&connection).await.unwrap();
-    let result = Anvil::query()
-        .update()
+    let result = Anvil::update()
         .set(Anvil::MATERIAL, "Steel".to_string())
         .r#where(Anvil::ID, "=", anvil.id)
         .execute(&connection)
