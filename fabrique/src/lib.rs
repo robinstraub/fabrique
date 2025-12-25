@@ -41,7 +41,7 @@
 //!     material: String,
 //! }
 //!
-//! # async fn example(db: &PgPool) -> Result<(), sqlx::Error> {
+//! # async fn example(db: &PgPool) -> Result<(), fabrique::Error> {
 //! // Query the database
 //! let heavy_anvils: Vec<Anvil> = Anvil::query()
 //!     .select()
@@ -76,10 +76,12 @@
 //! Then define your models and start querying. See the [`model`] module for a
 //! comprehensive guide on model conventions and usage
 pub use database::*;
+pub use error::*;
 pub use factory::*;
 pub use model::*;
 
 pub mod database;
+pub mod error;
 pub mod factory;
 pub mod model;
 pub mod prelude;

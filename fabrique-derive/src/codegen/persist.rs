@@ -53,8 +53,24 @@ impl<'a> PersistCodegen<'a> {
         // Generate field bindings (self.field1, self.field2, ...)
         let field_bindings = self.analysis.fields.iter().map(|field| {
             let ident = &field.ident;
+            let field_name = ident.to_string();
             match &field.r#as {
-                Some(ty) => quote! { #ty::from(self.#ident) },
+                Some(db_ty) => {
+                    let rust_ty = &field.ty;
+                    quote! {{
+                        let value_str = format!("{:?}", &self.#ident);
+                        <#db_ty>::try_from(self.#ident).map_err(|e| {
+                            ::fabrique::Error::Conversion {
+                                field: #field_name.to_string(),
+                                from: stringify!(#rust_ty),
+                                to: stringify!(#db_ty),
+                                value: value_str,
+                                reason: e.to_string(),
+                                direction: ::fabrique::error::ConversionDirection::ToDb,
+                            }
+                        })?
+                    }}
+                }
                 None => quote! { self.#ident },
             }
         });
@@ -81,8 +97,26 @@ impl<'a> PersistCodegen<'a> {
         let set_calls = self.analysis.fields.iter().map(|field| {
             let const_name = &field.const_column_name;
             let ident = &field.ident;
+            let field_name = ident.to_string();
             match &field.r#as {
-                Some(ty) => quote! { .set(Self::#const_name, <#ty>::from(self.#ident)) },
+                Some(db_ty) => {
+                    let rust_ty = &field.ty;
+                    quote! {
+                        .set(Self::#const_name, {
+                            let value_str = format!("{:?}", &self.#ident);
+                            <#db_ty>::try_from(self.#ident).map_err(|e| {
+                                ::fabrique::Error::Conversion {
+                                    field: #field_name.to_string(),
+                                    from: stringify!(#rust_ty),
+                                    to: stringify!(#db_ty),
+                                    value: value_str,
+                                    reason: e.to_string(),
+                                    direction: ::fabrique::error::ConversionDirection::ToDb,
+                                }
+                            })?
+                        })
+                    }
+                }
                 None => quote! { .set(Self::#const_name, self.#ident) },
             }
         });

@@ -25,7 +25,7 @@
 //!     weight: i32,
 //! }
 //!
-//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), fabrique::Error> {
 //! Anvil::factory()
 //!     .material("Iron".to_owned())
 //!     .weight(42)
@@ -64,7 +64,7 @@
 //!     user_id: Uuid,
 //! }
 //!
-//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), fabrique::Error> {
 //! Anvil::factory()
 //!     .for_user(User::factory())
 //!     .create(&connection)
@@ -95,7 +95,7 @@
 //!     user_id: Uuid,
 //! }
 //!
-//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), sqlx::Error> {
+//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), fabrique::Error> {
 //! let user = User::factory().create(&connection).await?;
 //! Anvil::factory()
 //!     .for_user(user)

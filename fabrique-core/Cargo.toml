@@ -11,6 +11,7 @@ documentation = "https://docs.rs/fabrique-core"
 
 [dependencies]
 sqlx = { workspace = true }
+thiserror = "2"
 
 [dev-dependencies]
 fabrique-derive = { path = "../fabrique-derive" }
