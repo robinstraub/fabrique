@@ -26,13 +26,25 @@ impl<'a> FromRowCodegen<'a> {
             let column_name = field.ident.to_string();
 
             match &field.r#as {
-                Some(intermediate_ty) => {
+                Some(db_ty) => {
                     // Field has `as` attribute, need to convert from intermediate type using
                     // TryFrom
+                    let rust_ty = &field.ty;
                     quote! {
-                        #field_ident: row.try_get::<#intermediate_ty, _>(#column_name)?
-                            .try_into()
-                            .map_err(|e| ::sqlx::Error::Decode(Box::new(e)))?
+                        #field_ident: {
+                            let db_value: #db_ty = row.try_get(#column_name)?;
+                            let value_str = format!("{:?}", &db_value);
+                            <#rust_ty>::try_from(db_value).map_err(|e| {
+                                ::sqlx::Error::Decode(Box::new(::fabrique::Error::Conversion {
+                                    field: #column_name.to_string(),
+                                    from: stringify!(#db_ty),
+                                    to: stringify!(#rust_ty),
+                                    value: value_str,
+                                    reason: e.to_string(),
+                                    direction: ::fabrique::error::ConversionDirection::FromDb,
+                                }))
+                            })?
+                        }
                     }
                 }
                 None => {

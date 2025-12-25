@@ -20,7 +20,7 @@ impl<'a> DatabaseAwareCodegen<'a> {
         quote! {
             impl ::fabrique::DatabaseAware for #base_struct_ident {
                 type Database = ::sqlx::Postgres;
-                type Error = ::sqlx::Error;
+                type Error = ::fabrique::Error;
             }
         }
     }
@@ -47,7 +47,7 @@ mod tests {
             quote! {
                 impl ::fabrique::DatabaseAware for Anvil {
                     type Database = ::sqlx::Postgres;
-                    type Error = ::sqlx::Error;
+                    type Error = ::fabrique::Error;
                 }
             }
             .to_string()

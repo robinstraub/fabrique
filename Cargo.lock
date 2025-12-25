@@ -366,6 +366,7 @@ dependencies = [
  "fabrique",
  "fabrique-derive",
  "sqlx",
+ "thiserror",
  "uuid",
 ]
 
