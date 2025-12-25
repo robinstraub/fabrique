@@ -34,7 +34,7 @@ pub enum Error {
     NotFound,
 
     /// Failed to convert a value between Rust and database types.
-    #[error("failed to convert field '{field}' from {from} to {to} {direction}: {reason} (value: {value})")]
+    #[error("failed to convert field '{field}' from {from} to {to}: {reason} (value: {value})")]
     Conversion {
         /// The name of the field that failed to convert.
         field: String,
@@ -52,7 +52,8 @@ pub enum Error {
 
     /// Other database errors (connection, query syntax, constraints, etc.).
     ///
-    /// This variant may be split into more specific variants in future versions.
+    /// This variant may be split into more specific variants in future
+    /// versions.
     #[error("database error: {0}")]
     Other(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
@@ -100,7 +101,7 @@ mod tests {
         };
         assert_eq!(
             error.to_string(),
-            "failed to convert field 'material' from String to Material to database: unknown variant (value: INVALID)"
+            "failed to convert field 'material' from String to Material: unknown variant (value: INVALID)"
         );
     }
 
