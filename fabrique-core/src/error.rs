@@ -72,3 +72,83 @@ impl From<sqlx::Error> for Error {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn conversion_direction_display() {
+        assert_eq!(ConversionDirection::ToDb.to_string(), "to database");
+        assert_eq!(ConversionDirection::FromDb.to_string(), "from database");
+    }
+
+    #[test]
+    fn error_display_not_found() {
+        assert_eq!(Error::NotFound.to_string(), "entity not found");
+    }
+
+    #[test]
+    fn error_display_conversion() {
+        let error = Error::Conversion {
+            field: "material".into(),
+            from: "String",
+            to: "Material",
+            value: "INVALID".into(),
+            reason: "unknown variant".into(),
+            direction: ConversionDirection::ToDb,
+        };
+        assert_eq!(
+            error.to_string(),
+            "failed to convert field 'material' from String to Material to database: unknown variant (value: INVALID)"
+        );
+    }
+
+    #[test]
+    fn error_display_other() {
+        let error = Error::Other(Box::new(std::io::Error::other("test")));
+        assert_eq!(error.to_string(), "database error: test");
+    }
+
+    #[test]
+    fn from_sqlx_row_not_found() {
+        let error: Error = sqlx::Error::RowNotFound.into();
+        assert!(matches!(error, Error::NotFound));
+    }
+
+    #[test]
+    fn from_sqlx_decode_with_fabrique_error() {
+        let fabrique_error = Error::Conversion {
+            field: "f".into(),
+            from: "A",
+            to: "B",
+            value: "v".into(),
+            reason: "r".into(),
+            direction: ConversionDirection::FromDb,
+        };
+        let sqlx_error = sqlx::Error::Decode(Box::new(fabrique_error));
+
+        let error: Error = sqlx_error.into();
+
+        assert!(matches!(error, Error::Conversion { field, .. } if field == "f"));
+    }
+
+    #[test]
+    fn from_sqlx_decode_with_other_error() {
+        let other_error = std::io::Error::other("decode failed");
+        let sqlx_error = sqlx::Error::Decode(Box::new(other_error));
+
+        let error: Error = sqlx_error.into();
+
+        assert!(matches!(error, Error::Other(_)));
+    }
+
+    #[test]
+    fn from_sqlx_other_error() {
+        let sqlx_error = sqlx::Error::WorkerCrashed;
+
+        let error: Error = sqlx_error.into();
+
+        assert!(matches!(error, Error::Other(_)));
+    }
+}
