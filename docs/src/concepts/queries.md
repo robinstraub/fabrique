@@ -7,6 +7,9 @@ Once you have created a model and its corresponding database table, you are read
 The model's `all` method retrieves all of the records from the model's associated database table:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -20,6 +23,7 @@ The model's `all` method retrieves all of the records from the model's associate
 let anvils: Vec<Anvil> = Anvil::all(&pool).await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 ## Building Queries
@@ -27,6 +31,9 @@ let anvils: Vec<Anvil> = Anvil::all(&pool).await?;
 The `all` method returns all results in the model's table. Since each Fabrique model serves as a query builder, you may add additional constraints to queries and then invoke the `get` method to retrieve the results:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -45,6 +52,7 @@ let anvils: Vec<Anvil> = Anvil::query()
     .await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 ## Retrieving Results
@@ -56,6 +64,9 @@ Fabrique provides several methods to execute a query and retrieve results:
 Returns all records matching the query as a `Vec<T>`:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -71,6 +82,7 @@ let anvils: Vec<Anvil> = Anvil::query()
     .await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 ### `first` — First or None
@@ -78,6 +90,9 @@ let anvils: Vec<Anvil> = Anvil::query()
 Returns the first matching record as `Option<T>`:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -93,6 +108,7 @@ let anvil: Option<Anvil> = Anvil::query()
     .await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 ### `first_or_fail` — First or Error
@@ -100,6 +116,9 @@ let anvil: Option<Anvil> = Anvil::query()
 Returns the first matching record, or an error if none found:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -115,6 +134,7 @@ let anvil: Anvil = Anvil::query()
     .await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 ## Column Constants
@@ -122,6 +142,9 @@ let anvil: Anvil = Anvil::query()
 When you derive the `Model` macro, Fabrique generates column constants for each field. These constants are used in query methods to provide type-safe column references:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 #[derive(Model)]
@@ -135,6 +158,7 @@ pub struct Anvil {
 // Anvil::ID
 // Anvil::WEIGHT
 // Anvil::NAME
+# fn main() {}
 ```
 
 ## Type-Safe Columns
@@ -142,6 +166,9 @@ pub struct Anvil {
 Column constants are not just names — they carry type information. When using `r#where`, the value must match the column's type:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 #
@@ -153,9 +180,13 @@ Column constants are not just names — they carry type information. When using 
 // ✓ Compiles: WEIGHT is i32, 42 is i32
 .r#where(Anvil::WEIGHT, ">", 42);
 # }
+# fn main() {}
 ```
 
 ```rust,compile_fail
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 #
@@ -167,4 +198,5 @@ Column constants are not just names — they carry type information. When using 
 // ✗ Won't compile: WEIGHT is i32, "heavy" is &str
 .r#where(Anvil::WEIGHT, ">", "heavy");
 # }
+# fn main() {}
 ```

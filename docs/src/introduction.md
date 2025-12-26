@@ -10,7 +10,27 @@ Fabrique is a lightweight ORM for Rust that combines ease of use with Rust's saf
 
 ## Quick Example
 
+```rust
+extern crate fabrique;
+extern crate sqlx;
+extern crate uuid;
+use fabrique::Model;
+use uuid::Uuid;
+
+ #[derive(Default, Model)]
+ pub struct Anvil {
+   pub id: Uuid
+ }
+fn main() {
+  let anvil = Anvil::default();
+  assert_eq!(anvil.id, Uuid::default());
+}
+```
+
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 # use sqlx::{Pool, Postgres};

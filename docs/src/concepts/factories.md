@@ -7,6 +7,9 @@ Factories provide a convenient way to generate model instances for testing and d
 To define a factory, derive the `Factory` macro alongside `Model`:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 #[derive(Model, Factory)]
@@ -16,6 +19,7 @@ pub struct Anvil {
     name: String,
     weight: i32,
 }
+# fn main() {}
 ```
 
 ## Creating Instances
@@ -23,6 +27,9 @@ pub struct Anvil {
 Use the `factory()` method to get a factory builder, then call `create()` to persist to the database:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -43,6 +50,7 @@ let anvil = Anvil::factory()
     .await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 ## Relations
@@ -50,6 +58,9 @@ let anvil = Anvil::factory()
 Factories support creating related models. When a model has a foreign key, use the `for_<relation>` method to link it:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -84,6 +95,7 @@ let order = Order::factory()
     .await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 The `for_customer` method accepts either a `Customer` instance or a `CustomerFactory`, giving you flexibility in how you set up test data.

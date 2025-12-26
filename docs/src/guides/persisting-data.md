@@ -7,6 +7,9 @@ This guide covers inserting, updating, and deleting records in the database.
 To insert a new record, instantiate a model and call the `save` method:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -19,13 +22,14 @@ To insert a new record, instantiate a model and call the `save` method:
 #
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
 let anvil = Anvil {
-    id: Uuid::new_v4(),
+    id: Uuid::nil(),
     name: "Heavy Duty".to_string(),
 };
 
 anvil.save(&pool).await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 The `save` method performs an UPSERT: it inserts if the record is new, or updates if a record with the same primary key already exists.
@@ -33,6 +37,9 @@ The `save` method performs an UPSERT: it inserts if the record is new, or update
 Alternatively, use `create` to insert a new record. This method fails if a record with the same primary key already exists:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -47,6 +54,7 @@ Alternatively, use `create` to insert a new record. This method fails if a recor
 anvil.create(&pool).await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 ## Updating Records
@@ -54,6 +62,9 @@ anvil.create(&pool).await?;
 To update a model, retrieve it, modify its attributes, and call `save`:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -69,6 +80,7 @@ anvil.name = "Super Heavy Duty".to_string();
 anvil.save(&pool).await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 ## Mass Updates
@@ -76,6 +88,9 @@ anvil.save(&pool).await?;
 Update multiple records matching a query using the `update` builder:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -94,6 +109,7 @@ Anvil::update()
     .await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 ## Deleting Records
@@ -101,6 +117,9 @@ Anvil::update()
 To delete a model, call the `delete` method:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -114,11 +133,15 @@ To delete a model, call the `delete` method:
 anvil.delete(&pool).await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 If you know the primary key, delete without retrieving the model first using `destroy`:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -132,6 +155,7 @@ If you know the primary key, delete without retrieving the model first using `de
 Anvil::destroy(&pool, id).await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 > **Note:** If you need to keep deleted records for auditing or recovery, see [Using Soft Deletes](using-soft-deletes.md).

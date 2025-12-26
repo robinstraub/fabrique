@@ -7,6 +7,9 @@ Factories make it easy to set up test data without writing verbose setup code. T
 Create models with only the attributes relevant to your test:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -29,6 +32,7 @@ let anvil = Anvil::factory()
 assert!(anvil.weight > 100);
 # Ok(())
 # }
+# fn main() {}
 ```
 
 ## Testing with Relations
@@ -36,11 +40,14 @@ assert!(anvil.weight > 100);
 When testing models with relationships, factories handle the foreign keys automatically:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
-# #[derive(Factory, Model)]
+# #[derive(Clone, Factory, Model)]
 # pub struct Customer {
 #     #[fabrique(primary_key)]
 #     id: Uuid,
@@ -77,6 +84,7 @@ let order2 = Order::factory()
     .await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 ## Inline Relation Creation
@@ -84,6 +92,9 @@ let order2 = Order::factory()
 For simpler tests, create related models inline:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -111,6 +122,7 @@ let order = Order::factory()
     .await?;
 # Ok(())
 # }
+# fn main() {}
 ```
 
 ## Multiple Records
@@ -118,6 +130,9 @@ let order = Order::factory()
 Create multiple records by calling `create` in a loop or using iterators:
 
 ```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -138,4 +153,5 @@ for i in 0..5 {
 }
 # Ok(())
 # }
+# fn main() {}
 ```

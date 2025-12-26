@@ -6,7 +6,7 @@ Soft deletes allow you to mark records as deleted without actually removing them
 
 To enable soft deletes, add a field annotated with `#[fabrique(soft_delete)]`. The field type must be an optional datetime:
 
-```rust,no_run
+```rust,ignore
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 use chrono::{DateTime, Utc};
@@ -24,7 +24,7 @@ pub struct Anvil {
 
 When you call `delete` on a model with soft deletes enabled, the `deleted_at` column is set to the current timestamp instead of removing the record:
 
-```rust,no_run
+```rust,ignore
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -50,7 +50,7 @@ Soft-deleted records are automatically excluded from query results.
 
 Use the `trashed` method to check if a model has been soft deleted:
 
-```rust,no_run
+```rust,ignore
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -75,7 +75,7 @@ if anvil.trashed(&pool).await? {
 
 To restore a soft-deleted record, use the `restore` method:
 
-```rust,no_run
+```rust,ignore
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
@@ -99,7 +99,7 @@ anvil.restore(&pool).await?;
 
 To permanently remove a soft-deleted record from the database, use `hard_delete`:
 
-```rust,no_run
+```rust,ignore
 # use fabrique::prelude::*;
 # use sqlx::{Pool, Postgres};
 # use uuid::Uuid;

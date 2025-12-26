@@ -128,8 +128,11 @@ jobs:
       - name: Install mdBook
         uses: taiki-e/install-action@mdbook
 
+      - name: Build dependencies for doctests
+        run: cargo build
+
       - name: Build mdBook
         run: mdbook build docs
 
       - name: Test mdBook code examples
-        run: mdbook test docs
+        run: mdbook test docs -L target/debug/deps
