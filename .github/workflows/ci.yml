@@ -115,3 +115,26 @@ jobs:
 
       - name: Run clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: nightly-2025-12-01
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install mdBook
+        uses: taiki-e/install-action@mdbook
+
+      - name: Build dependencies for doctests
+        run: cargo build
+
+      - name: Build mdBook
+        run: mdbook build docs
+
+      - name: Test mdBook code examples
+        run: mdbook test docs -L target/debug/deps
