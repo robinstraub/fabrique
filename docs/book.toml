@@ -1,0 +1,13 @@
+[book]
+title = "Fabrique"
+language = "en"
+
+[build]
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/robinstraub/fabrique"
+edit-url-template = "https://github.com/robinstraub/fabrique/edit/master/docs/{path}"
+
+[output.html.code.hidelines]
+rust = "# "
