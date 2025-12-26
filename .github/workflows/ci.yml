@@ -119,6 +119,8 @@ jobs:
   docs:
     name: Documentation
     runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: nightly-2025-12-01
     steps:
       - uses: actions/checkout@v5
 
