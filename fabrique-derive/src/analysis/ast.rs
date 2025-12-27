@@ -262,13 +262,9 @@ mod tests {
 
         // Assert
         let parsed = result.expect("should parse successfully");
-        match parsed {
-            ParsedField::HasMany(f) => {
-                assert_eq!(f.target_type, "Anvil");
-                assert_eq!(f.through.unwrap(), "OrderLine");
-            }
-            _ => panic!("expected HasMany"),
-        }
+        assert!(
+            matches!(parsed, ParsedField::HasMany(ref f) if f.target_type == "Anvil" && f.through.as_ref().unwrap() == "OrderLine")
+        );
     }
 
     #[test]

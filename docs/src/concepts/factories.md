@@ -1,6 +1,8 @@
 # Factories
 
-Factories provide a convenient way to generate model instances for testing and database seeding. Instead of manually specifying each attribute, factories let you define defaults and override only what you need.
+Factories provide a convenient way to generate model instances for testing and
+database seeding. Instead of manually specifying each attribute, factories let
+you define defaults and override only what you need.
 
 ## Defining a Factory
 
@@ -24,7 +26,8 @@ pub struct Anvil {
 
 ## Creating Instances
 
-Use the `factory()` method to get a factory builder, then call `create()` to persist to the database:
+Use the `factory()` method to get a factory builder, then call `create()` to
+persist to the database:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -55,7 +58,8 @@ let anvil = Anvil::factory()
 
 ## Relations
 
-Factories support creating related models. When a model has a foreign key, use the `for_<relation>` method to link it:
+Factories support creating related models. When a model has a foreign key, use
+the `for_<relation>` method to link it:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -98,11 +102,14 @@ let order = Order::factory()
 # fn main() {}
 ```
 
-The `for_customer` method accepts either a `Customer` instance or a `CustomerFactory`, giving you flexibility in how you set up test data.
+The `for_customer` method accepts either a `Customer` instance or a
+`CustomerFactory`, giving you flexibility in how you set up test data.
 
 ## Has Many Relations
 
-For one-to-many relationships, use `HasMany<T>` with a `foreign_key` attribute to define the relation, then use `has_<relation>()` in factories to create child records:
+For one-to-many relationships, use `HasMany<T>` on the parent and `belongs_to`
+on the child to define the relation, then use `has_<relation>()` in factories
+to create child records:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -117,7 +124,6 @@ pub struct Customer {
     #[fabrique(primary_key)]
     id: Uuid,
     name: String,
-    #[fabrique(foreign_key = Order::CUSTOMER_ID)]
     orders: HasMany<Order>,
 }
 
@@ -125,6 +131,7 @@ pub struct Customer {
 pub struct Order {
     #[fabrique(primary_key)]
     id: Uuid,
+    #[fabrique(belongs_to = "Customer")]
     customer_id: Uuid,
     total: i32,
 }
@@ -142,6 +149,7 @@ let customer = Customer::factory()
 ```
 
 The `has_orders` method:
+
 - Takes a child factory and a count
 - Creates the parent first, then creates the specified number of children
 - Automatically sets the foreign key on each child
@@ -160,7 +168,6 @@ You can chain multiple `has_<relation>` calls to create children with different 
 # pub struct Customer {
 #     #[fabrique(primary_key)]
 #     id: Uuid,
-#     #[fabrique(foreign_key = Order::CUSTOMER_ID)]
 #     orders: HasMany<Order>,
 # }
 #
@@ -168,6 +175,7 @@ You can chain multiple `has_<relation>` calls to create children with different 
 # pub struct Order {
 #     #[fabrique(primary_key)]
 #     id: Uuid,
+#     #[fabrique(belongs_to = "Customer")]
 #     customer_id: Uuid,
 #     total: i32,
 # }
