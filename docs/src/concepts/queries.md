@@ -15,12 +15,12 @@ The model's `all` method retrieves all of the records from the model's associate
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct Product {
 #     id: Uuid,
 # }
 #
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
-let anvils: Vec<Anvil> = Anvil::all(&pool).await?;
+let products: Vec<Product> = Product::all(&pool).await?;
 # Ok(())
 # }
 # fn main() {}
@@ -39,15 +39,15 @@ The `all` method returns all results in the model's table. Since each Fabrique m
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct Product {
 #     id: Uuid,
-#     weight: i32,
+#     price_cents: i32,
 # }
 #
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
-let anvils: Vec<Anvil> = Anvil::query()
+let products: Vec<Product> = Product::query()
     .select()
-    .r#where(Anvil::WEIGHT, ">=", 42)
+    .r#where(Product::PRICE_CENTS, ">=", 42)
     .get(&pool)
     .await?;
 # Ok(())
@@ -72,12 +72,12 @@ Returns all records matching the query as a `Vec<T>`:
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil { id: Uuid, weight: i32 }
+# pub struct Product { id: Uuid, price_cents: i32 }
 #
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
-let anvils: Vec<Anvil> = Anvil::query()
+let products: Vec<Product> = Product::query()
     .select()
-    .r#where(Anvil::WEIGHT, ">", 50)
+    .r#where(Product::PRICE_CENTS, ">", 50)
     .get(&pool)
     .await?;
 # Ok(())
@@ -98,12 +98,12 @@ Returns the first matching record as `Option<T>`:
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil { id: Uuid, weight: i32 }
+# pub struct Product { id: Uuid, price_cents: i32 }
 #
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
-let anvil: Option<Anvil> = Anvil::query()
+let product: Option<Product> = Product::query()
     .select()
-    .r#where(Anvil::WEIGHT, ">", 100)
+    .r#where(Product::PRICE_CENTS, ">", 100)
     .first(&pool)
     .await?;
 # Ok(())
@@ -124,12 +124,12 @@ Returns the first matching record, or an error if none found:
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil { id: Uuid, weight: i32 }
+# pub struct Product { id: Uuid, price_cents: i32 }
 #
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
-let anvil: Anvil = Anvil::query()
+let product: Product = Product::query()
     .select()
-    .r#where(Anvil::WEIGHT, ">", 100)
+    .r#where(Product::PRICE_CENTS, ">", 100)
     .first_or_fail(&pool)
     .await?;
 # Ok(())
@@ -148,16 +148,16 @@ When you derive the `Model` macro, Fabrique generates column constants for each 
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 #[derive(Model)]
-pub struct Anvil {
+pub struct Product {
     id: Uuid,
-    weight: i32,
+    price_cents: i32,
     name: String,
 }
 
 // Generated constants:
-// Anvil::ID
-// Anvil::WEIGHT
-// Anvil::NAME
+// Product::ID
+// Product::PRICE_CENTS
+// Product::NAME
 # fn main() {}
 ```
 
@@ -173,12 +173,12 @@ Column constants are not just names — they carry type information. When using 
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil { id: Uuid, weight: i32 }
+# pub struct Product { id: Uuid, price_cents: i32 }
 #
 # fn example() {
-# let _ = Anvil::query().select()
-// ✓ Compiles: WEIGHT is i32, 42 is i32
-.r#where(Anvil::WEIGHT, ">", 42);
+# let _ = Product::query().select()
+// ✓ Compiles: PRICE_CENTS is i32, 42 is i32
+.r#where(Product::PRICE_CENTS, ">", 42);
 # }
 # fn main() {}
 ```
@@ -191,12 +191,12 @@ Column constants are not just names — they carry type information. When using 
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil { id: Uuid, weight: i32 }
+# pub struct Product { id: Uuid, price_cents: i32 }
 #
 # fn example() {
-# let _ = Anvil::query().select()
-// ✗ Won't compile: WEIGHT is i32, "heavy" is &str
-.r#where(Anvil::WEIGHT, ">", "heavy");
+# let _ = Product::query().select()
+// ✗ Won't compile: PRICE_CENTS is i32, "heavy" is &str
+.r#where(Product::PRICE_CENTS, ">", "heavy");
 # }
 # fn main() {}
 ```

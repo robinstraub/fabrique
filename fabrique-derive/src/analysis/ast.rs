@@ -22,9 +22,10 @@ pub struct Model {
 impl Model {
     pub fn new(ident: &Ident, attrs: ModelAttrs) -> Self {
         Self {
-            table_name: attrs
-                .table
-                .unwrap_or_else(|| format!("{}s", ident.to_string().to_lowercase())),
+            table_name: attrs.table.unwrap_or_else(|| {
+                let singular = ident.to_string().to_lowercase();
+                pluralizer::pluralize(&singular, 2, false)
+            }),
         }
     }
 }

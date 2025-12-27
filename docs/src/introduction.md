@@ -19,13 +19,13 @@ use fabrique::Model;
 use uuid::Uuid;
 
 #[derive(Default, Model)]
-pub struct Anvil {
+pub struct Product {
     pub id: Uuid,
 }
 
 # fn main() {
-let anvil = Anvil::default();
-assert_eq!(anvil.id, Uuid::default());
+let product = Product::default();
+assert_eq!(product.id, Uuid::default());
 # }
 ```
 
@@ -38,25 +38,24 @@ assert_eq!(anvil.id, Uuid::default());
 # use sqlx::{Pool, Postgres};
 #
 # #[derive(Model, Factory)]
-# #[fabrique(table = "anvils")]
-# pub struct Anvil {
+# pub struct Product {
 #     #[fabrique(primary_key)]
 #     pub id: Uuid,
 #     pub name: String,
-#     pub weight: i32,
+#     pub price_cents: i32,
 # }
 #
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
 // Query
-let anvils = Anvil::query()
+let products = Product::query()
     .select()
-    .r#where(Anvil::WEIGHT, ">=", 50)
+    .r#where(Product::PRICE_CENTS, ">=", 1000)
     .get(&pool)
     .await?;
 
 // Create test data
-let anvil = Anvil::factory()
-    .name("Heavy Duty".to_string())
+let product = Product::factory()
+    .name("Anvil 3000".to_string())
     .create(&pool)
     .await?;
 # Ok(())

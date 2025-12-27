@@ -15,20 +15,20 @@
 //! # use uuid::Uuid;
 //! #
 //! #[derive(Factory, Model)]
-//! pub struct Anvil {
+//! pub struct Product {
 //!     id: Uuid,
-//!     material: String,
-//!     weight: i32,
+//!     name: String,
+//!     price_cents: i32,
 //! }
 //!
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), fabrique::Error> {
 //! // Create with defaults
-//! let anvil = Anvil::factory().create(&connection).await?;
+//! let product = Product::factory().create(&connection).await?;
 //!
 //! // Override specific fields
-//! let heavy_anvil = Anvil::factory()
-//!     .material("Iron".to_owned())
-//!     .weight(500)
+//! let expensive_product = Product::factory()
+//!     .name("Anvil 3000".to_owned())
+//!     .price_cents(9999)
 //!     .create(&connection)
 //!     .await?;
 //! #     Ok(())
@@ -52,22 +52,22 @@
 //! # }
 //! #
 //! #[derive(Factory, Model)]
-//! pub struct Anvil {
+//! pub struct Order {
 //!     id: Uuid,
 //!     #[fabrique(belongs_to = "User")]
 //!     user_id: Uuid,
 //! }
 //!
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), fabrique::Error> {
-//! // Creates a new User, then creates an Anvil linked to it
-//! Anvil::factory()
+//! // Creates a new User, then creates an Order linked to it
+//! Order::factory()
 //!     .for_user(User::factory())
 //!     .create(&connection)
 //!     .await?;
 //!
 //! // Or use an existing user
 //! let user = User::factory().create(&connection).await?;
-//! Anvil::factory()
+//! Order::factory()
 //!     .for_user(user)
 //!     .create(&connection)
 //!     .await?;
@@ -122,11 +122,11 @@
 //! pub struct Order {
 //!     id: Uuid,
 //!     #[fabrique(through = "OrderLine")]
-//!     anvils: HasMany<Anvil>,
+//!     products: HasMany<Product>,
 //! }
 //!
 //! #[derive(Default, Factory, Model)]
-//! pub struct Anvil {
+//! pub struct Product {
 //!     id: Uuid,
 //! }
 //!
@@ -135,14 +135,14 @@
 //! pub struct OrderLine {
 //!     #[fabrique(primary_key, belongs_to = "Order")]
 //!     order_id: Uuid,
-//!     #[fabrique(primary_key, belongs_to = "Anvil")]
-//!     anvil_id: Uuid,
+//!     #[fabrique(primary_key, belongs_to = "Product")]
+//!     product_id: Uuid,
 //! }
 //!
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), fabrique::Error> {
-//! // Creates an Order, 2 Anvils, and 2 OrderLines linking them
+//! // Creates an Order, 2 Products, and 2 OrderLines linking them
 //! Order::factory()
-//!     .has_anvils(Anvil::factory(), 2)
+//!     .has_products(Product::factory(), 2)
 //!     .create(&connection)
 //!     .await?;
 //! #     Ok(())

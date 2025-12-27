@@ -3,20 +3,42 @@ use sqlx::{Pool, Postgres};
 use uuid::Uuid;
 
 #[derive(Debug, Default, Factory, PartialEq, Model)]
-pub struct Anvil {
+pub struct User {
     pub id: Uuid,
-    pub material: String,
     pub name: String,
-    pub weight: i16,
-    pub order_lines: HasMany<OrderLine>,
+    pub email: String,
+    pub addresses: HasMany<Address>,
+    pub orders: HasMany<Order>,
+}
+
+#[derive(Debug, Default, Factory, PartialEq, Model)]
+pub struct Address {
+    pub id: Uuid,
+    #[fabrique(belongs_to = "User")]
+    pub user_id: Uuid,
+    pub label: String,
+    pub street: String,
+    pub city: String,
+    pub zip: String,
+}
+
+#[derive(Debug, Default, Factory, PartialEq, Model)]
+pub struct Product {
+    pub id: Uuid,
+    pub name: String,
+    pub price_cents: i32,
+    pub in_stock: bool,
 }
 
 #[derive(Debug, Default, Factory, PartialEq, Model)]
 pub struct Order {
     pub id: Uuid,
+    #[fabrique(belongs_to = "User")]
+    pub user_id: Uuid,
+    pub status: String,
     pub order_lines: HasMany<OrderLine>,
     #[fabrique(through = "OrderLine")]
-    pub anvils: HasMany<Anvil>,
+    pub products: HasMany<Product>,
 }
 
 #[derive(Debug, Default, Factory, PartialEq, Model)]
@@ -24,19 +46,25 @@ pub struct Order {
 pub struct OrderLine {
     #[fabrique(primary_key, belongs_to = "Order")]
     pub order_id: Uuid,
-
-    #[fabrique(primary_key, belongs_to = "Anvil")]
-    pub anvil_id: Uuid,
+    #[fabrique(primary_key, belongs_to = "Product")]
+    pub product_id: Uuid,
+    pub quantity: i32,
+    pub unit_price_cents: i32,
 }
 
 #[sqlx::test(migrations = "../migrations")]
 async fn test_factory_for_relations_accept_models(connection: Pool<Postgres>) {
-    let anvil = Anvil::factory().create(&connection).await.unwrap();
-    let order = Order::factory().create(&connection).await.unwrap();
+    let user = User::factory().create(&connection).await.unwrap();
+    let product = Product::factory().create(&connection).await.unwrap();
+    let order = Order::factory()
+        .for_user(user)
+        .create(&connection)
+        .await
+        .unwrap();
 
     OrderLine::factory()
-        .for_anvil(anvil)
         .for_order(order)
+        .for_product(product)
         .create(&connection)
         .await
         .unwrap();
@@ -45,8 +73,8 @@ async fn test_factory_for_relations_accept_models(connection: Pool<Postgres>) {
 #[sqlx::test(migrations = "../migrations")]
 async fn test_factory_for_relations_accept_factories(connection: Pool<Postgres>) {
     OrderLine::factory()
-        .for_anvil(Anvil::factory())
-        .for_order(Order::factory())
+        .for_order(Order::factory().for_user(User::factory()))
+        .for_product(Product::factory())
         .create(&connection)
         .await
         .unwrap();
@@ -54,16 +82,17 @@ async fn test_factory_for_relations_accept_factories(connection: Pool<Postgres>)
 
 #[sqlx::test(migrations = "../migrations")]
 async fn test_has_many_creates_children(connection: Pool<Postgres>) {
-    // Create an Order with 1 OrderLine (which also creates an Anvil)
-    let order = Order::factory()
-        .has_order_lines(OrderLine::factory().for_anvil(Anvil::factory()), 1)
+    // Create a User with 1 Address
+    let user = User::factory()
+        .name("Wile E. Coyote".to_string())
+        .has_addresses(Address::factory().label("Desert Cliff #42".to_string()), 1)
         .create(&connection)
         .await
         .unwrap();
 
-    // Verify the order line was created for this order
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM order_lines WHERE order_id = $1")
-        .bind(order.id)
+    // Verify the address was created for this user
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM addresses WHERE user_id = $1")
+        .bind(user.id)
         .fetch_one(&connection)
         .await
         .unwrap();
@@ -73,14 +102,15 @@ async fn test_has_many_creates_children(connection: Pool<Postgres>) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn test_many_to_many_through_creates_join_records(connection: Pool<Postgres>) {
-    // Create an Order with 1 Anvil through OrderLine (many-to-many)
+    // Create an Order with 1 Product through OrderLine (many-to-many)
     let order = Order::factory()
-        .has_anvils(Anvil::factory(), 1)
+        .for_user(User::factory())
+        .has_products(Product::factory().name("Anvil 3000".to_string()), 1)
         .create(&connection)
         .await
         .unwrap();
 
-    // Verify the order line was created linking order to anvil
+    // Verify the order line was created linking order to product
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM order_lines WHERE order_id = $1")
         .bind(order.id)
         .fetch_one(&connection)
@@ -89,11 +119,11 @@ async fn test_many_to_many_through_creates_join_records(connection: Pool<Postgre
 
     assert_eq!(count.0, 1);
 
-    // Verify an anvil was also created
-    let anvil_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM anvils")
+    // Verify product was also created
+    let product_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM products")
         .fetch_one(&connection)
         .await
         .unwrap();
 
-    assert_eq!(anvil_count.0, 1);
+    assert_eq!(product_count.0, 1);
 }

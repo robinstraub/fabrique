@@ -15,18 +15,18 @@ To insert a new record, instantiate a model and call the `save` method:
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct Product {
 #     id: Uuid,
 #     name: String,
 # }
 #
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
-let anvil = Anvil {
+let product = Product {
     id: Uuid::nil(),
-    name: "Heavy Duty".to_string(),
+    name: "Anvil 3000".to_string(),
 };
 
-anvil.save(&pool).await?;
+product.save(&pool).await?;
 # Ok(())
 # }
 # fn main() {}
@@ -45,13 +45,13 @@ Alternatively, use `create` to insert a new record. This method fails if a recor
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct Product {
 #     id: Uuid,
 #     name: String,
 # }
 #
-# async fn example(pool: Pool<Postgres>, anvil: Anvil) -> Result<(), fabrique::Error> {
-anvil.create(&pool).await?;
+# async fn example(pool: Pool<Postgres>, product: Product) -> Result<(), fabrique::Error> {
+product.create(&pool).await?;
 # Ok(())
 # }
 # fn main() {}
@@ -70,14 +70,14 @@ To update a model, retrieve it, modify its attributes, and call `save`:
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct Product {
 #     id: Uuid,
 #     name: String,
 # }
 #
-# async fn example(pool: Pool<Postgres>, mut anvil: Anvil) -> Result<(), fabrique::Error> {
-anvil.name = "Super Heavy Duty".to_string();
-anvil.save(&pool).await?;
+# async fn example(pool: Pool<Postgres>, mut product: Product) -> Result<(), fabrique::Error> {
+product.name = "Super Anvil 3000".to_string();
+product.save(&pool).await?;
 # Ok(())
 # }
 # fn main() {}
@@ -96,15 +96,15 @@ Update multiple records matching a query using the `update` builder:
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct Product {
 #     id: Uuid,
-#     weight: i32,
+#     price_cents: i32,
 # }
 #
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
-Anvil::update()
-    .set(Anvil::WEIGHT, 100)
-    .r#where(Anvil::WEIGHT, "<", 50)
+Product::update()
+    .set(Product::PRICE_CENTS, 100)
+    .r#where(Product::PRICE_CENTS, "<", 50)
     .execute(&pool)
     .await?;
 # Ok(())
@@ -125,12 +125,12 @@ To delete a model, call the `delete` method:
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct Product {
 #     id: Uuid,
 # }
 #
-# async fn example(pool: Pool<Postgres>, anvil: Anvil) -> Result<(), fabrique::Error> {
-anvil.delete(&pool).await?;
+# async fn example(pool: Pool<Postgres>, product: Product) -> Result<(), fabrique::Error> {
+product.delete(&pool).await?;
 # Ok(())
 # }
 # fn main() {}
@@ -147,12 +147,12 @@ If you know the primary key, delete without retrieving the model first using `de
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct Product {
 #     id: Uuid,
 # }
 #
 # async fn example(pool: Pool<Postgres>, id: Uuid) -> Result<(), fabrique::Error> {
-Anvil::destroy(&pool, id).await?;
+Product::destroy(&pool, id).await?;
 # Ok(())
 # }
 # fn main() {}

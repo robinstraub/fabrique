@@ -13,17 +13,17 @@ To define a model, create a struct and derive the `Model` macro:
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 #[derive(Model)]
-pub struct Anvil {
+pub struct Product {
     id: Uuid,
     name: String,
-    weight: i32,
+    price_cents: i32,
 }
 # fn main() {}
 ```
 
 ## Table Names
 
-By convention, the "snake case", plural name of the struct will be used as the table name unless another name is explicitly specified. So, in this case, Fabrique will assume the `Anvil` model stores records in the `anvils` table, while a `RocketShoe` model would store records in a `rocket_shoes` table.
+By convention, the "snake case", plural name of the struct will be used as the table name unless another name is explicitly specified. So, in this case, Fabrique will assume the `Product` model stores records in the `products` table, while a `RocketShoe` model would store records in a `rocket_shoes` table.
 
 If your model's corresponding database table does not fit this convention, you may manually specify the model's table name by defining a table attribute on the model:
 
@@ -34,8 +34,8 @@ If your model's corresponding database table does not fit this convention, you m
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 #[derive(Model)]
-#[fabrique(table = "acme_anvil")]
-pub struct Anvil {
+#[fabrique(table = "acme_products")]
+pub struct Product {
     id: Uuid,
     name: String,
 }
@@ -53,9 +53,9 @@ Fabrique will also assume that each model has a primary key column named `id`. O
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 #[derive(Model)]
-pub struct Anvil {
+pub struct Product {
     #[fabrique(primary_key)]
-    anvil_id: Uuid,
+    product_id: Uuid,
     name: String,
 }
 # fn main() {}
