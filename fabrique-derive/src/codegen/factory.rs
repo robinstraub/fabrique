@@ -111,17 +111,20 @@ impl<'a> FactoryCodegen<'a> {
 
     /// Extracts HasMany relations from the analysis.
     fn has_many_relations(&self) -> impl Iterator<Item = HasManyRelation<'a>> {
-        self.analysis.has_many_fields().filter_map(|field| {
+        self.analysis.has_many_fields().map(|field| {
             let FieldKind::HasMany(ref target_type) = field.kind else {
-                return None;
+                unreachable!("has_many_fields() only returns HasMany fields")
             };
-            let foreign_key = field.foreign_key.as_ref()?;
+            let foreign_key = field
+                .foreign_key
+                .as_ref()
+                .expect("HasMany fields require foreign_key");
 
-            Some(HasManyRelation {
+            HasManyRelation {
                 field_ident: &field.ident,
                 target_type,
                 foreign_key,
-            })
+            }
         })
     }
 
@@ -834,6 +837,96 @@ mod tests {
                 pub fn for_explosive(mut self, input: impl Into<ExplosiveRelation>) -> Self {
                     self.explosive_relation = Some(input.into());
                     self
+                }
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn test_generate_factory_with_has_many() {
+        // Arrange
+        let input = parse_quote! {
+            struct Customer {
+                id: u32,
+
+                #[fabrique(foreign_key = Order::CUSTOMER_ID)]
+                orders: HasMany<Order>
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = FactoryCodegen::new(&analysis);
+
+        // Act
+        let generated = codegen.generate_factory();
+
+        // Assert - verify the factory includes HasMany handling
+        assert_eq!(
+            generated.to_string(),
+            quote! {
+                impl Customer {
+                    pub fn factory() -> CustomerFactory {
+                        CustomerFactory::new()
+                    }
+                }
+
+                #[derive(Clone)]
+                pub struct CustomerFactory {
+                    id: std::option::Option<u32>,
+                    pending_orders: Vec<(OrderFactory, usize)>,
+                }
+
+                impl fabrique::Factory for CustomerFactory {
+                    type Model = Customer;
+
+                    fn create<'a, A>(
+                        mut self,
+                        executor: A,
+                    ) -> impl ::std::future::Future<Output = Result<Customer, <Customer as fabrique::DatabaseAware>::Error>> + Send + 'a
+                    where
+                        A: ::sqlx::Acquire<'a, Database = <Customer as fabrique::DatabaseAware>::Database> + Send + 'a,
+                    {
+                        async move {
+                            let mut conn = executor.acquire().await
+                                .map_err(|e| <Customer as fabrique::DatabaseAware>::Error::from(e))?;
+
+                            let instance = Customer {
+                                id: self.id.unwrap_or(<u32 as Default>::default()),
+                                orders: ::fabrique::HasMany::default(),
+                            };
+
+                            let instance = <Customer as fabrique::Persist>::create(instance, &mut *conn).await?;
+                            let pk = <Customer as fabrique::Model>::primary_key(&instance);
+
+                            for (factory, count) in self.pending_orders {
+                                for _ in 0..count {
+                                    let child_factory = factory.clone().customer_id(pk.clone());
+                                    fabrique::Factory::create(child_factory, &mut *conn).await?;
+                                }
+                            }
+
+                            Ok(instance)
+                        }
+                    }
+                }
+
+                impl CustomerFactory {
+                    pub fn new() -> Self {
+                        Self {
+                            id: None,
+                            pending_orders: Vec::new(),
+                        }
+                    }
+
+                    pub fn id(mut self, id: u32) -> Self {
+                        self.id = Some(id);
+                        self
+                    }
+
+                    pub fn has_orders(mut self, factory: OrderFactory, count: usize) -> Self {
+                        self.pending_orders.push((factory, count));
+                        self
+                    }
                 }
             }
             .to_string()
