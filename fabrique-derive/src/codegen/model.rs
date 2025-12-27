@@ -1,4 +1,5 @@
-use crate::analysis::{Analysis, ast::ModelField};
+use crate::Analysis;
+use crate::analysis::ast::FieldKind;
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -13,7 +14,7 @@ impl<'a> ModelCodegen<'a> {
         Self { analysis }
     }
 
-    /// Generates the `Model` trait implementation.
+    /// Generates the `Model` trait implementation and lazy loading methods.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
         let ty_primary_key = self.generate_ty_primary_key();
@@ -23,6 +24,7 @@ impl<'a> ModelCodegen<'a> {
         let fn_columns = self.generate_fn_columns();
         let fn_primary_key_columns = self.generate_fn_primary_key_columns();
         let fn_uses_soft_delete = self.generate_fn_soft_delete_column();
+        let lazy_loading_methods = self.generate_lazy_loading_methods();
 
         quote! {
             impl ::fabrique::Model for #base_struct_ident {
@@ -39,14 +41,15 @@ impl<'a> ModelCodegen<'a> {
 
                 #fn_uses_soft_delete
             }
+
+            #lazy_loading_methods
         }
     }
 
     fn generate_ty_primary_key(&self) -> TokenStream {
-        let primary_keys: Vec<&ModelField> = self
+        let primary_keys: Vec<_> = self
             .analysis
-            .fields
-            .iter()
+            .column_fields()
             .filter(|field| field.primary_key)
             .collect();
 
@@ -63,7 +66,11 @@ impl<'a> ModelCodegen<'a> {
     }
 
     fn generate_ty_soft_delete_column(&self) -> TokenStream {
-        match self.analysis.fields.iter().find(|field| field.soft_delete) {
+        match self
+            .analysis
+            .column_fields()
+            .find(|field| field.soft_delete)
+        {
             Some(field) => {
                 let ty = &field.column_type;
                 quote! { #ty }
@@ -73,10 +80,9 @@ impl<'a> ModelCodegen<'a> {
     }
 
     fn generate_fn_primary_key(&self) -> TokenStream {
-        let primary_keys: Vec<&ModelField> = self
+        let primary_keys: Vec<_> = self
             .analysis
-            .fields
-            .iter()
+            .column_fields()
             .filter(|field| field.primary_key)
             .collect();
 
@@ -115,8 +121,7 @@ impl<'a> ModelCodegen<'a> {
     fn generate_fn_columns(&self) -> TokenStream {
         let columns: Vec<_> = self
             .analysis
-            .fields
-            .iter()
+            .column_fields()
             .map(|field| field.column.as_str())
             .collect();
 
@@ -130,8 +135,7 @@ impl<'a> ModelCodegen<'a> {
     fn generate_fn_primary_key_columns(&self) -> TokenStream {
         let pk_columns: Vec<_> = self
             .analysis
-            .fields
-            .iter()
+            .column_fields()
             .filter(|field| field.primary_key)
             .map(|field| field.column.as_str())
             .collect();
@@ -146,8 +150,7 @@ impl<'a> ModelCodegen<'a> {
     fn generate_fn_soft_delete_column(&self) -> TokenStream {
         let soft_delete = self
             .analysis
-            .fields
-            .iter()
+            .column_fields()
             .find(|field| field.soft_delete)
             .map(|field| {
                 let const_column_name = &field.const_column_name;
@@ -161,6 +164,33 @@ impl<'a> ModelCodegen<'a> {
                 }
             },
             None => quote! {},
+        }
+    }
+
+    fn generate_lazy_loading_methods(&self) -> TokenStream {
+        let base_struct_ident = &self.analysis.ident;
+
+        let methods = self.analysis.has_many_fields().map(|field| {
+            let method_name = &field.ident;
+            let FieldKind::HasMany(ref target_type) = field.kind else {
+                unreachable!("has_many_fields() only returns HasMany fields")
+            };
+            let foreign_key = field.foreign_key.as_ref().expect("HasMany requires foreign_key");
+
+            quote! {
+                pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Filtered<::fabrique::sql::Selected>> {
+                    let pk = <Self as ::fabrique::Model>::primary_key(self);
+                    <#target_type as ::fabrique::Query>::query()
+                        .select()
+                        .r#where(#foreign_key, "=", pk)
+                }
+            }
+        });
+
+        quote! {
+            impl #base_struct_ident {
+                #(#methods)*
+            }
         }
     }
 }
@@ -204,6 +234,8 @@ mod tests {
                         &["id"]
                     }
                 }
+
+                impl Anvil {}
             }
             .to_string()
         );
@@ -252,6 +284,63 @@ mod tests {
 
                     fn soft_delete_column() -> Option<Self::SoftDeleteColumn> {
                         Some(Self::DELETED_AT)
+                    }
+                }
+
+                impl Anvil {}
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn test_generate_lazy_loading_methods() {
+        // Arrange
+        let input = parse_quote! {
+            struct Customer {
+                id: String,
+
+                #[fabrique(foreign_key = Order::CUSTOMER_ID)]
+                orders: HasMany<Order>
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = ModelCodegen::new(&analysis);
+
+        // Act
+        let result = codegen.generate();
+
+        // Assert - verify the lazy loading method is generated
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                impl ::fabrique::Model for Customer {
+                    type PrimaryKey = String;
+                    type SoftDeleteColumn = ::fabrique::Nil;
+
+                    fn primary_key(&self) -> Self::PrimaryKey {
+                        self.id.clone()
+                    }
+
+                    fn table_name() -> &'static str {
+                        "customers"
+                    }
+
+                    fn columns() -> &'static [&'static str] {
+                        &["id"]
+                    }
+
+                    fn primary_key_columns() -> &'static [&'static str] {
+                        &["id"]
+                    }
+                }
+
+                impl Customer {
+                    pub fn orders(&self) -> ::fabrique::model::QueryBuilder<Order, ::fabrique::sql::Filtered<::fabrique::sql::Selected>> {
+                        let pk = <Self as ::fabrique::Model>::primary_key(self);
+                        <Order as ::fabrique::Query>::query()
+                            .select()
+                            .r#where(Order::CUSTOMER_ID, "=", pk)
                     }
                 }
             }

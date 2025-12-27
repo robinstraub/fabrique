@@ -31,7 +31,7 @@ impl<'a> ColumnsCodegen<'a> {
     }
 
     fn generate_column_types(&self) -> TokenStream {
-        let types = self.analysis.fields.iter().map(|field| {
+        let types = self.analysis.column_fields().map(|field| {
             let type_name = &field.column_type;
 
             quote! {
@@ -46,7 +46,7 @@ impl<'a> ColumnsCodegen<'a> {
 
     fn generate_column_impls(&self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
-        let impls = self.analysis.fields.iter().map(|field| {
+        let impls = self.analysis.column_fields().map(|field| {
             let type_name = &field.column_type;
             let field_type = match &field.r#as {
                 Some(as_type) => quote! { #as_type },
@@ -74,7 +74,7 @@ impl<'a> ColumnsCodegen<'a> {
     }
 
     fn generate_column_constants(&self) -> TokenStream {
-        let constants = self.analysis.fields.iter().map(|field| {
+        let constants = self.analysis.column_fields().map(|field| {
             let const_name = &field.const_column_name;
             let type_name = &field.column_type;
 

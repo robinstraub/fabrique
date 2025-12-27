@@ -1,17 +1,13 @@
-//! # Fabrique: Factories
+//! # Factories
 //!
-//! ## Introduction
+//! Factories generate test data by creating model instances with sensible
+//! defaults. They provide a fluent builder API for overriding specific fields
+//! while keeping the rest at their default values.
 //!
-//! ## Creating Models Using Factories
+//! ## Creating Models
 //!
-//! ### Instantiating Models
-//!
-//! #### Overriding Attributes
-//!
-//! If you would like to override some of the default values of your models, you
-//! may use the generated setter methods on the factory. Only the specified
-//! attributes will be replaced while the rest of the attributes remain set to
-//! their default values as specified by the factory:
+//! Use `Model::factory()` to get a factory, configure it with setter methods,
+//! then call `create()` to persist the instance:
 //!
 //!```rust,no_run
 //! # use fabrique::prelude::*;
@@ -25,26 +21,25 @@
 //!     weight: i32,
 //! }
 //!
-//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), fabrique::Error> {
-//! Anvil::factory()
+//! # async fn example(connection: Pool<Postgres>) -> Result<(), fabrique::Error> {
+//! // Create with defaults
+//! let anvil = Anvil::factory().create(&connection).await?;
+//!
+//! // Override specific fields
+//! let heavy_anvil = Anvil::factory()
 //!     .material("Iron".to_owned())
-//!     .weight(42)
+//!     .weight(500)
 //!     .create(&connection)
 //!     .await?;
 //! #     Ok(())
 //! # }
 //! ```
 //!
+//! ## Belongs To Relationships
 //!
-//! ## Factory Relationships
-//!
-//! ### Belongs To Relationships
-//!
-//! Now that we have explored how to build [has many][Factory::has]
-//! relationships using factories, let's explore the inverse of the
-//! relationship. The `for_[relation]` methods may be used to define the
-//! parent model that factory created models belong to. For example, we can
-//! create an `Anvil` model instance that belongs to a factory generated user:
+//! Use `for_<relation>()` methods to link a factory to a parent model.
+//! The method accepts either a factory (creates a new parent) or an existing
+//! model instance (uses its primary key):
 //!
 //!```rust,no_run
 //! # use fabrique::prelude::*;
@@ -59,46 +54,54 @@
 //! #[derive(Factory, Model)]
 //! pub struct Anvil {
 //!     id: Uuid,
-//!
-//!     #[fabrique(relation="User")]
+//!     #[fabrique(relation = "User")]
 //!     user_id: Uuid,
 //! }
 //!
-//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), fabrique::Error> {
+//! # async fn example(connection: Pool<Postgres>) -> Result<(), fabrique::Error> {
+//! // Creates a new User, then creates an Anvil linked to it
 //! Anvil::factory()
 //!     .for_user(User::factory())
+//!     .create(&connection)
+//!     .await?;
+//!
+//! // Or use an existing user
+//! let user = User::factory().create(&connection).await?;
+//! Anvil::factory()
+//!     .for_user(user)
 //!     .create(&connection)
 //!     .await?;
 //! #     Ok(())
 //! # }
 //! ```
 //!
-//! If you already have a parent model instance that should be associated with
-//! the models you are creating, you may pass the model instance to the
-//! `for_[relation]` method:
+//! ## Has Many Relationships
+//!
+//! Use `has_<relation>()` methods to create child models after the parent.
+//! Specify a child factory and the number of instances to create:
 //!
 //!```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::{Pool,Postgres};
+//! # use sqlx::{Pool, Postgres};
 //! # use uuid::Uuid;
 //!
-//! # #[derive(Factory, Model)]
-//! # pub struct User {
-//! #     id: Uuid,
-//! # }
-//!
 //! #[derive(Factory, Model)]
-//! pub struct Anvil {
+//! pub struct Customer {
 //!     id: Uuid,
-//!
-//!     #[fabrique(relation="User")]
-//!     user_id: Uuid,
+//!     #[fabrique(foreign_key = Order::CUSTOMER_ID)]
+//!     orders: HasMany<Order>,
 //! }
 //!
-//! # async fn example(connection: Pool<Postgres>, anvil: Anvil) -> Result<(), fabrique::Error> {
-//! let user = User::factory().create(&connection).await?;
-//! Anvil::factory()
-//!     .for_user(user)
+//! #[derive(Factory, Model)]
+//! pub struct Order {
+//!     id: Uuid,
+//!     customer_id: Uuid,
+//! }
+//!
+//! # async fn example(connection: Pool<Postgres>) -> Result<(), fabrique::Error> {
+//! // Creates a Customer, then creates 3 Orders linked to it
+//! Customer::factory()
+//!     .has_orders(Order::factory(), 3)
 //!     .create(&connection)
 //!     .await?;
 //! #     Ok(())

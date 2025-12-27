@@ -4,7 +4,7 @@ use std::str::FromStr;
 use strum_macros::{Display, EnumString, IntoStaticStr};
 use uuid::Uuid;
 
-#[derive(Debug, Default, Display, EnumString, IntoStaticStr, PartialEq)]
+#[derive(Clone, Debug, Default, Display, EnumString, IntoStaticStr, PartialEq)]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum Material {
     #[default]

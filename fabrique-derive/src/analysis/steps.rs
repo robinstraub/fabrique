@@ -133,15 +133,7 @@ impl<'a> ParsedFields<'a> {
 
     /// Builds the final analysis.
     pub fn build(self) -> Result<Analysis<'a>, Error> {
-        let returning = self
-            .fields
-            .iter()
-            .map(|fields| fields.column.to_string())
-            .collect::<Vec<String>>()
-            .join(", ");
-
         Ok(Analysis {
-            returning,
             fields: self.fields,
             ident: self.ident,
             model: self.model,

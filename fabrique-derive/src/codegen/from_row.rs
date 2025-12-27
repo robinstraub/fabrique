@@ -1,4 +1,5 @@
 use crate::Analysis;
+use crate::analysis::ast::FieldKind;
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -16,41 +17,52 @@ impl<'a> FromRowCodegen<'a> {
     /// Generates the `FromRow` trait implementation.
     ///
     /// This implementation handles automatic type conversions for fields with
-    /// the `as` attribute.
+    /// the `as` attribute. HasMany fields are initialized with their default
+    /// value.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
 
         // Generate field assignments
         let field_assignments = self.analysis.fields.iter().map(|field| {
             let field_ident = &field.ident;
-            let column_name = field.ident.to_string();
 
-            match &field.r#as {
-                Some(db_ty) => {
-                    // Field has `as` attribute, need to convert from intermediate type using
-                    // TryFrom
-                    let rust_ty = &field.ty;
+            match field.kind {
+                FieldKind::HasMany(_) => {
+                    // HasMany fields are not stored in the database
                     quote! {
-                        #field_ident: {
-                            let db_value: #db_ty = row.try_get(#column_name)?;
-                            let value_str = format!("{:?}", &db_value);
-                            <#rust_ty>::try_from(db_value).map_err(|e| {
-                                ::sqlx::Error::Decode(Box::new(::fabrique::Error::Conversion {
-                                    field: #column_name.to_string(),
-                                    from: stringify!(#db_ty),
-                                    to: stringify!(#rust_ty),
-                                    value: value_str,
-                                    reason: e.to_string(),
-                                    direction: ::fabrique::error::ConversionDirection::FromDb,
-                                }))
-                            })?
-                        }
+                        #field_ident: ::fabrique::HasMany::default()
                     }
                 }
-                None => {
-                    // No conversion needed, read directly
-                    quote! {
-                        #field_ident: row.try_get(#column_name)?
+                FieldKind::Column => {
+                    let column_name = field.ident.to_string();
+
+                    match &field.r#as {
+                        Some(db_ty) => {
+                            // Field has `as` attribute, need to convert from intermediate type
+                            let rust_ty = &field.ty;
+                            quote! {
+                                #field_ident: {
+                                    let db_value: #db_ty = row.try_get(#column_name)?;
+                                    let value_str = format!("{:?}", &db_value);
+                                    <#rust_ty>::try_from(db_value).map_err(|e| {
+                                        ::sqlx::Error::Decode(Box::new(::fabrique::Error::Conversion {
+                                            field: #column_name.to_string(),
+                                            from: stringify!(#db_ty),
+                                            to: stringify!(#rust_ty),
+                                            value: value_str,
+                                            reason: e.to_string(),
+                                            direction: ::fabrique::error::ConversionDirection::FromDb,
+                                        }))
+                                    })?
+                                }
+                            }
+                        }
+                        None => {
+                            // No conversion needed, read directly
+                            quote! {
+                                #field_ident: row.try_get(#column_name)?
+                            }
+                        }
                     }
                 }
             }

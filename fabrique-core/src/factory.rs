@@ -1,19 +1,19 @@
 use crate::{database::DatabaseAware, model::Model};
 use std::future::Future;
 
-/// Trait representing a factory that can create model instances.
+/// Factory pattern for creating model instances with test data.
 ///
-/// Factories provide a fluent interface for building and persisting model
-/// instances with optional field values and relation support.
+/// Factories provide a fluent builder for constructing and persisting
+/// model instances with optional field overrides and relation support.
 ///
-/// Factory methods that produce async behavior (like `for`) are designed to
-/// be chained synchronously, with their async execution deferred to a single
-/// async block in the `create()` method. This enables a clean builder pattern
-/// while maintaining async capabilities.
-pub trait Factory: Sized {
-    /// The model type this factory produces
+/// Factories must implement `Clone` to allow configuration reuse.
+/// A configured factory can be cloned and used multiple times,
+/// for example when creating several related instances.
+pub trait Factory: Clone + Sized {
+    /// The model type this factory produces.
     type Model: Model;
 
+    /// Builds and persists the model instance.
     fn create<'a, A>(
         self,
         executor: A,

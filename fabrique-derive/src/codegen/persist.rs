@@ -30,28 +30,35 @@ impl<'a> PersistCodegen<'a> {
 
     /// Generates the `create()` method.
     fn generate_fn_create(&self) -> TokenStream {
-        // Get field identifiers and names
+        // Get field identifiers and names (column fields only)
         let columns = self
             .analysis
-            .fields
-            .iter()
-            .map(|fields| fields.ident.to_string())
+            .column_fields()
+            .map(|field| field.ident.to_string())
             .collect::<Vec<String>>()
             .join(", ");
 
         // Generate placeholders ($1, $2, $3, ...)
-        let placeholders = (1..=self.analysis.fields.len())
+        let placeholders = (1..=self.analysis.column_fields().count())
             .map(|i| format!("${}", i))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        // Generate RETURNING clause
+        let returning = self
+            .analysis
+            .column_fields()
+            .map(|field| field.column.to_string())
             .collect::<Vec<String>>()
             .join(", ");
 
         let query = format!(
             "INSERT INTO {} ({}) VALUES ({}) RETURNING {}",
-            self.analysis.model.table_name, columns, placeholders, self.analysis.returning,
+            self.analysis.model.table_name, columns, placeholders, returning,
         );
 
         // Generate field bindings (self.field1, self.field2, ...)
-        let field_bindings = self.analysis.fields.iter().map(|field| {
+        let field_bindings = self.analysis.column_fields().map(|field| {
             let ident = &field.ident;
             let field_name = ident.to_string();
             match &field.r#as {
@@ -93,8 +100,8 @@ impl<'a> PersistCodegen<'a> {
 
     /// Generates the `save()` method using the Layer 2 query builder.
     fn generate_fn_save(&self) -> TokenStream {
-        // Generate .set() calls for each field
-        let set_calls = self.analysis.fields.iter().map(|field| {
+        // Generate .set() calls for each column field
+        let set_calls = self.analysis.column_fields().map(|field| {
             let const_name = &field.const_column_name;
             let ident = &field.ident;
             let field_name = ident.to_string();
