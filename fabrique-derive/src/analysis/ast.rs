@@ -119,7 +119,7 @@ pub struct HasManyField {
 /// Result of parsing a field - either a column or a HasMany relation.
 #[derive(Debug)]
 pub enum ParsedField {
-    Column(ColumnField),
+    Column(Box<ColumnField>),
     HasMany(HasManyField),
 }
 
@@ -130,18 +130,18 @@ impl ParsedField {
         })?;
 
         // Check if this is a HasMany field
-        if let Some((outer, target)) = Self::parse_parameterized_type(&attrs.ty) {
-            if outer == "HasMany" {
-                let foreign_key = attrs.foreign_key.ok_or_else(|| {
-                    Error::new(ident.span(), ErrorKind::MissingForeignKeyAttribute)
-                })?;
+        if let Some((outer, target)) = Self::parse_parameterized_type(&attrs.ty)
+            && outer == "HasMany"
+        {
+            let foreign_key = attrs.foreign_key.ok_or_else(|| {
+                Error::new(ident.span(), ErrorKind::MissingForeignKeyAttribute)
+            })?;
 
-                return Ok(ParsedField::HasMany(HasManyField {
-                    ident,
-                    target_type: target.clone(),
-                    foreign_key,
-                }));
-            }
+            return Ok(ParsedField::HasMany(HasManyField {
+                ident,
+                target_type: target.clone(),
+                foreign_key,
+            }));
         }
 
         // Regular column field
@@ -156,7 +156,7 @@ impl ParsedField {
             referenced_type,
         });
 
-        Ok(ParsedField::Column(ColumnField {
+        Ok(ParsedField::Column(Box::new(ColumnField {
             ident,
             span: attrs.span,
             ty: attrs.ty,
@@ -167,7 +167,7 @@ impl ParsedField {
             primary_key: attrs.primary_key,
             relation,
             soft_delete: attrs.soft_delete,
-        }))
+        })))
     }
 
     /// Parse a parameterized type like `HasMany<Order>` into (outer,

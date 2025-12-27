@@ -111,7 +111,7 @@ impl<'a> ParsedStruct<'a> {
             let parsed = ParsedField::try_from(attrs, self.ident.to_string())?;
 
             match parsed {
-                ParsedField::Column(col) => column_fields.push(col),
+                ParsedField::Column(col) => column_fields.push(*col),
                 ParsedField::HasMany(hm) => has_many_fields.push(hm),
             }
         }
