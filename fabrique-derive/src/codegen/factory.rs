@@ -1,6 +1,5 @@
 use crate::analysis::Analysis;
 use crate::analysis::ast::HasManyField;
-use heck::ToSnakeCase;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
@@ -52,6 +51,7 @@ impl<'a> FactoryCodegen<'a> {
         let factory_trait_impl = self.generate_impl_factory_trait();
         let relation_enums = self.generate_relation_enums();
         let relation_from_impls = self.generate_relation_from_impls();
+        let set_foreign_key_impls = self.generate_set_foreign_key_impls();
 
         quote! {
             impl #base_struct_ident {
@@ -72,6 +72,8 @@ impl<'a> FactoryCodegen<'a> {
             }
 
             #factory_trait_impl
+
+            #(#set_foreign_key_impls)*
 
             impl #factory_ident {
                 #factory_method_new
@@ -98,7 +100,23 @@ impl<'a> FactoryCodegen<'a> {
         })
     }
 
-    /// Returns HasMany fields from the analysis.
+    /// Returns one-to-many HasMany fields (without `through`).
+    fn one_to_many_fields(&self) -> impl Iterator<Item = &'a HasManyField> {
+        self.analysis
+            .has_many_fields
+            .iter()
+            .filter(|f| f.through.is_none())
+    }
+
+    /// Returns many-to-many HasMany fields (with `through`).
+    fn many_to_many_fields(&self) -> impl Iterator<Item = &'a HasManyField> {
+        self.analysis
+            .has_many_fields
+            .iter()
+            .filter(|f| f.through.is_some())
+    }
+
+    /// Returns all HasMany fields from the analysis.
     fn has_many_fields(&self) -> impl Iterator<Item = &'a HasManyField> {
         self.analysis.has_many_fields.iter()
     }
@@ -285,33 +303,47 @@ impl<'a> FactoryCodegen<'a> {
 
         let struct_fields = column_fields.chain(has_many_init);
 
-        // Step 4: Create has_many children
-        let has_many_create = self.has_many_fields().map(|field| {
+        // Step 4a: Create one-to-many children using SetForeignKey trait
+        let one_to_many_create = self.one_to_many_fields().map(|field| {
             let pending_field = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
-
-            // Extract the FK field method name from the path (e.g., Order::CUSTOMER_ID ->
-            // customer_id)
-            let fk_method = field
-                .foreign_key
-                .segments
-                .last()
-                .map(|seg| {
-                    let name = seg.ident.to_string().to_snake_case();
-                    Ident::new(&name, seg.ident.span())
-                })
-                .expect("foreign_key path must have at least one segment");
+            let target_factory = Ident::new(
+                &format!("{}Factory", field.target_type),
+                field.target_type.span(),
+            );
 
             quote! {
                 for (factory, count) in self.#pending_field {
                     for _ in 0..count {
-                        let child_factory = factory.clone().#fk_method(pk.clone());
+                        let child_factory = <#target_factory as fabrique::SetForeignKey<#struct_ident>>::set_foreign_key(factory.clone(), pk.clone());
                         fabrique::Factory::create(child_factory, &mut *conn).await?;
                     }
                 }
             }
         });
 
-        // Step 5: Return the instance is inline in the quote! below
+        // Step 4b: Create many-to-many relationships through join model
+        let many_to_many_create = self.many_to_many_fields().map(|field| {
+            let pending_field = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
+            let target_type = &field.target_type;
+            let join_type = field.through.as_ref().unwrap();
+            let join_factory = Ident::new(&format!("{}Factory", join_type), join_type.span());
+
+            quote! {
+                for (factory, count) in self.#pending_field {
+                    for _ in 0..count {
+                        // Create the target model
+                        let target = fabrique::Factory::create(factory.clone(), &mut *conn).await?;
+                        let target_pk = <#target_type as fabrique::Model>::primary_key(&target);
+
+                        // Create the join model with FKs to both parent and target
+                        let join_factory = #join_factory::new();
+                        let join_factory = <#join_factory as fabrique::SetForeignKey<#struct_ident>>::set_foreign_key(join_factory, pk.clone());
+                        let join_factory = <#join_factory as fabrique::SetForeignKey<#target_type>>::set_foreign_key(join_factory, target_pk);
+                        fabrique::Factory::create(join_factory, &mut *conn).await?;
+                    }
+                }
+            }
+        });
 
         quote! {
             fn create<'a, A>(
@@ -321,27 +353,25 @@ impl<'a> FactoryCodegen<'a> {
             where
                 A: ::sqlx::Acquire<'a, Database = <#struct_ident as fabrique::DatabaseAware>::Database> + Send + 'a,
             {
-                async move {
-                    // Step 1: Acquire connection
+                // Box::pin breaks recursive async type cycles that occur when
+                // Parent has HasMany<Child> and Child belongs_to Parent
+                ::std::boxed::Box::pin(async move {
                     let mut conn = executor.acquire().await
                         .map_err(|e| <#struct_ident as fabrique::DatabaseAware>::Error::from(e))?;
 
-                    // Step 2: Create belongs_to relations
                     #(#belongs_to_create)*
 
-                    // Step 3: Create the main instance
                     let instance = #struct_ident {
                         #(#struct_fields,)*
                     };
                     let instance = <#struct_ident as fabrique::Persist>::create(instance, &mut *conn).await?;
                     let pk = <#struct_ident as fabrique::Model>::primary_key(&instance);
 
-                    // Step 4: Create has_many children
-                    #(#has_many_create)*
+                    #(#one_to_many_create)*
+                    #(#many_to_many_create)*
 
-                    // Step 5: Return the instance
                     Ok(instance)
-                }
+                })
             }
         }
     }
@@ -434,6 +464,27 @@ impl<'a> FactoryCodegen<'a> {
             }
         }
     }
+
+    /// Generates `impl SetForeignKey<Parent>` for each belongs_to relation.
+    ///
+    /// This allows parent factories to set the FK on child factories when
+    /// creating HasMany relationships.
+    fn generate_set_foreign_key_impls(&self) -> impl Iterator<Item = TokenStream> + '_ {
+        let factory_ident = &self.ident;
+
+        self.relations().map(move |relation| {
+            let parent_type = relation.referenced_type;
+            let fk_field = relation.base_ident;
+
+            quote! {
+                impl fabrique::SetForeignKey<#parent_type> for #factory_ident {
+                    fn set_foreign_key(self, parent_key: <#parent_type as fabrique::Model>::PrimaryKey) -> Self {
+                        self.#fk_field(parent_key)
+                    }
+                }
+            }
+        })
+    }
 }
 
 #[cfg(test)]
@@ -517,7 +568,7 @@ mod tests {
                     where
                         A: ::sqlx::Acquire<'a, Database = <Anvil as fabrique::DatabaseAware>::Database> + Send + 'a,
                     {
-                        async move {
+                        ::std::boxed::Box::pin(async move {
                             let mut conn = executor.acquire().await
                                 .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
 
@@ -543,7 +594,13 @@ mod tests {
                             let pk = <Anvil as fabrique::Model>::primary_key(&instance);
 
                             Ok(instance)
-                        }
+                        })
+                    }
+                }
+
+                impl fabrique::SetForeignKey<Hammer> for AnvilFactory {
+                    fn set_foreign_key(self, parent_key: <Hammer as fabrique::Model>::PrimaryKey) -> Self {
+                        self.hammer_id(parent_key)
                     }
                 }
 
@@ -669,7 +726,7 @@ mod tests {
                 where
                     A: ::sqlx::Acquire<'a, Database = <Anvil as fabrique::DatabaseAware>::Database> + Send + 'a,
                 {
-                    async move {
+                    ::std::boxed::Box::pin(async move {
                         let mut conn = executor.acquire().await
                             .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
 
@@ -695,7 +752,7 @@ mod tests {
                         let pk = <Anvil as fabrique::Model>::primary_key(&instance);
 
                         Ok(instance)
-                    }
+                    })
                 }
             }
             .to_string()
@@ -804,12 +861,10 @@ mod tests {
 
     #[test]
     fn test_generate_factory_with_has_many() {
-        // Arrange
+        // Arrange - HasMany infers FK via SetForeignKey trait
         let input = parse_quote! {
             struct Customer {
                 id: u32,
-
-                #[fabrique(foreign_key = Order::CUSTOMER_ID)]
                 orders: HasMany<Order>
             }
         };
@@ -819,7 +874,7 @@ mod tests {
         // Act
         let generated = codegen.generate_factory();
 
-        // Assert - verify the factory includes HasMany handling
+        // Assert - verify the factory uses SetForeignKey trait for HasMany
         assert_eq!(
             generated.to_string(),
             quote! {
@@ -845,7 +900,7 @@ mod tests {
                     where
                         A: ::sqlx::Acquire<'a, Database = <Customer as fabrique::DatabaseAware>::Database> + Send + 'a,
                     {
-                        async move {
+                        ::std::boxed::Box::pin(async move {
                             let mut conn = executor.acquire().await
                                 .map_err(|e| <Customer as fabrique::DatabaseAware>::Error::from(e))?;
 
@@ -859,13 +914,13 @@ mod tests {
 
                             for (factory, count) in self.pending_orders {
                                 for _ in 0..count {
-                                    let child_factory = factory.clone().customer_id(pk.clone());
+                                    let child_factory = <OrderFactory as fabrique::SetForeignKey<Customer>>::set_foreign_key(factory.clone(), pk.clone());
                                     fabrique::Factory::create(child_factory, &mut *conn).await?;
                                 }
                             }
 
                             Ok(instance)
-                        }
+                        })
                     }
                 }
 
@@ -898,8 +953,6 @@ mod tests {
         let input = parse_quote! {
             struct Customer {
                 id: u32,
-
-                #[fabrique(foreign_key = Order::CUSTOMER_ID)]
                 orders: HasMany<Order>
             }
         };
@@ -922,8 +975,6 @@ mod tests {
         let input = parse_quote! {
             struct Customer {
                 id: u32,
-
-                #[fabrique(foreign_key = Order::CUSTOMER_ID)]
                 orders: HasMany<Order>
             }
         };
@@ -940,6 +991,130 @@ mod tests {
                 pub fn has_orders(mut self, factory: OrderFactory, count: usize) -> Self {
                     self.pending_orders.push((factory, count));
                     self
+                }
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn test_generate_set_foreign_key_impls() {
+        // Arrange - Order belongs_to Customer
+        let input = parse_quote! {
+            struct Order {
+                id: u32,
+                #[fabrique(belongs_to = "Customer")]
+                customer_id: u32
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = FactoryCodegen::new(&analysis);
+
+        // Act
+        let generated: Vec<TokenStream> = codegen.generate_set_foreign_key_impls().collect();
+
+        // Assert
+        assert_eq!(
+            generated[0].to_string(),
+            quote! {
+                impl fabrique::SetForeignKey<Customer> for OrderFactory {
+                    fn set_foreign_key(self, parent_key: <Customer as fabrique::Model>::PrimaryKey) -> Self {
+                        self.customer_id(parent_key)
+                    }
+                }
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn test_generate_factory_with_many_to_many() {
+        // Arrange - Order has many Anvils through OrderLine
+        let input = parse_quote! {
+            struct Order {
+                id: u32,
+                #[fabrique(through = "OrderLine")]
+                anvils: HasMany<Anvil>
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = FactoryCodegen::new(&analysis);
+
+        // Act
+        let generated = codegen.generate_factory();
+
+        // Assert - verify the factory creates target then join model
+        assert_eq!(
+            generated.to_string(),
+            quote! {
+                impl Order {
+                    pub fn factory() -> OrderFactory {
+                        OrderFactory::new()
+                    }
+                }
+
+                #[derive(Clone)]
+                pub struct OrderFactory {
+                    id: std::option::Option<u32>,
+                    pending_anvils: Vec<(AnvilFactory, usize)>,
+                }
+
+                impl fabrique::Factory for OrderFactory {
+                    type Model = Order;
+
+                    fn create<'a, A>(
+                        mut self,
+                        executor: A,
+                    ) -> impl ::std::future::Future<Output = Result<Order, <Order as fabrique::DatabaseAware>::Error>> + Send + 'a
+                    where
+                        A: ::sqlx::Acquire<'a, Database = <Order as fabrique::DatabaseAware>::Database> + Send + 'a,
+                    {
+                        ::std::boxed::Box::pin(async move {
+                            let mut conn = executor.acquire().await
+                                .map_err(|e| <Order as fabrique::DatabaseAware>::Error::from(e))?;
+
+                            let instance = Order {
+                                id: self.id.unwrap_or(<u32 as Default>::default()),
+                                anvils: ::fabrique::HasMany::default(),
+                            };
+
+                            let instance = <Order as fabrique::Persist>::create(instance, &mut *conn).await?;
+                            let pk = <Order as fabrique::Model>::primary_key(&instance);
+
+                            for (factory, count) in self.pending_anvils {
+                                for _ in 0..count {
+                                    let target = fabrique::Factory::create(factory.clone(), &mut *conn).await?;
+                                    let target_pk = <Anvil as fabrique::Model>::primary_key(&target);
+
+                                    let join_factory = OrderLineFactory::new();
+                                    let join_factory = <OrderLineFactory as fabrique::SetForeignKey<Order>>::set_foreign_key(join_factory, pk.clone());
+                                    let join_factory = <OrderLineFactory as fabrique::SetForeignKey<Anvil>>::set_foreign_key(join_factory, target_pk);
+                                    fabrique::Factory::create(join_factory, &mut *conn).await?;
+                                }
+                            }
+
+                            Ok(instance)
+                        })
+                    }
+                }
+
+                impl OrderFactory {
+                    pub fn new() -> Self {
+                        Self {
+                            id: None,
+                            pending_anvils: Vec::new(),
+                        }
+                    }
+
+                    pub fn id(mut self, id: u32) -> Self {
+                        self.id = Some(id);
+                        self
+                    }
+
+                    pub fn has_anvils(mut self, factory: AnvilFactory, count: usize) -> Self {
+                        self.pending_anvils.push((factory, count));
+                        self
+                    }
                 }
             }
             .to_string()

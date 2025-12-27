@@ -42,23 +42,25 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let from_row = FromRowCodegen::new(&analysis).generate();
     let database_aware = DatabaseAwareCodegen::new(&analysis).generate();
     let model = ModelCodegen::new(&analysis).generate();
+    let columns = ColumnsCodegen::new(&analysis).generate();
+    let belongs_to = BelongsToCodegen::new(&analysis).generate();
     let query = QueryCodegen::new(&analysis).generate();
     let persist = PersistCodegen::new(&analysis).generate();
     let delete = DeleteCodegen::new(&analysis).generate();
     let hard_delete = HardDeleteCodegen::new(&analysis).generate();
     let soft_delete = SoftDeleteCodegen::new(&analysis).generate();
-    let columns = ColumnsCodegen::new(&analysis).generate();
 
     quote::quote! {
         #from_row
         #database_aware
         #model
+        #columns
+        #belongs_to
         #query
         #persist
         #delete
         #hard_delete
         #soft_delete
-        #columns
     }
     .into()
 }

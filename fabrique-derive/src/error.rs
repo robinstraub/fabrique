@@ -45,11 +45,6 @@ pub enum ErrorKind {
 
     #[error("Missing primary key, either add an id column or mark an existing column as primary")]
     MissingPrimaryKey,
-
-    #[error(
-        "HasMany fields require a foreign_key attribute, e.g. #[fabrique(foreign_key = Order::CUSTOMER_ID)]"
-    )]
-    MissingForeignKeyAttribute,
 }
 
 impl From<Error> for syn::Error {

@@ -1,3 +1,4 @@
+pub mod belongs_to;
 pub mod columns;
 pub mod database;
 pub mod delete;
@@ -9,6 +10,7 @@ pub mod persist;
 pub mod query;
 pub mod soft_delete;
 
+pub use belongs_to::BelongsToCodegen;
 pub use columns::ColumnsCodegen;
 pub use database::DatabaseAwareCodegen;
 pub use delete::DeleteCodegen;
