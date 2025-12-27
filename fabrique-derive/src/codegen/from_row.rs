@@ -16,19 +16,19 @@ impl<'a> FromRowCodegen<'a> {
     /// Generates the `FromRow` trait implementation.
     ///
     /// This implementation handles automatic type conversions for fields with
-    /// the `as` attribute.
+    /// the `as` attribute. HasMany fields are initialized with their default
+    /// value.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
 
-        // Generate field assignments
-        let field_assignments = self.analysis.fields.iter().map(|field| {
+        // Generate column field assignments
+        let column_assignments = self.analysis.column_fields.iter().map(|field| {
             let field_ident = &field.ident;
             let column_name = field.ident.to_string();
 
             match &field.r#as {
                 Some(db_ty) => {
-                    // Field has `as` attribute, need to convert from intermediate type using
-                    // TryFrom
+                    // Field has `as` attribute, need to convert from intermediate type
                     let rust_ty = &field.ty;
                     quote! {
                         #field_ident: {
@@ -55,6 +55,16 @@ impl<'a> FromRowCodegen<'a> {
                 }
             }
         });
+
+        // Generate HasMany field assignments (initialized with default)
+        let has_many_assignments = self.analysis.has_many_fields.iter().map(|field| {
+            let field_ident = &field.ident;
+            quote! {
+                #field_ident: ::fabrique::HasMany::default()
+            }
+        });
+
+        let field_assignments = column_assignments.chain(has_many_assignments);
 
         quote! {
             impl<'r> ::sqlx::FromRow<'r, ::sqlx::postgres::PgRow> for #base_struct_ident {
@@ -98,6 +108,31 @@ mod tests {
                 }
             }
             .to_string()
+        );
+    }
+
+    #[test]
+    fn test_generate_from_row_with_has_many() {
+        // Arrange
+        let input = parse_quote! {
+            struct Customer {
+                id: String,
+
+                #[fabrique(foreign_key = Order::CUSTOMER_ID)]
+                orders: HasMany<Order>
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = FromRowCodegen::new(&analysis);
+
+        // Act
+        let result = codegen.generate();
+
+        // Assert
+        assert!(
+            result
+                .to_string()
+                .contains("orders : :: fabrique :: HasMany :: default ()")
         );
     }
 }

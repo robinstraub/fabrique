@@ -79,10 +79,12 @@ pub use database::*;
 pub use error::*;
 pub use factory::*;
 pub use model::*;
+pub use relation::*;
 
 pub mod database;
 pub mod error;
 pub mod factory;
 pub mod model;
 pub mod prelude;
+pub mod relation;
 pub mod sql;

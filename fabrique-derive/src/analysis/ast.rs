@@ -1,7 +1,7 @@
 use darling::{FromDeriveInput, FromField};
 use heck::{ToPascalCase, ToSnakeCase};
 use proc_macro2::Span;
-use syn::{Ident, Type};
+use syn::{Ident, Path, Type};
 
 use crate::error::{Error, ErrorKind};
 
@@ -54,9 +54,14 @@ pub struct ModelFieldAttrs {
     #[darling(default)]
     soft_delete: bool,
 
-    /// The type referenced by this relation field
+    /// The type referenced by this relation field (belongs_to)
     #[darling(default)]
     relation: Option<Ident>,
+
+    /// The foreign key path for HasMany relationships (e.g.,
+    /// `Order::CUSTOMER_ID`)
+    #[darling(default)]
+    foreign_key: Option<Path>,
 }
 
 #[derive(Debug)]
@@ -65,8 +70,9 @@ pub struct Relation {
     pub referenced_type: Ident,
 }
 
+/// A database column field.
 #[derive(Debug)]
-pub struct ModelField {
+pub struct ColumnField {
     /// The field ident.
     pub ident: Ident,
 
@@ -91,25 +97,57 @@ pub struct ModelField {
     /// True if the field is primary key.
     pub primary_key: bool,
 
-    /// The field relation, if any.
+    /// The field relation, if any (belongs_to).
     pub relation: Option<Relation>,
 
     pub soft_delete: bool,
 }
 
-impl ModelField {
+/// A HasMany relationship field (not stored in database).
+#[derive(Debug)]
+pub struct HasManyField {
+    /// The field ident (e.g., `orders`).
+    pub ident: Ident,
+
+    /// The target type (e.g., `Order` from `HasMany<Order>`).
+    pub target_type: Ident,
+
+    /// The foreign key path (e.g., `Order::CUSTOMER_ID`).
+    pub foreign_key: Path,
+}
+
+/// Result of parsing a field - either a column or a HasMany relation.
+#[derive(Debug)]
+pub enum ParsedField {
+    Column(Box<ColumnField>),
+    HasMany(HasManyField),
+}
+
+impl ParsedField {
     pub fn try_from(attrs: ModelFieldAttrs, struct_name: String) -> Result<Self, Error> {
         let ident = attrs.ident.ok_or_else(|| {
             Error::new(attrs.span, ErrorKind::UnsupportedDataStructureTupleStruct)
         })?;
 
-        // Simple column name without type annotations (for runtime queries)
+        // Check if this is a HasMany field
+        if let Some((outer, target)) = Self::parse_parameterized_type(&attrs.ty)
+            && outer == "HasMany"
+        {
+            let foreign_key = attrs
+                .foreign_key
+                .ok_or_else(|| Error::new(ident.span(), ErrorKind::MissingForeignKeyAttribute))?;
+
+            return Ok(ParsedField::HasMany(HasManyField {
+                ident,
+                target_type: target.clone(),
+                foreign_key,
+            }));
+        }
+
+        // Regular column field
         let column = ident.to_string();
-
         let const_column_name = Ident::new(&ident.to_string().to_uppercase(), ident.span());
-
         let pascal_case_field = ident.to_string().to_pascal_case();
-
         let type_name = format!("{}{}Column", struct_name, pascal_case_field);
         let column_type = syn::Ident::new(&type_name, ident.span());
 
@@ -118,7 +156,7 @@ impl ModelField {
             referenced_type,
         });
 
-        Ok(Self {
+        Ok(ParsedField::Column(Box::new(ColumnField {
             ident,
             span: attrs.span,
             ty: attrs.ty,
@@ -129,7 +167,25 @@ impl ModelField {
             primary_key: attrs.primary_key,
             relation,
             soft_delete: attrs.soft_delete,
-        })
+        })))
+    }
+
+    /// Parse a parameterized type like `HasMany<Order>` into (outer,
+    /// parameter).
+    fn parse_parameterized_type(ty: &Type) -> Option<(&Ident, &Ident)> {
+        let Type::Path(type_path) = ty else {
+            return None;
+        };
+        let segment = type_path.path.segments.last()?;
+        let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {
+            return None;
+        };
+        let syn::GenericArgument::Type(Type::Path(inner_path)) = args.args.first()? else {
+            return None;
+        };
+        let parameter = &inner_path.path.segments.last()?.ident;
+
+        Some((&segment.ident, parameter))
     }
 }
 
@@ -139,7 +195,7 @@ mod tests {
     use syn::parse_quote;
 
     #[test]
-    fn test_model_field_try_from_without_ident_fails() {
+    fn test_parsed_field_try_from_without_ident_fails() {
         // Arrange a ModelFieldAttrs without an identifier (simulating tuple struct
         // field)
         let attrs = ModelFieldAttrs {
@@ -150,10 +206,11 @@ mod tests {
             primary_key: false,
             soft_delete: false,
             relation: None,
+            foreign_key: None,
         };
 
-        // Act the call to the `ModelField::try_from` method
-        let result = ModelField::try_from(attrs, "Anvil".to_owned());
+        // Act
+        let result = ParsedField::try_from(attrs, "Anvil".to_owned());
 
         // Assert the error
         assert!(result.is_err());
@@ -162,5 +219,119 @@ mod tests {
             error.kind,
             ErrorKind::UnsupportedDataStructureTupleStruct
         ));
+    }
+
+    #[test]
+    fn test_has_many_field_without_foreign_key_fails() {
+        // Arrange a HasMany field without foreign_key attribute
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(orders)),
+            ty: parse_quote!(HasMany<Order>),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            relation: None,
+            foreign_key: None,
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "Customer".to_owned());
+
+        // Assert
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(matches!(error.kind, ErrorKind::MissingForeignKeyAttribute));
+    }
+
+    #[test]
+    fn test_has_many_field_with_foreign_key_succeeds() {
+        // Arrange a HasMany field with foreign_key attribute
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(orders)),
+            ty: parse_quote!(HasMany<Order>),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            relation: None,
+            foreign_key: Some(parse_quote!(Order::CUSTOMER_ID)),
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "Customer".to_owned());
+
+        // Assert
+        let parsed = result.expect("should parse successfully");
+        assert!(matches!(
+            parsed,
+            ParsedField::HasMany(ref f) if f.target_type == "Order" && f.foreign_key.segments.last().is_some()
+        ));
+    }
+
+    #[test]
+    fn test_regular_field_is_column() {
+        // Arrange a regular field
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(name)),
+            ty: parse_quote!(String),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            relation: None,
+            foreign_key: None,
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "Customer".to_owned());
+
+        // Assert
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), ParsedField::Column(_)));
+    }
+
+    #[test]
+    fn test_reference_type_is_column() {
+        // Arrange a field with a reference type (not Type::Path)
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(name)),
+            ty: parse_quote!(&str),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            relation: None,
+            foreign_key: None,
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "Customer".to_owned());
+
+        // Assert - reference types are treated as column fields
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), ParsedField::Column(_)));
+    }
+
+    #[test]
+    fn test_generic_with_reference_arg_is_column() {
+        // Arrange a field with a generic type whose argument is not Type::Path
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(items)),
+            ty: parse_quote!(Vec<&str>),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            relation: None,
+            foreign_key: None,
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "Customer".to_owned());
+
+        // Assert - generic types with non-Path arguments are treated as column fields
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), ParsedField::Column(_)));
     }
 }

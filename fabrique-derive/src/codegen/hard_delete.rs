@@ -1,4 +1,5 @@
-use crate::{Analysis, analysis::ast::ModelField};
+use crate::Analysis;
+use crate::analysis::ast::ColumnField;
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -31,7 +32,7 @@ impl<'a> HardDeleteCodegen<'a> {
     fn generate_fn_hard_delete(&self) -> TokenStream {
         let primary_key = self
             .analysis
-            .fields
+            .column_fields
             .iter()
             .filter(|field| field.primary_key);
 
@@ -47,7 +48,7 @@ impl<'a> HardDeleteCodegen<'a> {
             self.analysis.model.table_name, clause
         );
 
-        let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
+        let bindings = primary_key.map(|ColumnField { ident, .. }| quote! { self.#ident });
 
         quote! {
             fn hard_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
@@ -65,7 +66,7 @@ impl<'a> HardDeleteCodegen<'a> {
     fn generate_fn_hard_destroy(&self) -> TokenStream {
         let primary_key: Vec<_> = self
             .analysis
-            .fields
+            .column_fields
             .iter()
             .filter(|field| field.primary_key)
             .collect();

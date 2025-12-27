@@ -16,7 +16,7 @@ use syn::{Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, spanned::Sp
 use crate::{
     analysis::{
         Analysis,
-        ast::{Model, ModelAttrs, ModelField, ModelFieldAttrs},
+        ast::{ColumnField, HasManyField, Model, ModelAttrs, ModelFieldAttrs, ParsedField},
     },
     error::{Error, ErrorKind},
 };
@@ -35,7 +35,8 @@ pub struct ParsedStruct<'a> {
 
 /// Validated and parsed fields.
 pub struct ParsedFields<'a> {
-    fields: Vec<ModelField>,
+    column_fields: Vec<ColumnField>,
+    has_many_fields: Vec<HasManyField>,
     ident: &'a Ident,
     model: Model,
 }
@@ -100,49 +101,52 @@ impl<'a> ParsedStruct<'a> {
             }
         };
 
-        // Transform `syn::Field` into `ast::ModelField`
-        let mut fields = fields
-            .iter()
-            .map(|field| {
-                let attrs = ModelFieldAttrs::from_field(field)
-                    .map_err(|e| Error::from_darling(e, field.span()))?;
-                ModelField::try_from(attrs, self.ident.to_string())
-            })
-            .collect::<Result<Vec<_>, Error>>()?;
+        // Parse all fields and separate into columns and has_many
+        let mut column_fields = Vec::new();
+        let mut has_many_fields = Vec::new();
+
+        for field in fields.iter() {
+            let attrs = ModelFieldAttrs::from_field(field)
+                .map_err(|e| Error::from_darling(e, field.span()))?;
+            let parsed = ParsedField::try_from(attrs, self.ident.to_string())?;
+
+            match parsed {
+                ParsedField::Column(col) => column_fields.push(*col),
+                ParsedField::HasMany(hm) => has_many_fields.push(hm),
+            }
+        }
 
         // Ensure manual primary keys are defined or attempt to infer auto primary keys
-        if !fields.iter().any(|field| field.primary_key) {
-            match fields.iter().position(|field| field.ident == "id") {
-                Some(index) => fields[index].primary_key = true,
+        if !column_fields.iter().any(|field| field.primary_key) {
+            match column_fields.iter().position(|field| field.ident == "id") {
+                Some(index) => column_fields[index].primary_key = true,
                 None => Err(Error::new(self.ident.span(), ErrorKind::MissingPrimaryKey))?,
             }
         }
 
-        Ok(ParsedFields::new(self, fields))
+        Ok(ParsedFields::new(self, column_fields, has_many_fields))
     }
 }
 
 impl<'a> ParsedFields<'a> {
-    pub fn new(previous_step: ParsedStruct<'a>, fields: Vec<ModelField>) -> Self {
+    pub fn new(
+        previous_step: ParsedStruct<'a>,
+        column_fields: Vec<ColumnField>,
+        has_many_fields: Vec<HasManyField>,
+    ) -> Self {
         Self {
             ident: previous_step.ident,
-            fields,
+            column_fields,
+            has_many_fields,
             model: previous_step.model,
         }
     }
 
     /// Builds the final analysis.
     pub fn build(self) -> Result<Analysis<'a>, Error> {
-        let returning = self
-            .fields
-            .iter()
-            .map(|fields| fields.column.to_string())
-            .collect::<Vec<String>>()
-            .join(", ");
-
         Ok(Analysis {
-            returning,
-            fields: self.fields,
+            column_fields: self.column_fields,
+            has_many_fields: self.has_many_fields,
             ident: self.ident,
             model: self.model,
         })
