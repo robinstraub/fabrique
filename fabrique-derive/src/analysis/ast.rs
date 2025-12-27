@@ -133,9 +133,9 @@ impl ParsedField {
         if let Some((outer, target)) = Self::parse_parameterized_type(&attrs.ty)
             && outer == "HasMany"
         {
-            let foreign_key = attrs.foreign_key.ok_or_else(|| {
-                Error::new(ident.span(), ErrorKind::MissingForeignKeyAttribute)
-            })?;
+            let foreign_key = attrs
+                .foreign_key
+                .ok_or_else(|| Error::new(ident.span(), ErrorKind::MissingForeignKeyAttribute))?;
 
             return Ok(ParsedField::HasMany(HasManyField {
                 ident,
