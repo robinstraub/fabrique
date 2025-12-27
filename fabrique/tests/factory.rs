@@ -18,10 +18,10 @@ pub struct Order {
 #[derive(Debug, Default, Factory, PartialEq, Model)]
 #[fabrique(table = "order_lines")]
 pub struct OrderLine {
-    #[fabrique(primary_key, relation = "Order")]
+    #[fabrique(primary_key, belongs_to = "Order")]
     pub order_id: Uuid,
 
-    #[fabrique(primary_key, relation = "Anvil")]
+    #[fabrique(primary_key, belongs_to = "Anvil")]
     pub anvil_id: Uuid,
 }
 

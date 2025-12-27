@@ -54,9 +54,9 @@ pub struct ModelFieldAttrs {
     #[darling(default)]
     soft_delete: bool,
 
-    /// The type referenced by this relation field (belongs_to)
+    /// The type referenced by this belongs_to field
     #[darling(default)]
-    relation: Option<Ident>,
+    belongs_to: Option<Ident>,
 
     /// The foreign key path for HasMany relationships (e.g.,
     /// `Order::CUSTOMER_ID`)
@@ -151,7 +151,7 @@ impl ParsedField {
         let type_name = format!("{}{}Column", struct_name, pascal_case_field);
         let column_type = syn::Ident::new(&type_name, ident.span());
 
-        let relation = attrs.relation.map(|referenced_type| Relation {
+        let relation = attrs.belongs_to.map(|referenced_type| Relation {
             name: referenced_type.to_string().to_snake_case(),
             referenced_type,
         });
@@ -205,7 +205,7 @@ mod tests {
             r#as: None,
             primary_key: false,
             soft_delete: false,
-            relation: None,
+            belongs_to: None,
             foreign_key: None,
         };
 
@@ -231,7 +231,7 @@ mod tests {
             r#as: None,
             primary_key: false,
             soft_delete: false,
-            relation: None,
+            belongs_to: None,
             foreign_key: None,
         };
 
@@ -254,7 +254,7 @@ mod tests {
             r#as: None,
             primary_key: false,
             soft_delete: false,
-            relation: None,
+            belongs_to: None,
             foreign_key: Some(parse_quote!(Order::CUSTOMER_ID)),
         };
 
@@ -279,7 +279,7 @@ mod tests {
             r#as: None,
             primary_key: false,
             soft_delete: false,
-            relation: None,
+            belongs_to: None,
             foreign_key: None,
         };
 
@@ -301,7 +301,7 @@ mod tests {
             r#as: None,
             primary_key: false,
             soft_delete: false,
-            relation: None,
+            belongs_to: None,
             foreign_key: None,
         };
 
@@ -323,7 +323,7 @@ mod tests {
             r#as: None,
             primary_key: false,
             soft_delete: false,
-            relation: None,
+            belongs_to: None,
             foreign_key: None,
         };
 

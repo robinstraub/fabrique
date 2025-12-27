@@ -2,7 +2,7 @@ use fabrique_derive::Factory;
 
 #[derive(Factory)]
 struct Anvil {
-    #[fabrique(relation = "Not A Valid Type")]
+    #[fabrique(belongs_to = "Not A Valid Type")]
     hammer_id: u32,
     weight: u32,
 }

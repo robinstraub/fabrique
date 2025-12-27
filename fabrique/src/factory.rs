@@ -54,7 +54,7 @@
 //! #[derive(Factory, Model)]
 //! pub struct Anvil {
 //!     id: Uuid,
-//!     #[fabrique(relation = "User")]
+//!     #[fabrique(belongs_to = "User")]
 //!     user_id: Uuid,
 //! }
 //!
