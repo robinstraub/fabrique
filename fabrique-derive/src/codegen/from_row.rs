@@ -110,4 +110,25 @@ mod tests {
             .to_string()
         );
     }
+
+    #[test]
+    fn test_generate_from_row_with_has_many() {
+        // Arrange
+        let input = parse_quote! {
+            struct Customer {
+                id: String,
+
+                #[fabrique(foreign_key = Order::CUSTOMER_ID)]
+                orders: HasMany<Order>
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = FromRowCodegen::new(&analysis);
+
+        // Act
+        let result = codegen.generate();
+
+        // Assert
+        assert!(result.to_string().contains("orders : :: fabrique :: HasMany :: default ()"));
+    }
 }

@@ -262,12 +262,11 @@ mod tests {
         let result = ParsedField::try_from(attrs, "Customer".to_owned());
 
         // Assert
-        assert!(result.is_ok());
-        let ParsedField::HasMany(field) = result.unwrap() else {
-            panic!("Expected HasManyField");
-        };
-        assert_eq!(field.target_type, "Order");
-        assert!(field.foreign_key.segments.last().is_some());
+        let parsed = result.expect("should parse successfully");
+        assert!(matches!(
+            parsed,
+            ParsedField::HasMany(ref f) if f.target_type == "Order" && f.foreign_key.segments.last().is_some()
+        ));
     }
 
     #[test]
@@ -288,6 +287,52 @@ mod tests {
         let result = ParsedField::try_from(attrs, "Customer".to_owned());
 
         // Assert
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), ParsedField::Column(_)));
+    }
+
+    #[test]
+    fn test_reference_type_is_column() {
+        // Arrange a field with a reference type (not Type::Path)
+        // This covers line 177: `let Type::Path(type_path) = ty else { return None }`
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(name)),
+            ty: parse_quote!(&str),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            relation: None,
+            foreign_key: None,
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "Customer".to_owned());
+
+        // Assert - reference types are treated as column fields
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), ParsedField::Column(_)));
+    }
+
+    #[test]
+    fn test_generic_with_reference_arg_is_column() {
+        // Arrange a field with a generic type whose argument is not Type::Path
+        // This covers line 184: `let GenericArgument::Type(Type::Path(...)) = ... else { return None }`
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(items)),
+            ty: parse_quote!(Vec<&str>),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            relation: None,
+            foreign_key: None,
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "Customer".to_owned());
+
+        // Assert - generic types with non-Path arguments are treated as column fields
         assert!(result.is_ok());
         assert!(matches!(result.unwrap(), ParsedField::Column(_)));
     }
