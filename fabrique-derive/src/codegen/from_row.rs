@@ -113,12 +113,10 @@ mod tests {
 
     #[test]
     fn test_generate_from_row_with_has_many() {
-        // Arrange
+        // Arrange - HasMany no longer requires foreign_key attribute
         let input = parse_quote! {
             struct Customer {
                 id: String,
-
-                #[fabrique(foreign_key = Order::CUSTOMER_ID)]
                 orders: HasMany<Order>
             }
         };

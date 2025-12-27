@@ -175,20 +175,27 @@ impl<'a> ModelCodegen<'a> {
     fn generate_lazy_loading_methods(&self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
 
-        let methods = self.analysis.has_many_fields.iter().map(|field| {
-            let method_name = &field.ident;
-            let target_type = &field.target_type;
-            let foreign_key = &field.foreign_key;
+        // Only generate lazy loading for one-to-many (no through).
+        // Many-to-many lazy loading requires different query logic.
+        let methods = self
+            .analysis
+            .has_many_fields
+            .iter()
+            .filter(|field| field.through.is_none())
+            .map(|field| {
+                let method_name = &field.ident;
+                let target_type = &field.target_type;
 
-            quote! {
-                pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Filtered<::fabrique::sql::Selected>> {
-                    let pk = <Self as ::fabrique::Model>::primary_key(self);
-                    <#target_type as ::fabrique::Query>::query()
-                        .select()
-                        .r#where(#foreign_key, "=", pk)
+                quote! {
+                    pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Filtered<::fabrique::sql::Selected>> {
+                        let pk = <Self as ::fabrique::Model>::primary_key(self);
+                        let fk = <#target_type as ::fabrique::BelongsTo<Self>>::foreign_key_column();
+                        <#target_type as ::fabrique::Query>::query()
+                            .select()
+                            .r#where(fk, "=", pk)
+                    }
                 }
-            }
-        });
+            });
 
         quote! {
             impl #base_struct_ident {
@@ -298,12 +305,10 @@ mod tests {
 
     #[test]
     fn test_generate_lazy_loading_methods() {
-        // Arrange
+        // Arrange - HasMany infers FK via BelongsTo trait
         let input = parse_quote! {
             struct Customer {
                 id: String,
-
-                #[fabrique(foreign_key = Order::CUSTOMER_ID)]
                 orders: HasMany<Order>
             }
         };
@@ -313,7 +318,7 @@ mod tests {
         // Act
         let result = codegen.generate();
 
-        // Assert - verify the lazy loading method is generated
+        // Assert - verify the lazy loading method uses BelongsTo trait
         assert_eq!(
             result.to_string(),
             quote! {
@@ -341,9 +346,10 @@ mod tests {
                 impl Customer {
                     pub fn orders(&self) -> ::fabrique::model::QueryBuilder<Order, ::fabrique::sql::Filtered<::fabrique::sql::Selected>> {
                         let pk = <Self as ::fabrique::Model>::primary_key(self);
+                        let fk = <Order as ::fabrique::BelongsTo<Self>>::foreign_key_column();
                         <Order as ::fabrique::Query>::query()
                             .select()
-                            .r#where(Order::CUSTOMER_ID, "=", pk)
+                            .r#where(fk, "=", pk)
                     }
                 }
             }

@@ -1,7 +1,7 @@
 use darling::{FromDeriveInput, FromField};
 use heck::{ToPascalCase, ToSnakeCase};
 use proc_macro2::Span;
-use syn::{Ident, Path, Type};
+use syn::{Ident, Type};
 
 use crate::error::{Error, ErrorKind};
 
@@ -58,10 +58,10 @@ pub struct ModelFieldAttrs {
     #[darling(default)]
     belongs_to: Option<Ident>,
 
-    /// The foreign key path for HasMany relationships (e.g.,
-    /// `Order::CUSTOMER_ID`)
+    /// The join model for many-to-many relationships (only valid on HasMany
+    /// fields)
     #[darling(default)]
-    foreign_key: Option<Path>,
+    through: Option<Ident>,
 }
 
 #[derive(Debug)]
@@ -112,8 +112,9 @@ pub struct HasManyField {
     /// The target type (e.g., `Order` from `HasMany<Order>`).
     pub target_type: Ident,
 
-    /// The foreign key path (e.g., `Order::CUSTOMER_ID`).
-    pub foreign_key: Path,
+    /// The join model for many-to-many relationships (e.g., `OrderLine`).
+    /// When set, this is a many-to-many relationship through the join model.
+    pub through: Option<Ident>,
 }
 
 /// Result of parsing a field - either a column or a HasMany relation.
@@ -133,14 +134,10 @@ impl ParsedField {
         if let Some((outer, target)) = Self::parse_parameterized_type(&attrs.ty)
             && outer == "HasMany"
         {
-            let foreign_key = attrs
-                .foreign_key
-                .ok_or_else(|| Error::new(ident.span(), ErrorKind::MissingForeignKeyAttribute))?;
-
             return Ok(ParsedField::HasMany(HasManyField {
                 ident,
                 target_type: target.clone(),
-                foreign_key,
+                through: attrs.through,
             }));
         }
 
@@ -206,7 +203,7 @@ mod tests {
             primary_key: false,
             soft_delete: false,
             belongs_to: None,
-            foreign_key: None,
+            through: None,
         };
 
         // Act
@@ -222,8 +219,8 @@ mod tests {
     }
 
     #[test]
-    fn test_has_many_field_without_foreign_key_fails() {
-        // Arrange a HasMany field without foreign_key attribute
+    fn test_has_many_field_succeeds() {
+        // Arrange a HasMany field (no foreign_key needed, inferred via BelongsTo)
         let attrs = ModelFieldAttrs {
             ident: Some(parse_quote!(orders)),
             ty: parse_quote!(HasMany<Order>),
@@ -232,30 +229,7 @@ mod tests {
             primary_key: false,
             soft_delete: false,
             belongs_to: None,
-            foreign_key: None,
-        };
-
-        // Act
-        let result = ParsedField::try_from(attrs, "Customer".to_owned());
-
-        // Assert
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(matches!(error.kind, ErrorKind::MissingForeignKeyAttribute));
-    }
-
-    #[test]
-    fn test_has_many_field_with_foreign_key_succeeds() {
-        // Arrange a HasMany field with foreign_key attribute
-        let attrs = ModelFieldAttrs {
-            ident: Some(parse_quote!(orders)),
-            ty: parse_quote!(HasMany<Order>),
-            span: Span::call_site(),
-            r#as: None,
-            primary_key: false,
-            soft_delete: false,
-            belongs_to: None,
-            foreign_key: Some(parse_quote!(Order::CUSTOMER_ID)),
+            through: None,
         };
 
         // Act
@@ -265,8 +239,32 @@ mod tests {
         let parsed = result.expect("should parse successfully");
         assert!(matches!(
             parsed,
-            ParsedField::HasMany(ref f) if f.target_type == "Order" && f.foreign_key.segments.last().is_some()
+            ParsedField::HasMany(ref f) if f.target_type == "Order" && f.through.is_none()
         ));
+    }
+
+    #[test]
+    fn test_has_many_field_with_through_succeeds() {
+        // Arrange a HasMany field with through (many-to-many)
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(anvils)),
+            ty: parse_quote!(HasMany<Anvil>),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            belongs_to: None,
+            through: Some(parse_quote!(OrderLine)),
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "Order".to_owned());
+
+        // Assert
+        let parsed = result.expect("should parse successfully");
+        assert!(
+            matches!(parsed, ParsedField::HasMany(ref f) if f.target_type == "Anvil" && f.through.as_ref().unwrap() == "OrderLine")
+        );
     }
 
     #[test]
@@ -280,7 +278,7 @@ mod tests {
             primary_key: false,
             soft_delete: false,
             belongs_to: None,
-            foreign_key: None,
+            through: None,
         };
 
         // Act
@@ -302,7 +300,7 @@ mod tests {
             primary_key: false,
             soft_delete: false,
             belongs_to: None,
-            foreign_key: None,
+            through: None,
         };
 
         // Act
@@ -324,7 +322,7 @@ mod tests {
             primary_key: false,
             soft_delete: false,
             belongs_to: None,
-            foreign_key: None,
+            through: None,
         };
 
         // Act

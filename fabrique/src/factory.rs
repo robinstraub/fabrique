@@ -88,13 +88,13 @@
 //! #[derive(Factory, Model)]
 //! pub struct Customer {
 //!     id: Uuid,
-//!     #[fabrique(foreign_key = Order::CUSTOMER_ID)]
 //!     orders: HasMany<Order>,
 //! }
 //!
-//! #[derive(Factory, Model)]
+//! #[derive(Default, Factory, Model)]
 //! pub struct Order {
 //!     id: Uuid,
+//!     #[fabrique(belongs_to = "Customer")]
 //!     customer_id: Uuid,
 //! }
 //!
@@ -102,6 +102,47 @@
 //! // Creates a Customer, then creates 3 Orders linked to it
 //! Customer::factory()
 //!     .has_orders(Order::factory(), 3)
+//!     .create(&connection)
+//!     .await?;
+//! #     Ok(())
+//! # }
+//! ```
+//!
+//! ## Many-to-Many Relationships
+//!
+//! Use the `through` attribute for many-to-many relationships via a join model.
+//! The join model must have `belongs_to` annotations for both related types:
+//!
+//!```rust,no_run
+//! # use fabrique::prelude::*;
+//! # use sqlx::{Pool, Postgres};
+//! # use uuid::Uuid;
+//!
+//! #[derive(Factory, Model)]
+//! pub struct Order {
+//!     id: Uuid,
+//!     #[fabrique(through = "OrderLine")]
+//!     anvils: HasMany<Anvil>,
+//! }
+//!
+//! #[derive(Default, Factory, Model)]
+//! pub struct Anvil {
+//!     id: Uuid,
+//! }
+//!
+//! #[derive(Default, Factory, Model)]
+//! #[fabrique(table = "order_lines")]
+//! pub struct OrderLine {
+//!     #[fabrique(primary_key, belongs_to = "Order")]
+//!     order_id: Uuid,
+//!     #[fabrique(primary_key, belongs_to = "Anvil")]
+//!     anvil_id: Uuid,
+//! }
+//!
+//! # async fn example(connection: Pool<Postgres>) -> Result<(), fabrique::Error> {
+//! // Creates an Order, 2 Anvils, and 2 OrderLines linking them
+//! Order::factory()
+//!     .has_anvils(Anvil::factory(), 2)
 //!     .create(&connection)
 //!     .await?;
 //! #     Ok(())

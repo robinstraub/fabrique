@@ -1,8 +1,45 @@
 //! Relationship types for model associations.
 //!
-//! This module provides marker types for defining relationships between models.
+//! This module provides marker types and traits for defining relationships
+//! between models.
 
 use std::marker::PhantomData;
+
+use crate::database::Column;
+use crate::model::Model;
+
+/// Trait for models that belong to a parent model.
+///
+/// This trait is automatically implemented by the derive macro for fields
+/// annotated with `#[fabrique(belongs_to = "ParentModel")]`. It provides
+/// the foreign key column, enabling automatic relationship inference
+/// for `HasMany<T>` fields.
+///
+/// # Example
+///
+/// ```rust
+/// # use fabrique::prelude::*;
+/// # use uuid::Uuid;
+/// #[derive(Model)]
+/// struct Order {
+///     id: Uuid,
+///     #[fabrique(belongs_to = "User")]
+///     user_id: Uuid,  // Generates: impl BelongsTo<User> for Order
+/// }
+///
+/// #[derive(Model)]
+/// struct User {
+///     id: Uuid,
+///     orders: HasMany<Order>,  // Infers FK via <Order as BelongsTo<User>>
+/// }
+/// ```
+pub trait BelongsTo<Parent: Model>: Model {
+    /// The type-safe column type for the foreign key.
+    type ForeignKeyColumn: Column<Self>;
+
+    /// Returns the foreign key column that references the parent model.
+    fn foreign_key_column() -> Self::ForeignKeyColumn;
+}
 
 /// Marker type for one-to-many relationships.
 ///
