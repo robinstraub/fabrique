@@ -109,9 +109,6 @@ pub struct HasManyField {
     /// The field ident (e.g., `orders`).
     pub ident: Ident,
 
-    /// The field span.
-    pub span: Span,
-
     /// The target type (e.g., `Order` from `HasMany<Order>`).
     pub target_type: Ident,
 
@@ -141,7 +138,6 @@ impl ParsedField {
 
                 return Ok(ParsedField::HasMany(HasManyField {
                     ident,
-                    span: attrs.span,
                     target_type: target.clone(),
                     foreign_key,
                 }));

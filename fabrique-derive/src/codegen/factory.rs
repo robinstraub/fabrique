@@ -106,10 +106,7 @@ impl<'a> FactoryCodegen<'a> {
     /// Generates pending HasMany fields for the factory struct.
     fn generate_has_many_fields(&self) -> impl Iterator<Item = TokenStream> + '_ {
         self.has_many_fields().map(|field| {
-            let field_name = Ident::new(
-                &format!("pending_{}", field.ident),
-                field.ident.span(),
-            );
+            let field_name = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
             let target_factory = Ident::new(
                 &format!("{}Factory", field.target_type),
                 field.target_type.span(),
@@ -124,14 +121,8 @@ impl<'a> FactoryCodegen<'a> {
     /// Generates `has_<relation>` setter methods for HasMany fields.
     fn generate_has_many_methods(&self) -> impl Iterator<Item = TokenStream> + '_ {
         self.has_many_fields().map(|field| {
-            let method_name = Ident::new(
-                &format!("has_{}", field.ident),
-                field.ident.span(),
-            );
-            let pending_field = Ident::new(
-                &format!("pending_{}", field.ident),
-                field.ident.span(),
-            );
+            let method_name = Ident::new(&format!("has_{}", field.ident), field.ident.span());
+            let pending_field = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
             let target_factory = Ident::new(
                 &format!("{}Factory", field.target_type),
                 field.target_type.span(),
@@ -296,10 +287,7 @@ impl<'a> FactoryCodegen<'a> {
 
         // Step 4: Create has_many children
         let has_many_create = self.has_many_fields().map(|field| {
-            let pending_field = Ident::new(
-                &format!("pending_{}", field.ident),
-                field.ident.span(),
-            );
+            let pending_field = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
 
             // Extract the FK field method name from the path (e.g., Order::CUSTOMER_ID ->
             // customer_id)
@@ -375,10 +363,7 @@ impl<'a> FactoryCodegen<'a> {
         });
 
         let initialized_has_many_fields = self.has_many_fields().map(|field| {
-            let name = Ident::new(
-                &format!("pending_{}", field.ident),
-                field.ident.span(),
-            );
+            let name = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
             quote! {
                 #name: Vec::new()
             }
