@@ -33,13 +33,14 @@ impl<'a> PersistCodegen<'a> {
         // Get field identifiers and names (column fields only)
         let columns = self
             .analysis
-            .column_fields()
+            .column_fields
+            .iter()
             .map(|field| field.ident.to_string())
             .collect::<Vec<String>>()
             .join(", ");
 
         // Generate placeholders ($1, $2, $3, ...)
-        let placeholders = (1..=self.analysis.column_fields().count())
+        let placeholders = (1..=self.analysis.column_fields.len())
             .map(|i| format!("${}", i))
             .collect::<Vec<String>>()
             .join(", ");
@@ -47,7 +48,8 @@ impl<'a> PersistCodegen<'a> {
         // Generate RETURNING clause
         let returning = self
             .analysis
-            .column_fields()
+            .column_fields
+            .iter()
             .map(|field| field.column.to_string())
             .collect::<Vec<String>>()
             .join(", ");
@@ -58,7 +60,7 @@ impl<'a> PersistCodegen<'a> {
         );
 
         // Generate field bindings (self.field1, self.field2, ...)
-        let field_bindings = self.analysis.column_fields().map(|field| {
+        let field_bindings = self.analysis.column_fields.iter().map(|field| {
             let ident = &field.ident;
             let field_name = ident.to_string();
             match &field.r#as {
@@ -101,7 +103,7 @@ impl<'a> PersistCodegen<'a> {
     /// Generates the `save()` method using the Layer 2 query builder.
     fn generate_fn_save(&self) -> TokenStream {
         // Generate .set() calls for each column field
-        let set_calls = self.analysis.column_fields().map(|field| {
+        let set_calls = self.analysis.column_fields.iter().map(|field| {
             let const_name = &field.const_column_name;
             let ident = &field.ident;
             let field_name = ident.to_string();

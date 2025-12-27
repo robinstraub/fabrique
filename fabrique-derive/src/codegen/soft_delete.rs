@@ -1,4 +1,5 @@
-use crate::{Analysis, analysis::ast::ModelField};
+use crate::Analysis;
+use crate::analysis::ast::ColumnField;
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -17,7 +18,7 @@ impl<'a> SoftDeleteCodegen<'a> {
     pub fn generate(self) -> Option<TokenStream> {
         let soft_delete_field = self
             .analysis
-            .fields
+            .column_fields
             .iter()
             .find(|field| field.soft_delete)?;
 
@@ -37,10 +38,10 @@ impl<'a> SoftDeleteCodegen<'a> {
         })
     }
 
-    fn generate_fn_soft_delete(&self, soft_delete_field: &ModelField) -> TokenStream {
+    fn generate_fn_soft_delete(&self, soft_delete_field: &ColumnField) -> TokenStream {
         let primary_key = self
             .analysis
-            .fields
+            .column_fields
             .iter()
             .filter(|field| field.primary_key);
 
@@ -56,7 +57,7 @@ impl<'a> SoftDeleteCodegen<'a> {
             self.analysis.model.table_name, soft_delete_field.ident, clause
         );
 
-        let bindings = primary_key.map(|ModelField { ident, .. }| quote! { self.#ident });
+        let bindings = primary_key.map(|ColumnField { ident, .. }| quote! { self.#ident });
 
         quote! {
             fn soft_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
@@ -71,10 +72,10 @@ impl<'a> SoftDeleteCodegen<'a> {
         }
     }
 
-    fn generate_fn_soft_destroy(&self, soft_delete_field: &ModelField) -> TokenStream {
+    fn generate_fn_soft_destroy(&self, soft_delete_field: &ColumnField) -> TokenStream {
         let primary_key: Vec<_> = self
             .analysis
-            .fields
+            .column_fields
             .iter()
             .filter(|field| field.primary_key)
             .collect();
@@ -92,7 +93,7 @@ impl<'a> SoftDeleteCodegen<'a> {
         );
 
         let binds = match primary_key.as_slice() {
-            [ModelField { ident, .. }] => quote! { .bind(#ident) },
+            [ColumnField { ident, .. }] => quote! { .bind(#ident) },
             composite => {
                 let indices = (0..composite.len()).map(syn::Index::from);
                 quote! { #(.bind(id.#indices))* }
@@ -115,10 +116,10 @@ impl<'a> SoftDeleteCodegen<'a> {
         }
     }
 
-    fn generate_fn_restore(&self, soft_delete_field: &ModelField) -> TokenStream {
+    fn generate_fn_restore(&self, soft_delete_field: &ColumnField) -> TokenStream {
         let primary_key: Vec<_> = self
             .analysis
-            .fields
+            .column_fields
             .iter()
             .filter(|field| field.primary_key)
             .collect();
@@ -159,10 +160,10 @@ impl<'a> SoftDeleteCodegen<'a> {
         }
     }
 
-    fn generate_fn_trashed(&self, soft_delete_field: &ModelField) -> TokenStream {
+    fn generate_fn_trashed(&self, soft_delete_field: &ColumnField) -> TokenStream {
         let primary_key: Vec<_> = self
             .analysis
-            .fields
+            .column_fields
             .iter()
             .filter(|field| field.primary_key)
             .collect();

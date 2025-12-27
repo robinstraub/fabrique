@@ -1,5 +1,4 @@
 use crate::Analysis;
-use crate::analysis::ast::FieldKind;
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -49,7 +48,8 @@ impl<'a> ModelCodegen<'a> {
     fn generate_ty_primary_key(&self) -> TokenStream {
         let primary_keys: Vec<_> = self
             .analysis
-            .column_fields()
+            .column_fields
+            .iter()
             .filter(|field| field.primary_key)
             .collect();
 
@@ -68,7 +68,8 @@ impl<'a> ModelCodegen<'a> {
     fn generate_ty_soft_delete_column(&self) -> TokenStream {
         match self
             .analysis
-            .column_fields()
+            .column_fields
+            .iter()
             .find(|field| field.soft_delete)
         {
             Some(field) => {
@@ -82,7 +83,8 @@ impl<'a> ModelCodegen<'a> {
     fn generate_fn_primary_key(&self) -> TokenStream {
         let primary_keys: Vec<_> = self
             .analysis
-            .column_fields()
+            .column_fields
+            .iter()
             .filter(|field| field.primary_key)
             .collect();
 
@@ -121,7 +123,8 @@ impl<'a> ModelCodegen<'a> {
     fn generate_fn_columns(&self) -> TokenStream {
         let columns: Vec<_> = self
             .analysis
-            .column_fields()
+            .column_fields
+            .iter()
             .map(|field| field.column.as_str())
             .collect();
 
@@ -135,7 +138,8 @@ impl<'a> ModelCodegen<'a> {
     fn generate_fn_primary_key_columns(&self) -> TokenStream {
         let pk_columns: Vec<_> = self
             .analysis
-            .column_fields()
+            .column_fields
+            .iter()
             .filter(|field| field.primary_key)
             .map(|field| field.column.as_str())
             .collect();
@@ -150,7 +154,8 @@ impl<'a> ModelCodegen<'a> {
     fn generate_fn_soft_delete_column(&self) -> TokenStream {
         let soft_delete = self
             .analysis
-            .column_fields()
+            .column_fields
+            .iter()
             .find(|field| field.soft_delete)
             .map(|field| {
                 let const_column_name = &field.const_column_name;
@@ -170,12 +175,10 @@ impl<'a> ModelCodegen<'a> {
     fn generate_lazy_loading_methods(&self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
 
-        let methods = self.analysis.has_many_fields().map(|field| {
+        let methods = self.analysis.has_many_fields.iter().map(|field| {
             let method_name = &field.ident;
-            let FieldKind::HasMany(ref target_type) = field.kind else {
-                unreachable!("has_many_fields() only returns HasMany fields")
-            };
-            let foreign_key = field.foreign_key.as_ref().expect("HasMany requires foreign_key");
+            let target_type = &field.target_type;
+            let foreign_key = &field.foreign_key;
 
             quote! {
                 pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Filtered<::fabrique::sql::Selected>> {

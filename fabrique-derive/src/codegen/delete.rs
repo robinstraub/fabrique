@@ -33,7 +33,8 @@ impl<'a> DeleteCodegen<'a> {
     fn generate_fn_delete(&self) -> TokenStream {
         let soft_delete = self
             .analysis
-            .column_fields()
+            .column_fields
+            .iter()
             .find(|field| field.soft_delete);
 
         match soft_delete {
@@ -59,7 +60,8 @@ impl<'a> DeleteCodegen<'a> {
     fn generate_fn_destroy(&self) -> TokenStream {
         let soft_delete = self
             .analysis
-            .column_fields()
+            .column_fields
+            .iter()
             .find(|field| field.soft_delete);
 
         match soft_delete {

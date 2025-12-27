@@ -1,5 +1,5 @@
 use crate::analysis::Analysis;
-use crate::analysis::ast::FieldKind;
+use crate::analysis::ast::HasManyField;
 use heck::ToSnakeCase;
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -17,17 +17,6 @@ pub struct FactoryRelation<'a> {
 
     /// The related model type.
     referenced_type: &'a Ident,
-}
-
-pub struct HasManyRelation<'a> {
-    /// The field identifier (e.g., `orders`).
-    field_ident: &'a Ident,
-
-    /// The target type (e.g., `Order`).
-    target_type: &'a Ident,
-
-    /// The foreign key path (e.g., `Order::CUSTOMER_ID`).
-    foreign_key: &'a syn::Path,
 }
 
 /// Code generator for factory struct implementations.
@@ -109,35 +98,21 @@ impl<'a> FactoryCodegen<'a> {
         })
     }
 
-    /// Extracts HasMany relations from the analysis.
-    fn has_many_relations(&self) -> impl Iterator<Item = HasManyRelation<'a>> {
-        self.analysis.has_many_fields().map(|field| {
-            let FieldKind::HasMany(ref target_type) = field.kind else {
-                unreachable!("has_many_fields() only returns HasMany fields")
-            };
-            let foreign_key = field
-                .foreign_key
-                .as_ref()
-                .expect("HasMany fields require foreign_key");
-
-            HasManyRelation {
-                field_ident: &field.ident,
-                target_type,
-                foreign_key,
-            }
-        })
+    /// Returns HasMany fields from the analysis.
+    fn has_many_fields(&self) -> impl Iterator<Item = &'a HasManyField> {
+        self.analysis.has_many_fields.iter()
     }
 
     /// Generates pending HasMany fields for the factory struct.
     fn generate_has_many_fields(&self) -> impl Iterator<Item = TokenStream> + '_ {
-        self.has_many_relations().map(|relation| {
+        self.has_many_fields().map(|field| {
             let field_name = Ident::new(
-                &format!("pending_{}", relation.field_ident),
-                relation.field_ident.span(),
+                &format!("pending_{}", field.ident),
+                field.ident.span(),
             );
             let target_factory = Ident::new(
-                &format!("{}Factory", relation.target_type),
-                relation.target_type.span(),
+                &format!("{}Factory", field.target_type),
+                field.target_type.span(),
             );
 
             quote! {
@@ -148,18 +123,18 @@ impl<'a> FactoryCodegen<'a> {
 
     /// Generates `has_<relation>` setter methods for HasMany fields.
     fn generate_has_many_methods(&self) -> impl Iterator<Item = TokenStream> + '_ {
-        self.has_many_relations().map(|relation| {
+        self.has_many_fields().map(|field| {
             let method_name = Ident::new(
-                &format!("has_{}", relation.field_ident),
-                relation.field_ident.span(),
+                &format!("has_{}", field.ident),
+                field.ident.span(),
             );
             let pending_field = Ident::new(
-                &format!("pending_{}", relation.field_ident),
-                relation.field_ident.span(),
+                &format!("pending_{}", field.ident),
+                field.ident.span(),
             );
             let target_factory = Ident::new(
-                &format!("{}Factory", relation.target_type),
-                relation.target_type.span(),
+                &format!("{}Factory", field.target_type),
+                field.target_type.span(),
             );
 
             quote! {
@@ -175,9 +150,9 @@ impl<'a> FactoryCodegen<'a> {
     ///
     /// Transforms each field into an Option so users can either set specific
     /// values or let the factory generate defaults when building the final
-    /// struct. HasMany fields are excluded as they're not part of the factory.
-    fn generate_factory_fields(&self) -> impl Iterator<Item = TokenStream> {
-        self.analysis.column_fields().map(|field| {
+    /// struct.
+    fn generate_factory_fields(&self) -> impl Iterator<Item = TokenStream> + '_ {
+        self.analysis.column_fields.iter().map(|field| {
             let name = &field.ident;
             let ty = &field.ty;
             quote! {
@@ -302,34 +277,33 @@ impl<'a> FactoryCodegen<'a> {
         });
 
         // Step 3: Create the main instance
-        let struct_fields = self.analysis.fields.iter().map(|field| {
+        let column_fields = self.analysis.column_fields.iter().map(|field| {
             let name = &field.ident;
-
-            match field.kind {
-                FieldKind::Column => {
-                    let ty = &field.ty;
-                    quote! {
-                        #name: self.#name.unwrap_or(<#ty as Default>::default())
-                    }
-                }
-                FieldKind::HasMany(_) => {
-                    quote! {
-                        #name: ::fabrique::HasMany::default()
-                    }
-                }
+            let ty = &field.ty;
+            quote! {
+                #name: self.#name.unwrap_or(<#ty as Default>::default())
             }
         });
 
+        let has_many_init = self.has_many_fields().map(|field| {
+            let name = &field.ident;
+            quote! {
+                #name: ::fabrique::HasMany::default()
+            }
+        });
+
+        let struct_fields = column_fields.chain(has_many_init);
+
         // Step 4: Create has_many children
-        let has_many_create = self.has_many_relations().map(|relation| {
+        let has_many_create = self.has_many_fields().map(|field| {
             let pending_field = Ident::new(
-                &format!("pending_{}", relation.field_ident),
-                relation.field_ident.span(),
+                &format!("pending_{}", field.ident),
+                field.ident.span(),
             );
 
             // Extract the FK field method name from the path (e.g., Order::CUSTOMER_ID ->
             // customer_id)
-            let fk_method = relation
+            let fk_method = field
                 .foreign_key
                 .segments
                 .last()
@@ -386,7 +360,7 @@ impl<'a> FactoryCodegen<'a> {
 
     /// Generates the `new()` method for the factory struct.
     fn generate_factory_method_new(&self) -> TokenStream {
-        let initialized_fields = self.analysis.column_fields().map(|field| {
+        let initialized_fields = self.analysis.column_fields.iter().map(|field| {
             let name = &field.ident;
             quote! {
                 #name: None
@@ -400,10 +374,10 @@ impl<'a> FactoryCodegen<'a> {
             }
         });
 
-        let initialized_has_many_fields = self.has_many_relations().map(|relation| {
+        let initialized_has_many_fields = self.has_many_fields().map(|field| {
             let name = Ident::new(
-                &format!("pending_{}", relation.field_ident),
-                relation.field_ident.span(),
+                &format!("pending_{}", field.ident),
+                field.ident.span(),
             );
             quote! {
                 #name: Vec::new()
@@ -425,8 +399,8 @@ impl<'a> FactoryCodegen<'a> {
     ///
     /// Each setter method takes a value and stores it in the factory's optional
     /// field, enabling a fluent builder pattern for constructing objects.
-    fn generate_factory_method_fields(&self) -> impl Iterator<Item = TokenStream> {
-        self.analysis.column_fields().map(|field| {
+    fn generate_factory_method_fields(&self) -> impl Iterator<Item = TokenStream> + '_ {
+        self.analysis.column_fields.iter().map(|field| {
             let name = &field.ident;
             let ty = &field.ty;
 

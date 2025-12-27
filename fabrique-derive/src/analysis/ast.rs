@@ -5,17 +5,6 @@ use syn::{Ident, Path, Type};
 
 use crate::error::{Error, ErrorKind};
 
-/// Distinguishes between regular database columns and relationship markers.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FieldKind {
-    /// A regular database column that maps to a table column.
-    Column,
-    /// A HasMany relationship marker (not stored in database).
-    /// Contains the target type identifier (e.g., `Order` from
-    /// `HasMany<Order>`).
-    HasMany(Ident),
-}
-
 /// Attributes parsed from `#[fabrique(...)]` struct annotations.
 #[derive(FromDeriveInput)]
 #[darling(attributes(fabrique))]
@@ -81,8 +70,9 @@ pub struct Relation {
     pub referenced_type: Ident,
 }
 
+/// A database column field.
 #[derive(Debug)]
-pub struct ModelField {
+pub struct ColumnField {
     /// The field ident.
     pub ident: Ident,
 
@@ -111,42 +101,57 @@ pub struct ModelField {
     pub relation: Option<Relation>,
 
     pub soft_delete: bool,
-
-    /// The kind of field (column or HasMany relationship).
-    pub kind: FieldKind,
-
-    /// For HasMany fields: the foreign key path (e.g., `Order::CUSTOMER_ID`).
-    pub foreign_key: Option<Path>,
 }
 
-impl ModelField {
+/// A HasMany relationship field (not stored in database).
+#[derive(Debug)]
+pub struct HasManyField {
+    /// The field ident (e.g., `orders`).
+    pub ident: Ident,
+
+    /// The field span.
+    pub span: Span,
+
+    /// The target type (e.g., `Order` from `HasMany<Order>`).
+    pub target_type: Ident,
+
+    /// The foreign key path (e.g., `Order::CUSTOMER_ID`).
+    pub foreign_key: Path,
+}
+
+/// Result of parsing a field - either a column or a HasMany relation.
+#[derive(Debug)]
+pub enum ParsedField {
+    Column(ColumnField),
+    HasMany(HasManyField),
+}
+
+impl ParsedField {
     pub fn try_from(attrs: ModelFieldAttrs, struct_name: String) -> Result<Self, Error> {
         let ident = attrs.ident.ok_or_else(|| {
             Error::new(attrs.span, ErrorKind::UnsupportedDataStructureTupleStruct)
         })?;
 
-        // Determine field kind based on type
-        let kind = match Self::parse_parameterized_type(&attrs.ty) {
-            Some((outer, target)) if outer == "HasMany" => {
-                // HasMany fields require a foreign_key attribute
-                if attrs.foreign_key.is_none() {
-                    return Err(Error::new(
-                        ident.span(),
-                        ErrorKind::MissingForeignKeyAttribute,
-                    ));
-                }
-                FieldKind::HasMany(target.clone())
+        // Check if this is a HasMany field
+        if let Some((outer, target)) = Self::parse_parameterized_type(&attrs.ty) {
+            if outer == "HasMany" {
+                let foreign_key = attrs.foreign_key.ok_or_else(|| {
+                    Error::new(ident.span(), ErrorKind::MissingForeignKeyAttribute)
+                })?;
+
+                return Ok(ParsedField::HasMany(HasManyField {
+                    ident,
+                    span: attrs.span,
+                    target_type: target.clone(),
+                    foreign_key,
+                }));
             }
-            _ => FieldKind::Column,
-        };
+        }
 
-        // Simple column name without type annotations (for runtime queries)
+        // Regular column field
         let column = ident.to_string();
-
         let const_column_name = Ident::new(&ident.to_string().to_uppercase(), ident.span());
-
         let pascal_case_field = ident.to_string().to_pascal_case();
-
         let type_name = format!("{}{}Column", struct_name, pascal_case_field);
         let column_type = syn::Ident::new(&type_name, ident.span());
 
@@ -155,7 +160,7 @@ impl ModelField {
             referenced_type,
         });
 
-        Ok(Self {
+        Ok(ParsedField::Column(ColumnField {
             ident,
             span: attrs.span,
             ty: attrs.ty,
@@ -166,9 +171,7 @@ impl ModelField {
             primary_key: attrs.primary_key,
             relation,
             soft_delete: attrs.soft_delete,
-            kind,
-            foreign_key: attrs.foreign_key,
-        })
+        }))
     }
 
     /// Parse a parameterized type like `HasMany<Order>` into (outer,
@@ -196,7 +199,7 @@ mod tests {
     use syn::parse_quote;
 
     #[test]
-    fn test_model_field_try_from_without_ident_fails() {
+    fn test_parsed_field_try_from_without_ident_fails() {
         // Arrange a ModelFieldAttrs without an identifier (simulating tuple struct
         // field)
         let attrs = ModelFieldAttrs {
@@ -210,8 +213,8 @@ mod tests {
             foreign_key: None,
         };
 
-        // Act the call to the `ModelField::try_from` method
-        let result = ModelField::try_from(attrs, "Anvil".to_owned());
+        // Act
+        let result = ParsedField::try_from(attrs, "Anvil".to_owned());
 
         // Assert the error
         assert!(result.is_err());
@@ -237,7 +240,7 @@ mod tests {
         };
 
         // Act
-        let result = ModelField::try_from(attrs, "Customer".to_owned());
+        let result = ParsedField::try_from(attrs, "Customer".to_owned());
 
         // Assert
         assert!(result.is_err());
@@ -260,17 +263,19 @@ mod tests {
         };
 
         // Act
-        let result = ModelField::try_from(attrs, "Customer".to_owned());
+        let result = ParsedField::try_from(attrs, "Customer".to_owned());
 
         // Assert
         assert!(result.is_ok());
-        let field = result.unwrap();
-        assert!(matches!(field.kind, FieldKind::HasMany(ref target) if target == "Order"));
-        assert!(field.foreign_key.is_some());
+        let ParsedField::HasMany(field) = result.unwrap() else {
+            panic!("Expected HasManyField");
+        };
+        assert_eq!(field.target_type, "Order");
+        assert!(field.foreign_key.segments.last().is_some());
     }
 
     #[test]
-    fn test_regular_field_is_column_kind() {
+    fn test_regular_field_is_column() {
         // Arrange a regular field
         let attrs = ModelFieldAttrs {
             ident: Some(parse_quote!(name)),
@@ -284,11 +289,10 @@ mod tests {
         };
 
         // Act
-        let result = ModelField::try_from(attrs, "Customer".to_owned());
+        let result = ParsedField::try_from(attrs, "Customer".to_owned());
 
         // Assert
         assert!(result.is_ok());
-        let field = result.unwrap();
-        assert_eq!(field.kind, FieldKind::Column);
+        assert!(matches!(result.unwrap(), ParsedField::Column(_)));
     }
 }
