@@ -12,7 +12,7 @@ To enable soft deletes, add a field annotated with `#[fabrique(soft_delete)]`. T
 use chrono::{DateTime, Utc};
 
 #[derive(Factory, Model)]
-pub struct Anvil {
+pub struct User {
     id: Uuid,
 
     #[fabrique(soft_delete)]
@@ -31,14 +31,14 @@ When you call `delete` on a model with soft deletes enabled, the `deleted_at` co
 # use chrono::{DateTime, Utc};
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct User {
 #     id: Uuid,
 #     #[fabrique(soft_delete)]
 #     deleted_at: Option<DateTime<Utc>>,
 # }
 #
-# async fn example(pool: Pool<Postgres>, anvil: Anvil) -> Result<(), fabrique::Error> {
-anvil.delete(&pool).await?;
+# async fn example(pool: Pool<Postgres>, user: User) -> Result<(), fabrique::Error> {
+user.delete(&pool).await?;
 // Record still exists with deleted_at set
 # Ok(())
 # }
@@ -57,15 +57,15 @@ Use the `trashed` method to check if a model has been soft deleted:
 # use chrono::{DateTime, Utc};
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct User {
 #     id: Uuid,
 #     #[fabrique(soft_delete)]
 #     deleted_at: Option<DateTime<Utc>>,
 # }
 #
-# async fn example(pool: Pool<Postgres>, anvil: Anvil) -> Result<(), fabrique::Error> {
-if anvil.trashed(&pool).await? {
-    println!("This anvil has been deleted");
+# async fn example(pool: Pool<Postgres>, user: User) -> Result<(), fabrique::Error> {
+if user.trashed(&pool).await? {
+    println!("This user has been deleted");
 }
 # Ok(())
 # }
@@ -82,14 +82,14 @@ To restore a soft-deleted record, use the `restore` method:
 # use chrono::{DateTime, Utc};
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct User {
 #     id: Uuid,
 #     #[fabrique(soft_delete)]
 #     deleted_at: Option<DateTime<Utc>>,
 # }
 #
-# async fn example(pool: Pool<Postgres>, anvil: Anvil) -> Result<(), fabrique::Error> {
-anvil.restore(&pool).await?;
+# async fn example(pool: Pool<Postgres>, user: User) -> Result<(), fabrique::Error> {
+user.restore(&pool).await?;
 // deleted_at is now null, record appears in queries again
 # Ok(())
 # }
@@ -106,14 +106,14 @@ To permanently remove a soft-deleted record from the database, use `hard_delete`
 # use chrono::{DateTime, Utc};
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct User {
 #     id: Uuid,
 #     #[fabrique(soft_delete)]
 #     deleted_at: Option<DateTime<Utc>>,
 # }
 #
-# async fn example(pool: Pool<Postgres>, anvil: Anvil) -> Result<(), fabrique::Error> {
-anvil.hard_delete(&pool).await?;
+# async fn example(pool: Pool<Postgres>, user: User) -> Result<(), fabrique::Error> {
+user.hard_delete(&pool).await?;
 // Record is permanently removed
 # Ok(())
 # }

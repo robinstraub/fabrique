@@ -15,21 +15,21 @@ Create models with only the attributes relevant to your test:
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct Product {
 #     #[fabrique(primary_key)]
 #     id: Uuid,
 #     name: String,
-#     weight: i32,
+#     price_cents: i32,
 # }
 #
-# async fn test_heavy_anvils(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+# async fn test_heavy_products(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
 // Only set the attributes you care about
-let anvil = Anvil::factory()
-    .weight(150)
+let product = Product::factory()
+    .price_cents(150)
     .create(&pool)
     .await?;
 
-assert!(anvil.weight > 100);
+assert!(product.price_cents > 100);
 # Ok(())
 # }
 # fn main() {}
@@ -138,16 +138,16 @@ Create multiple records by calling `create` in a loop or using iterators:
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Anvil {
+# pub struct Product {
 #     #[fabrique(primary_key)]
 #     id: Uuid,
-#     weight: i32,
+#     price_cents: i32,
 # }
 #
 # async fn test_bulk_creation(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
 for i in 0..5 {
-    Anvil::factory()
-        .weight(i * 10)
+    Product::factory()
+        .price_cents(i * 10)
         .create(&pool)
         .await?;
 }

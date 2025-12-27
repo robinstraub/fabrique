@@ -15,11 +15,11 @@ To define a factory, derive the `Factory` macro alongside `Model`:
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 #[derive(Model, Factory)]
-pub struct Anvil {
+pub struct Product {
     #[fabrique(primary_key)]
     id: Uuid,
     name: String,
-    weight: i32,
+    price_cents: i32,
 }
 # fn main() {}
 ```
@@ -38,17 +38,17 @@ persist to the database:
 # use uuid::Uuid;
 #
 # #[derive(Model, Factory)]
-# pub struct Anvil {
+# pub struct Product {
 #     #[fabrique(primary_key)]
 #     id: Uuid,
 #     name: String,
-#     weight: i32,
+#     price_cents: i32,
 # }
 #
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
-let anvil = Anvil::factory()
-    .name("Heavy Duty".to_string())
-    .weight(100)
+let product = Product::factory()
+    .name("Anvil 3000".to_string())
+    .price_cents(100)
     .create(&pool)
     .await?;
 # Ok(())

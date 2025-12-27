@@ -3,33 +3,50 @@ use sqlx::{Pool, Postgres};
 use uuid::Uuid;
 
 #[derive(Debug, Factory, Model)]
-pub struct Anvil {
+pub struct User {
     id: Uuid,
-    material: String,
     name: String,
-    weight: i16,
+    email: String,
+}
+
+#[derive(Debug, Factory, Model)]
+pub struct Product {
+    id: Uuid,
+    name: String,
+    price_cents: i32,
+    in_stock: bool,
 }
 
 #[derive(Debug, Factory, Model)]
 pub struct Order {
     id: Uuid,
+    #[fabrique(belongs_to = "User")]
+    user_id: Uuid,
+    status: String,
 }
 
 #[derive(Debug, Factory, PartialEq, Model)]
 #[fabrique(table = "order_lines")]
 pub struct OrderLine {
-    #[fabrique(primary_key)]
-    anvil_id: Uuid,
-
-    #[fabrique(primary_key)]
+    #[fabrique(primary_key, belongs_to = "Order")]
     order_id: Uuid,
 
-    amount: i16,
+    #[fabrique(primary_key, belongs_to = "Product")]
+    product_id: Uuid,
+
+    quantity: i32,
+    unit_price_cents: i32,
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn test_soft_delete(connection: Pool<Postgres>) {
-    let anvil = Anvil::factory()
+async fn test_composite_primary_key(connection: Pool<Postgres>) {
+    let user = User::factory()
+        .id(Uuid::new_v4())
+        .create(&connection)
+        .await
+        .unwrap();
+
+    let product = Product::factory()
         .id(Uuid::new_v4())
         .create(&connection)
         .await
@@ -37,20 +54,21 @@ async fn test_soft_delete(connection: Pool<Postgres>) {
 
     let order = Order::factory()
         .id(Uuid::new_v4())
+        .user_id(user.id)
         .create(&connection)
         .await
         .unwrap();
 
     let order_line = OrderLine::factory()
-        .anvil_id(anvil.id)
         .order_id(order.id)
+        .product_id(product.id)
         .create(&connection)
         .await
         .unwrap();
 
     assert_eq!(OrderLine::all(&connection).await.unwrap(), vec![order_line]);
 
-    let result = OrderLine::destroy(&connection, (anvil.id, order.id)).await;
+    let result = OrderLine::destroy(&connection, (order.id, product.id)).await;
     assert!(result.is_ok());
     assert_eq!(OrderLine::all(&connection).await.unwrap(), vec![]);
 }

@@ -171,10 +171,11 @@ impl<'a> FactoryCodegen<'a> {
     }
 
     /// Generates factory relation fields for linked factory dependencies.
-    fn generate_factory_relation_fields(&self) -> impl Iterator<Item = TokenStream> {
-        self.relations().map(|relation| {
+    fn generate_factory_relation_fields(&self) -> impl Iterator<Item = TokenStream> + '_ {
+        let struct_name = self.analysis.ident.to_string();
+        self.relations().map(move |relation| {
             let factory_field = relation.factory_field;
-            let enum_ident = Self::relation_enum_ident(relation.name);
+            let enum_ident = Self::relation_enum_ident(&struct_name, relation.name);
 
             quote! {
                 #factory_field: std::option::Option<#enum_ident>
@@ -188,8 +189,9 @@ impl<'a> FactoryCodegen<'a> {
     /// or a factory to create a new instance. This design avoids requiring
     /// Clone on model types.
     fn generate_relation_enums(&self) -> impl Iterator<Item = TokenStream> + '_ {
-        self.relations().map(|relation| {
-            let enum_ident = Self::relation_enum_ident(relation.name);
+        let struct_name = self.analysis.ident.to_string();
+        self.relations().map(move |relation| {
+            let enum_ident = Self::relation_enum_ident(&struct_name, relation.name);
             let referenced_type = relation.referenced_type;
             let factory_type = Ident::new(
                 &format!("{}Factory", referenced_type),
@@ -208,8 +210,9 @@ impl<'a> FactoryCodegen<'a> {
 
     /// Generates From implementations for relation enums.
     fn generate_relation_from_impls(&self) -> impl Iterator<Item = TokenStream> + '_ {
-        self.relations().flat_map(|relation| {
-            let enum_ident = Self::relation_enum_ident(relation.name);
+        let struct_name = self.analysis.ident.to_string();
+        self.relations().flat_map(move |relation| {
+            let enum_ident = Self::relation_enum_ident(&struct_name, relation.name);
             let referenced_type = relation.referenced_type;
             let factory_type = Ident::new(
                 &format!("{}Factory", referenced_type),
@@ -236,19 +239,23 @@ impl<'a> FactoryCodegen<'a> {
     }
 
     /// Helper to generate relation enum identifier.
-    fn relation_enum_ident(relation_name: &str) -> Ident {
-        let enum_name = format!(
-            "{}Relation",
-            relation_name
-                .chars()
-                .enumerate()
-                .map(|(i, c)| if i == 0 {
+    ///
+    /// Generates `{StructName}{RelationName}Relation` to avoid name collisions
+    /// when multiple models in the same module have belongs_to to the same
+    /// parent.
+    fn relation_enum_ident(struct_name: &str, relation_name: &str) -> Ident {
+        let capitalized_relation = relation_name
+            .chars()
+            .enumerate()
+            .map(|(i, c)| {
+                if i == 0 {
                     c.to_uppercase().to_string()
                 } else {
                     c.to_string()
-                })
-                .collect::<String>()
-        );
+                }
+            })
+            .collect::<String>();
+        let enum_name = format!("{}{}Relation", struct_name, capitalized_relation);
         Ident::new(&enum_name, proc_macro2::Span::call_site())
     }
 
@@ -266,10 +273,11 @@ impl<'a> FactoryCodegen<'a> {
         // Step 1: Acquire connection is inline in the quote! below
 
         // Step 2: Create belongs_to relations
+        let struct_name = struct_ident.to_string();
         let belongs_to_create = self.relations().map(|relation| {
             let field = &relation.base_ident;
             let factory_field = relation.factory_field;
-            let enum_ident = Self::relation_enum_ident(relation.name);
+            let enum_ident = Self::relation_enum_ident(&struct_name, relation.name);
 
             quote! {
                 if let Some(relation) = self.#factory_field.take() {
@@ -432,13 +440,14 @@ impl<'a> FactoryCodegen<'a> {
     ///
     /// These methods accept either a model instance or a factory instance
     /// and store them for deferred execution during `create()`.
-    fn generate_factory_methods_for_relation(&self) -> impl Iterator<Item = TokenStream> {
-        self.relations().map(|relation| {
+    fn generate_factory_methods_for_relation(&self) -> impl Iterator<Item = TokenStream> + '_ {
+        let struct_name = self.analysis.ident.to_string();
+        self.relations().map(move |relation| {
             let referenced_type = relation.referenced_type;
             let method_name =
                 Ident::new(&format!("for_{}", &relation.name), referenced_type.span());
             let field_ident = &relation.factory_field;
-            let enum_ident = Self::relation_enum_ident(relation.name);
+            let enum_ident = Self::relation_enum_ident(&struct_name, relation.name);
 
             quote! {
                 pub fn #method_name(mut self, input: impl Into<#enum_ident>) -> Self
@@ -532,20 +541,20 @@ mod tests {
                 }
 
                 #[derive(Clone)]
-                pub enum HammerRelation {
+                pub enum AnvilHammerRelation {
                     PrimaryKey(<Hammer as fabrique::Model>::PrimaryKey),
                     Factory(HammerFactory),
                 }
 
-                impl From<Hammer> for HammerRelation {
+                impl From<Hammer> for AnvilHammerRelation {
                     fn from(model: Hammer) -> Self {
-                        HammerRelation::PrimaryKey(fabrique::Model::primary_key(&model))
+                        AnvilHammerRelation::PrimaryKey(fabrique::Model::primary_key(&model))
                     }
                 }
 
-                impl From<HammerFactory> for HammerRelation {
+                impl From<HammerFactory> for AnvilHammerRelation {
                     fn from(factory: HammerFactory) -> Self {
-                        HammerRelation::Factory(factory)
+                        AnvilHammerRelation::Factory(factory)
                     }
                 }
 
@@ -555,7 +564,7 @@ mod tests {
                     hammer_id: std::option::Option<u32>,
                     hardness: std::option::Option<u32>,
                     weight: std::option::Option<u32>,
-                    hammer_relation: std::option::Option<HammerRelation>,
+                    hammer_relation: std::option::Option<AnvilHammerRelation>,
                 }
 
                 impl fabrique::Factory for AnvilFactory {
@@ -574,8 +583,8 @@ mod tests {
 
                             if let Some(relation) = self.hammer_relation.take() {
                                 let key = match relation {
-                                    HammerRelation::PrimaryKey(pk) => pk,
-                                    HammerRelation::Factory(factory) => {
+                                    AnvilHammerRelation::PrimaryKey(pk) => pk,
+                                    AnvilHammerRelation::Factory(factory) => {
                                         let instance = fabrique::Factory::create(factory, &mut *conn).await?;
                                         fabrique::Model::primary_key(&instance)
                                     }
@@ -635,7 +644,7 @@ mod tests {
                         self
                     }
 
-                    pub fn for_hammer(mut self, input: impl Into<HammerRelation>) -> Self {
+                    pub fn for_hammer(mut self, input: impl Into<AnvilHammerRelation>) -> Self {
                         self.hammer_relation = Some(input.into());
                         self
                     }
@@ -691,7 +700,7 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                explosive_relation: std::option::Option<ExplosiveRelation>
+                explosive_relation: std::option::Option<DynamiteExplosiveRelation>
             }
             .to_string()
         );
@@ -732,8 +741,8 @@ mod tests {
 
                         if let Some(relation) = self.hammer_relation.take() {
                             let key = match relation {
-                                HammerRelation::PrimaryKey(pk) => pk,
-                                HammerRelation::Factory(factory) => {
+                                AnvilHammerRelation::PrimaryKey(pk) => pk,
+                                AnvilHammerRelation::Factory(factory) => {
                                     let instance = fabrique::Factory::create(factory, &mut *conn).await?;
                                     fabrique::Model::primary_key(&instance)
                                 }
@@ -850,7 +859,7 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                pub fn for_explosive(mut self, input: impl Into<ExplosiveRelation>) -> Self {
+                pub fn for_explosive(mut self, input: impl Into<DynamiteExplosiveRelation>) -> Self {
                     self.explosive_relation = Some(input.into());
                     self
                 }

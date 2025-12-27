@@ -35,30 +35,30 @@
 //!
 //! // Define a model
 //! #[derive(Model, Factory)]
-//! pub struct Anvil {
+//! pub struct Product {
 //!     id: uuid::Uuid,
-//!     weight: i32,
-//!     material: String,
+//!     name: String,
+//!     price_cents: i32,
 //! }
 //!
 //! # async fn example(db: &PgPool) -> Result<(), fabrique::Error> {
 //! // Query the database
-//! let heavy_anvils: Vec<Anvil> = Anvil::query()
+//! let expensive_products: Vec<Product> = Product::query()
 //!     .select()
-//!     .r#where(Anvil::WEIGHT, ">=", 100)
+//!     .r#where(Product::PRICE_CENTS, ">=", 1000)
 //!     .get(db)
 //!     .await?;
 //!
 //! // Create a new record
-//! let anvil = Anvil {
+//! let product = Product {
 //!     id: uuid::Uuid::new_v4(),
-//!     weight: 150,
-//!     material: "iron".to_string(),
+//!     name: "Anvil 3000".to_string(),
+//!     price_cents: 9999,
 //! };
-//! anvil.create(db).await?;
+//! product.create(db).await?;
 //!
 //! // Generate test data with factories
-//! let test_anvil = Anvil::factory().create(db).await?;
+//! let test_product = Product::factory().create(db).await?;
 //! # Ok(())
 //! # }
 //! ```

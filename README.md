@@ -18,24 +18,23 @@ A lightweight ORM for Rust that combines ease of use with Rust's safety guarante
 use fabrique::prelude::*;
 
 #[derive(Model, Factory)]
-#[fabrique(table = "anvils")]
-pub struct Anvil {
+pub struct Product {
     #[fabrique(primary_key)]
     pub id: Uuid,
     pub name: String,
-    pub weight: i32,
+    pub price_cents: i32,
 }
 
 // Query
-let anvils = Anvil::query()
+let products = Product::query()
     .select()
-    .r#where(Anvil::WEIGHT, ">=", 50)
+    .r#where(Product::PRICE_CENTS, ">=", 1000)
     .get(&pool)
     .await?;
 
 // Create test data
-let anvil = Anvil::factory()
-    .name("Heavy Duty".to_string())
+let product = Product::factory()
+    .name("Anvil 3000".to_string())
     .create(&pool)
     .await?;
 ```

@@ -26,7 +26,7 @@
 //! # use sqlx::{Pool, Postgres};
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
-//! let rows: Vec<(uuid::Uuid, String, i16)> = QueryBuilder::table("anvils")
+//! let rows: Vec<(uuid::Uuid, String, i32)> = QueryBuilder::table("products")
 //!     .get(&connection)
 //!     .await?;
 //! #     Ok(())
@@ -42,12 +42,12 @@
 //! # use sqlx::{Pool, Postgres};
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
-//! # let rows: Vec<(uuid::Uuid, String, i16)> = QueryBuilder::table("anvils")
+//! # let rows: Vec<(uuid::Uuid, String, i32)> = QueryBuilder::table("products")
 //! #     .get(&connection)
 //! #     .await?;
 //! #
-//! for (id, name, weight) in rows {
-//!     println!("Anvil {} weighs {}", name, weight);
+//! for (id, name, price_cents) in rows {
+//!     println!("Product {} costs {} cents", name, price_cents);
 //! }
 //! #     Ok(())
 //! # }
@@ -64,7 +64,7 @@
 //! # use sqlx::{Pool, Postgres};
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
-//! let row: Option<(uuid::Uuid, String, i16)> = QueryBuilder::table("anvils")
+//! let row: Option<(uuid::Uuid, String, i32)> = QueryBuilder::table("products")
 //!     .first(&connection)
 //!     .await?;
 //! #     Ok(())
@@ -80,7 +80,7 @@
 //! # use sqlx::{Pool, Postgres};
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
-//! let row: (uuid::Uuid, String, i16) = QueryBuilder::table("anvils")
+//! let row: (uuid::Uuid, String, i32) = QueryBuilder::table("products")
 //!     .first_or_fail(&connection)
 //!     .await?;
 //! #     Ok(())

@@ -506,19 +506,19 @@ mod tests {
 
     /// Test model implementing required traits for query builder tests.
     #[derive(Debug, Default, PartialEq, FromRow)]
-    struct Anvil {
+    struct Product {
         id: Uuid,
-        material: String,
         name: String,
-        weight: i16,
+        price_cents: i32,
+        in_stock: bool,
     }
 
-    impl DatabaseAware for Anvil {
+    impl DatabaseAware for Product {
         type Database = Postgres;
         type Error = sqlx::Error;
     }
 
-    impl Model for Anvil {
+    impl Model for Product {
         type PrimaryKey = Uuid;
         type SoftDeleteColumn = Nil;
 
@@ -527,11 +527,11 @@ mod tests {
         }
 
         fn table_name() -> &'static str {
-            "anvils"
+            "products"
         }
 
         fn columns() -> &'static [&'static str] {
-            &["id", "material", "name", "weight"]
+            &["id", "name", "price_cents", "in_stock"]
         }
 
         fn primary_key_columns() -> &'static [&'static str] {
@@ -542,7 +542,7 @@ mod tests {
     /// Type-safe column marker for the `id` column.
     struct IdColumn;
 
-    impl Column<Anvil> for IdColumn {
+    impl Column<Product> for IdColumn {
         type Type = Uuid;
 
         fn name(&self) -> &'static str {
@@ -550,21 +550,10 @@ mod tests {
         }
     }
 
-    /// Type-safe column marker for the `material` column.
-    struct MaterialColumn;
-
-    impl Column<Anvil> for MaterialColumn {
-        type Type = String;
-
-        fn name(&self) -> &'static str {
-            "material"
-        }
-    }
-
     /// Type-safe column marker for the `name` column.
     struct NameColumn;
 
-    impl Column<Anvil> for NameColumn {
+    impl Column<Product> for NameColumn {
         type Type = String;
 
         fn name(&self) -> &'static str {
@@ -572,29 +561,40 @@ mod tests {
         }
     }
 
-    /// Type-safe column marker for the `weight` column.
-    struct WeightColumn;
+    /// Type-safe column marker for the `price_cents` column.
+    struct PriceCentsColumn;
 
-    impl Column<Anvil> for WeightColumn {
-        type Type = i16;
+    impl Column<Product> for PriceCentsColumn {
+        type Type = i32;
 
         fn name(&self) -> &'static str {
-            "weight"
+            "price_cents"
+        }
+    }
+
+    /// Type-safe column marker for the `in_stock` column.
+    struct InStockColumn;
+
+    impl Column<Product> for InStockColumn {
+        type Type = bool;
+
+        fn name(&self) -> &'static str {
+            "in_stock"
         }
     }
 
     #[test]
     fn test_primary_key() {
-        let anvil = Anvil::default();
-        assert_eq!(anvil.primary_key(), Uuid::default());
+        let product = Product::default();
+        assert_eq!(product.primary_key(), Uuid::default());
     }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn test_where(connection: Pool<Postgres>) {
-        let result: Result<Vec<Anvil>, sqlx::Error> = QueryBuilder::<Anvil>::default()
+        let result: Result<Vec<Product>, sqlx::Error> = QueryBuilder::<Product>::default()
             .select()
             // Call `where` on `Selected`, transitioning to `Filtered`
-            .r#where(WeightColumn, ">=", 10)
+            .r#where(PriceCentsColumn, ">=", 10)
             // Ensure the generated query can be executed
             .get(&connection)
             .await;
@@ -605,10 +605,10 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn test_where_null(connection: Pool<Postgres>) {
-        let result: Result<Vec<Anvil>, sqlx::Error> = QueryBuilder::<Anvil>::default()
+        let result: Result<Vec<Product>, sqlx::Error> = QueryBuilder::<Product>::default()
             .select()
             // Call `where_null` on `Selected`, transitioning to `Filtered`
-            .where_null(WeightColumn)
+            .where_null(PriceCentsColumn)
             // Ensure the generated query can be executed
             .get(&connection)
             .await;
@@ -619,10 +619,10 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn test_where_not_null(connection: Pool<Postgres>) {
-        let result: Result<Vec<Anvil>, sqlx::Error> = QueryBuilder::<Anvil>::default()
+        let result: Result<Vec<Product>, sqlx::Error> = QueryBuilder::<Product>::default()
             .select()
             // Call `where_null` on `Selected`, transitioning to `Filtered`
-            .where_not_null(WeightColumn)
+            .where_not_null(PriceCentsColumn)
             // Ensure the generated query can be executed
             .get(&connection)
             .await;
@@ -635,9 +635,9 @@ mod tests {
     async fn test_order_by(connection: Pool<Postgres>) {
         // `order_by` can be called on `Selected`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
-                .order_by("weight", Direction::Asc)
+                .order_by("price_cents", Direction::Asc)
                 .get(&connection)
                 .await
                 .is_ok()
@@ -645,10 +645,10 @@ mod tests {
 
         // `order_by` can be called on `Filtered`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
-                .r#where(WeightColumn, ">=", 0)
-                .order_by("weight", Direction::Asc)
+                .r#where(PriceCentsColumn, ">=", 0)
+                .order_by("price_cents", Direction::Asc)
                 .get(&connection)
                 .await
                 .is_ok()
@@ -659,7 +659,7 @@ mod tests {
     async fn test_limit(connection: Pool<Postgres>) {
         // `limit` can be called on `Selected`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
                 .limit(10)
                 .get(&connection)
@@ -669,9 +669,9 @@ mod tests {
 
         // `limit` can be called on `Filtered`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
-                .r#where(WeightColumn, ">=", 0)
+                .r#where(PriceCentsColumn, ">=", 0)
                 .limit(10)
                 .get(&connection)
                 .await
@@ -680,9 +680,9 @@ mod tests {
 
         // `limit` can be called on `Ordered`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
-                .order_by("weight", Direction::Asc)
+                .order_by("price_cents", Direction::Asc)
                 .limit(10)
                 .get(&connection)
                 .await
@@ -692,7 +692,7 @@ mod tests {
 
     #[sqlx::test(migrations = "../migrations")]
     async fn test_offset(connection: Pool<Postgres>) {
-        let result: Result<Vec<Anvil>, sqlx::Error> = QueryBuilder::<Anvil>::default()
+        let result: Result<Vec<Product>, sqlx::Error> = QueryBuilder::<Product>::default()
             .select()
             // Call `limit` on `Selected`, transitioning to `Limited`
             .limit(10)
@@ -710,7 +710,7 @@ mod tests {
     async fn test_get(connection: Pool<Postgres>) {
         // `get` can be called on `Selected`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
                 .get(&connection)
                 .await
@@ -719,9 +719,9 @@ mod tests {
 
         // `get` can be called on `Filtered`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
-                .r#where(WeightColumn, ">=", 0)
+                .r#where(PriceCentsColumn, ">=", 0)
                 .get(&connection)
                 .await
                 .is_ok()
@@ -729,10 +729,10 @@ mod tests {
 
         // `get` can be called on `Ordered`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
-                .r#where(WeightColumn, ">=", 0)
-                .order_by("weight", Direction::Asc)
+                .r#where(PriceCentsColumn, ">=", 0)
+                .order_by("price_cents", Direction::Asc)
                 .get(&connection)
                 .await
                 .is_ok()
@@ -740,10 +740,10 @@ mod tests {
 
         // `get` can be called on `Limited`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
-                .r#where(WeightColumn, ">=", 0)
-                .order_by("weight", Direction::Asc)
+                .r#where(PriceCentsColumn, ">=", 0)
+                .order_by("price_cents", Direction::Asc)
                 .limit(10)
                 .get(&connection)
                 .await
@@ -752,10 +752,10 @@ mod tests {
 
         // `get` can be called on `Offsetted`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
-                .r#where(WeightColumn, ">=", 0)
-                .order_by("weight", Direction::Asc)
+                .r#where(PriceCentsColumn, ">=", 0)
+                .order_by("price_cents", Direction::Asc)
                 .limit(10)
                 .offset(20)
                 .get(&connection)
@@ -765,11 +765,11 @@ mod tests {
 
         // `get` can be called on `Returned`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .update()
-                .set(WeightColumn, 0)
-                .r#where(WeightColumn, ">=", 0)
-                .returning(&[WeightColumn.name()])
+                .set(PriceCentsColumn, 0)
+                .r#where(PriceCentsColumn, ">=", 0)
+                .returning(&[PriceCentsColumn.name()])
                 .get(&connection)
                 .await
                 .is_ok()
@@ -780,7 +780,7 @@ mod tests {
     async fn test_first(connection: Pool<Postgres>) {
         // `first` can be called on `Selected`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
                 .first(&connection)
                 .await
@@ -789,9 +789,9 @@ mod tests {
 
         // `first` can be called on `Filtered`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
-                .r#where(WeightColumn, ">=", 0)
+                .r#where(PriceCentsColumn, ">=", 0)
                 .first(&connection)
                 .await
                 .is_ok()
@@ -799,10 +799,10 @@ mod tests {
 
         // `first` can be called on `Ordered`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
-                .r#where(WeightColumn, ">=", 0)
-                .order_by("weight", Direction::Asc)
+                .r#where(PriceCentsColumn, ">=", 0)
+                .order_by("price_cents", Direction::Asc)
                 .first(&connection)
                 .await
                 .is_ok()
@@ -813,7 +813,7 @@ mod tests {
     async fn test_first_or_fail(connection: Pool<Postgres>) {
         // `first_or_fail` can be called on `Selected`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
                 .first_or_fail(&connection)
                 .await
@@ -822,9 +822,9 @@ mod tests {
 
         // `first_or_fail` can be called on `Filtered`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
-                .r#where(WeightColumn, ">=", 0)
+                .r#where(PriceCentsColumn, ">=", 0)
                 .first_or_fail(&connection)
                 .await
                 .is_err() // No rows exist, so this should fail
@@ -832,10 +832,10 @@ mod tests {
 
         // `first_or_fail` can be called on `Ordered`
         assert!(
-            QueryBuilder::<Anvil>::default()
+            QueryBuilder::<Product>::default()
                 .select()
-                .r#where(WeightColumn, ">=", 0)
-                .order_by("weight", Direction::Asc)
+                .r#where(PriceCentsColumn, ">=", 0)
+                .order_by("price_cents", Direction::Asc)
                 .first_or_fail(&connection)
                 .await
                 .is_err() // No rows exist, so this should fail
@@ -846,80 +846,80 @@ mod tests {
     async fn test_update(connection: Pool<Postgres>) {
         // Arrange a row in the database.
         let id = Uuid::new_v4();
-        SqlQueryBuilder::table("anvils")
+        SqlQueryBuilder::table("products")
             .insert()
             .set("id", id)
-            .set("material", "Iron")
+            .set("in_stock", true)
             .set("name", "Original")
-            .set("weight", 100i16)
+            .set("price_cents", 100i32)
             .returning(&["id"])
             .first_or_fail::<(Uuid,), _>(&connection)
             .await
             .unwrap();
 
         // Act the update.
-        let result: Anvil = QueryBuilder::<Anvil>::default()
+        let result: Product = QueryBuilder::<Product>::default()
             .update()
             .set(NameColumn, "Updated".to_string())
-            .set(WeightColumn, 200i16)
+            .set(PriceCentsColumn, 200i32)
             .r#where(IdColumn, "=", id)
-            .returning(&["id", "material", "name", "weight"])
+            .returning(&["id", "in_stock", "name", "price_cents"])
             .first_or_fail(&connection)
             .await
             .unwrap();
 
         // Assert the row is updated.
         assert_eq!(result.name, "Updated");
-        assert_eq!(result.weight, 200);
+        assert_eq!(result.price_cents, 200);
     }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn test_insert(connection: Pool<Postgres>) {
-        // Arrange a new anvil.
+        // Arrange a new product.
         let id = Uuid::new_v4();
 
         // Act the insert.
-        let result: Result<Anvil, _> = QueryBuilder::<Anvil>::default()
+        let result: Result<Product, _> = QueryBuilder::<Product>::default()
             .insert()
             .set(IdColumn, id)
-            .set(MaterialColumn, "Iron".to_string())
+            .set(InStockColumn, true)
             .set(NameColumn, "Test".to_string())
-            .set(WeightColumn, 100i16)
+            .set(PriceCentsColumn, 100i32)
             .returning()
             .first_or_fail(&connection)
             .await;
 
         // Assert the row is inserted.
         assert!(result.is_ok());
-        let anvil = result.unwrap();
-        assert_eq!(anvil.id, id);
-        assert_eq!(anvil.material, "Iron");
-        assert_eq!(anvil.name, "Test");
-        assert_eq!(anvil.weight, 100);
+        let product = result.unwrap();
+        assert_eq!(product.id, id);
+        assert!(product.in_stock);
+        assert_eq!(product.name, "Test");
+        assert_eq!(product.price_cents, 100);
     }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn test_insert_do_nothing_on_conflict(connection: Pool<Postgres>) {
         // Arrange a row in the database.
         let id = Uuid::new_v4();
-        SqlQueryBuilder::table("anvils")
+        SqlQueryBuilder::table("products")
             .insert()
             .set("id", id)
-            .set("material", "Iron")
+            .set("in_stock", true)
             .set("name", "Existing")
-            .set("weight", 100i16)
+            .set("price_cents", 100i32)
             .returning(&["id"])
             .first_or_fail::<(Uuid,), _>(&connection)
             .await
             .unwrap();
 
         // Act the insert with DO NOTHING on conflict.
-        let result: Result<Option<Anvil>, _> = QueryBuilder::<Anvil>::default()
+        let result: Result<Option<Product>, _> = QueryBuilder::<Product>::default()
             .insert()
             .set(IdColumn, id)
-            .set(MaterialColumn, "Steel".to_string())
+            .set(InStockColumn, true)
             .set(NameColumn, "Ignored".to_string())
-            .set(WeightColumn, 999i16)
+            .set(PriceCentsColumn, 999i32)
             .on_conflict()
             .do_nothing()
             .returning()
@@ -935,24 +935,24 @@ mod tests {
     async fn test_insert_do_update_on_conflict(connection: Pool<Postgres>) {
         // Arrange a row in the database.
         let id = Uuid::new_v4();
-        SqlQueryBuilder::table("anvils")
+        SqlQueryBuilder::table("products")
             .insert()
             .set("id", id)
-            .set("material", "Iron")
+            .set("in_stock", true)
             .set("name", "Existing")
-            .set("weight", 100i16)
+            .set("price_cents", 100i32)
             .returning(&["id"])
             .first_or_fail::<(Uuid,), _>(&connection)
             .await
             .unwrap();
 
         // Act the insert with DO UPDATE on conflict.
-        let result: Result<Anvil, _> = QueryBuilder::<Anvil>::default()
+        let result: Result<Product, _> = QueryBuilder::<Product>::default()
             .insert()
             .set(IdColumn, id)
-            .set(MaterialColumn, "Steel".to_string())
+            .set(InStockColumn, true)
             .set(NameColumn, "Updated".to_string())
-            .set(WeightColumn, 200i16)
+            .set(PriceCentsColumn, 200i32)
             .on_conflict()
             .do_update()
             .returning()
@@ -961,44 +961,44 @@ mod tests {
 
         // Assert the row is updated.
         assert!(result.is_ok());
-        let anvil = result.unwrap();
-        assert_eq!(anvil.id, id);
-        assert_eq!(anvil.material, "Steel");
-        assert_eq!(anvil.name, "Updated");
-        assert_eq!(anvil.weight, 200);
+        let product = result.unwrap();
+        assert_eq!(product.id, id);
+        assert!(product.in_stock);
+        assert_eq!(product.name, "Updated");
+        assert_eq!(product.price_cents, 200);
     }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn test_returning(connection: Pool<Postgres>) {
         // Setup: insert a row
         let id = Uuid::new_v4();
-        SqlQueryBuilder::table("anvils")
+        SqlQueryBuilder::table("products")
             .insert()
             .set("id", id)
-            .set("material", "Iron")
+            .set("in_stock", true)
             .set("name", "Original")
-            .set("weight", 100i16)
+            .set("price_cents", 100i32)
             .returning(&["id"])
             .first_or_fail::<(Uuid,), _>(&connection)
             .await
             .unwrap();
 
         // `returning` can be called on `Updated`
-        let result: Anvil = QueryBuilder::<Anvil>::default()
+        let result: Product = QueryBuilder::<Product>::default()
             .update()
             .set(NameColumn, "Updated".to_string())
-            .returning(&["id", "material", "name", "weight"])
+            .returning(&["id", "in_stock", "name", "price_cents"])
             .first_or_fail(&connection)
             .await
             .unwrap();
         assert_eq!(result.name, "Updated");
 
         // `returning` can be called on `Filtered<Updated>`
-        let result: Anvil = QueryBuilder::<Anvil>::default()
+        let result: Product = QueryBuilder::<Product>::default()
             .update()
             .set(NameColumn, "Filtered Update".to_string())
             .r#where(IdColumn, "=", id)
-            .returning(&["id", "material", "name", "weight"])
+            .returning(&["id", "in_stock", "name", "price_cents"])
             .first_or_fail(&connection)
             .await
             .unwrap();
@@ -1006,26 +1006,26 @@ mod tests {
 
         // `returning` can be called on `Inserted`
         let new_id = Uuid::new_v4();
-        let result: Anvil = QueryBuilder::<Anvil>::default()
+        let result: Product = QueryBuilder::<Product>::default()
             .insert()
             .set(IdColumn, new_id)
-            .set(MaterialColumn, "Steel".to_string())
-            .set(NameColumn, "New Anvil".to_string())
-            .set(WeightColumn, 150i16)
+            .set(InStockColumn, true)
+            .set(NameColumn, "New Product".to_string())
+            .set(PriceCentsColumn, 150i32)
             .returning()
             .first_or_fail(&connection)
             .await
             .unwrap();
         assert_eq!(result.id, new_id);
-        assert_eq!(result.name, "New Anvil");
+        assert_eq!(result.name, "New Product");
 
         // `returning` can be called on `Upserted` (DO UPDATE)
-        let result: Anvil = QueryBuilder::<Anvil>::default()
+        let result: Product = QueryBuilder::<Product>::default()
             .insert()
             .set(IdColumn, id)
-            .set(MaterialColumn, "Bronze".to_string())
+            .set(InStockColumn, false)
             .set(NameColumn, "Upserted Name".to_string())
-            .set(WeightColumn, 200i16)
+            .set(PriceCentsColumn, 200i32)
             .on_conflict()
             .do_update()
             .returning()
@@ -1033,15 +1033,15 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(result.name, "Upserted Name");
-        assert_eq!(result.weight, 200);
+        assert_eq!(result.price_cents, 200);
 
         // `returning` can be called on `Upserted` (DO NOTHING)
-        let result: Option<Anvil> = QueryBuilder::<Anvil>::default()
+        let result: Option<Product> = QueryBuilder::<Product>::default()
             .insert()
             .set(IdColumn, id)
-            .set(MaterialColumn, "Ignored".to_string())
+            .set(InStockColumn, false)
             .set(NameColumn, "Ignored".to_string())
-            .set(WeightColumn, 999i16)
+            .set(PriceCentsColumn, 999i32)
             .on_conflict()
             .do_nothing()
             .returning()
@@ -1055,18 +1055,18 @@ mod tests {
     async fn test_execute(connection: Pool<Postgres>) {
         // `execute` can be called on `Filtered<Updated>`
         let id = Uuid::new_v4();
-        SqlQueryBuilder::table("anvils")
+        SqlQueryBuilder::table("products")
             .insert()
             .set("id", id)
-            .set("material", "Iron")
+            .set("in_stock", true)
             .set("name", "Original")
-            .set("weight", 100i16)
+            .set("price_cents", 100i32)
             .returning(&["id"])
             .first_or_fail::<(Uuid,), _>(&connection)
             .await
             .unwrap();
 
-        let result = QueryBuilder::<Anvil>::default()
+        let result = QueryBuilder::<Product>::default()
             .update()
             .set(NameColumn, "Updated".to_string())
             .r#where(IdColumn, "=", id)
@@ -1075,23 +1075,23 @@ mod tests {
         assert!(result.is_ok());
 
         // `execute` can be called on `Inserted`
-        let result = QueryBuilder::<Anvil>::default()
+        let result = QueryBuilder::<Product>::default()
             .insert()
             .set(IdColumn, Uuid::new_v4())
-            .set(MaterialColumn, "Steel".to_string())
-            .set(NameColumn, "New Anvil".to_string())
-            .set(WeightColumn, 150i16)
+            .set(InStockColumn, true)
+            .set(NameColumn, "New Product".to_string())
+            .set(PriceCentsColumn, 150i32)
             .execute(&connection)
             .await;
         assert!(result.is_ok());
 
         // `execute` can be called on `Upserted` (DO UPDATE)
-        let result = QueryBuilder::<Anvil>::default()
+        let result = QueryBuilder::<Product>::default()
             .insert()
             .set(IdColumn, id)
-            .set(MaterialColumn, "Bronze".to_string())
+            .set(InStockColumn, false)
             .set(NameColumn, "Upserted".to_string())
-            .set(WeightColumn, 200i16)
+            .set(PriceCentsColumn, 200i32)
             .on_conflict()
             .do_update()
             .execute(&connection)
@@ -1099,12 +1099,12 @@ mod tests {
         assert!(result.is_ok());
 
         // `execute` can be called on `Upserted` (DO NOTHING)
-        let result = QueryBuilder::<Anvil>::default()
+        let result = QueryBuilder::<Product>::default()
             .insert()
             .set(IdColumn, id)
-            .set(MaterialColumn, "Ignored".to_string())
+            .set(InStockColumn, false)
             .set(NameColumn, "Ignored".to_string())
-            .set(WeightColumn, 999i16)
+            .set(PriceCentsColumn, 999i32)
             .on_conflict()
             .do_nothing()
             .execute(&connection)

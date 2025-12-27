@@ -15,6 +15,7 @@ proc-macro = true
 darling = "0.21"
 fabrique-core = { path = "../fabrique-core", version = "0.1.1" }
 heck = "0.5"
+pluralizer = "0.4"
 proc-macro2 = "1.0"
 quote = "1.0"
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio", "uuid"] }
