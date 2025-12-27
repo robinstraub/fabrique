@@ -10,3 +10,9 @@ sqlx = { version = "0.9.0-alpha.1", features = [
   "postgres",
   "uuid",
 ] }
+cargo-husky = { version = "1", default-features = false, features = [
+  "precommit-hook",
+  "run-cargo-fmt",
+  "run-cargo-clippy",
+  "run-cargo-test",
+] }
