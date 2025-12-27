@@ -16,6 +16,7 @@ fabrique-core = { path = "../fabrique-core", version = "0.1.1" }
 fabrique-derive = { path = "../fabrique-derive", version = "0.1.1" }
 
 [dev-dependencies]
+cargo-husky = { workspace = true }
 chrono = "0.4"
 fabrique = { path = "." }
 strum = "0.27"
