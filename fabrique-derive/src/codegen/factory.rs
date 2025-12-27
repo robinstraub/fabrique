@@ -458,7 +458,7 @@ mod tests {
             struct Anvil {
                 #[fabrique(primary_key)]
                 id: u32,
-                #[fabrique(relation = "Hammer")]
+                #[fabrique(belongs_to = "Hammer")]
                 hammer_id: u32,
                 hardness: u32,
                 weight: u32,
@@ -620,7 +620,7 @@ mod tests {
         let input = parse_quote! {
             struct Dynamite {
                 id: u32,
-                #[fabrique(relation = "Explosive")]
+                #[fabrique(belongs_to = "Explosive")]
                 explosive_id: String,
             }
         };
@@ -646,7 +646,7 @@ mod tests {
         let input = parse_quote! {
             struct Anvil {
                 id: u32,
-                #[fabrique(relation = "Hammer")]
+                #[fabrique(belongs_to = "Hammer")]
                 hammer_id: u32,
                 hardness: u32,
                 weight: u32,
@@ -779,7 +779,7 @@ mod tests {
         let input = parse_quote! {
             struct Dynamite {
                 id: u32,
-                #[fabrique(relation = "Explosive")]
+                #[fabrique(belongs_to = "Explosive")]
                 explosive_id: String,
             }
         };

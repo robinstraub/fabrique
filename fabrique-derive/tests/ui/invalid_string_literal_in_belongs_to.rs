@@ -2,7 +2,7 @@ use fabrique_derive::Factory;
 
 #[derive(Factory)]
 struct Anvil {
-    #[fabrique(relation = "")]
+    #[fabrique(belongs_to = "")]
     hammer_id: u32,
     weight: u32,
 }

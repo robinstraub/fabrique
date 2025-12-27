@@ -58,7 +58,7 @@ When testing models with relationships, factories handle the foreign keys automa
 # pub struct Order {
 #     #[fabrique(primary_key)]
 #     id: Uuid,
-#     #[fabrique(relation = "Customer")]
+#     #[fabrique(belongs_to = "Customer")]
 #     customer_id: Uuid,
 #     total: i32,
 # }
@@ -110,7 +110,7 @@ For simpler tests, create related models inline:
 # pub struct Order {
 #     #[fabrique(primary_key)]
 #     id: Uuid,
-#     #[fabrique(relation = "Customer")]
+#     #[fabrique(belongs_to = "Customer")]
 #     customer_id: Uuid,
 # }
 #

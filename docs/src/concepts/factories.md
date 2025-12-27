@@ -76,7 +76,7 @@ Factories support creating related models. When a model has a foreign key, use t
 # pub struct Order {
 #     #[fabrique(primary_key)]
 #     id: Uuid,
-#     #[fabrique(relation = "Customer")]
+#     #[fabrique(belongs_to = "Customer")]
 #     customer_id: Uuid,
 # }
 #
