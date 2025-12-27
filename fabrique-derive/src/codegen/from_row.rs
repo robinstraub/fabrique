@@ -129,6 +129,10 @@ mod tests {
         let result = codegen.generate();
 
         // Assert
-        assert!(result.to_string().contains("orders : :: fabrique :: HasMany :: default ()"));
+        assert!(
+            result
+                .to_string()
+                .contains("orders : :: fabrique :: HasMany :: default ()")
+        );
     }
 }

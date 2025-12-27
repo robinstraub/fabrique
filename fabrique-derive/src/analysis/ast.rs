@@ -294,7 +294,6 @@ mod tests {
     #[test]
     fn test_reference_type_is_column() {
         // Arrange a field with a reference type (not Type::Path)
-        // This covers line 177: `let Type::Path(type_path) = ty else { return None }`
         let attrs = ModelFieldAttrs {
             ident: Some(parse_quote!(name)),
             ty: parse_quote!(&str),
@@ -317,7 +316,6 @@ mod tests {
     #[test]
     fn test_generic_with_reference_arg_is_column() {
         // Arrange a field with a generic type whose argument is not Type::Path
-        // This covers line 184: `let GenericArgument::Type(Type::Path(...)) = ... else { return None }`
         let attrs = ModelFieldAttrs {
             ident: Some(parse_quote!(items)),
             ty: parse_quote!(Vec<&str>),
