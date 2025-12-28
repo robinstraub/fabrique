@@ -1,5 +1,5 @@
 use darling::{FromDeriveInput, FromField};
-use heck::{ToPascalCase, ToSnakeCase};
+use heck::{ToPascalCase, ToShoutySnakeCase, ToSnakeCase};
 use proc_macro2::Span;
 use syn::{Ident, Type};
 
@@ -63,6 +63,12 @@ pub struct ModelFieldAttrs {
     /// fields)
     #[darling(default)]
     through: Option<Ident>,
+
+    /// The explicit foreign key column on the child model for HasMany
+    /// disambiguation. Required when the child has multiple belongs_to to the
+    /// same parent type.
+    #[darling(default)]
+    foreign_key: Option<Ident>,
 }
 
 #[derive(Debug)]
@@ -116,6 +122,14 @@ pub struct HasManyField {
     /// The join model for many-to-many relationships (e.g., `OrderLine`).
     /// When set, this is a many-to-many relationship through the join model.
     pub through: Option<Ident>,
+
+    /// The explicit foreign key column on the child model for disambiguation.
+    /// Required when the child has multiple belongs_to to the same parent type.
+    pub foreign_key: Option<Ident>,
+
+    /// The const column name for the foreign key (e.g., `SENDER_ID`).
+    /// Computed from `foreign_key` if present.
+    pub foreign_key_const: Option<Ident>,
 }
 
 /// Result of parsing a field - either a column or a HasMany relation.
@@ -135,10 +149,17 @@ impl ParsedField {
         if let Some((outer, target)) = Self::parse_parameterized_type(&attrs.ty)
             && outer == "HasMany"
         {
+            let foreign_key_const = attrs
+                .foreign_key
+                .as_ref()
+                .map(|fk| Ident::new(&fk.to_string().to_shouty_snake_case(), fk.span()));
+
             return Ok(ParsedField::HasMany(HasManyField {
                 ident,
                 target_type: target.clone(),
                 through: attrs.through,
+                foreign_key: attrs.foreign_key,
+                foreign_key_const,
             }));
         }
 
@@ -205,6 +226,7 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
+            foreign_key: None,
         };
 
         // Act
@@ -231,6 +253,7 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
+            foreign_key: None,
         };
 
         // Act
@@ -240,7 +263,10 @@ mod tests {
         let parsed = result.expect("should parse successfully");
         assert!(matches!(
             parsed,
-            ParsedField::HasMany(ref f) if f.target_type == "Order" && f.through.is_none()
+            ParsedField::HasMany(ref f)
+                if f.target_type == "Order"
+                && f.through.is_none()
+                && f.foreign_key_const.is_none()
         ));
     }
 
@@ -256,6 +282,7 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: Some(parse_quote!(OrderLine)),
+            foreign_key: None,
         };
 
         // Act
@@ -280,6 +307,7 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
+            foreign_key: None,
         };
 
         // Act
@@ -302,6 +330,7 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
+            foreign_key: None,
         };
 
         // Act
@@ -324,6 +353,7 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
+            foreign_key: None,
         };
 
         // Act
@@ -332,5 +362,34 @@ mod tests {
         // Assert - generic types with non-Path arguments are treated as column fields
         assert!(result.is_ok());
         assert!(matches!(result.unwrap(), ParsedField::Column(_)));
+    }
+
+    #[test]
+    fn test_has_many_field_with_foreign_key_succeeds() {
+        // Arrange a HasMany field with explicit foreign_key for disambiguation
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(sent_messages)),
+            ty: parse_quote!(HasMany<Message>),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            belongs_to: None,
+            through: None,
+            foreign_key: Some(parse_quote!(sender_id)),
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "User".to_owned());
+
+        // Assert
+        let parsed = result.expect("should parse successfully");
+        assert!(matches!(
+            parsed,
+            ParsedField::HasMany(ref f)
+                if f.target_type == "Message"
+                && f.foreign_key.as_ref().unwrap() == "sender_id"
+                && f.foreign_key_const.as_ref().unwrap() == "SENDER_ID"
+        ));
     }
 }

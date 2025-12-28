@@ -50,10 +50,19 @@ pub trait BelongsTo<Parent: Model>: Model {
 /// This type is NOT stored in the database. It's purely a compile-time
 /// marker used by the derive macros to generate navigation methods and
 /// factory helpers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct HasMany<T> {
     _marker: PhantomData<T>,
 }
+
+// Manual implementations to avoid requiring T: Clone/Copy
+impl<T> Clone for HasMany<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for HasMany<T> {}
 
 impl<T> Default for HasMany<T> {
     fn default() -> Self {

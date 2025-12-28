@@ -1,4 +1,4 @@
-error: Unknown field: `unknown_attribute`. Available values: `as`, `belongs_to`, `primary_key`, `soft_delete`, `through`
+error: Unknown field: `unknown_attribute`. Available values: `as`, `belongs_to`, `foreign_key`, `primary_key`, `soft_delete`, `through`
  --> tests/ui/invalid_attribute_name.rs:5:5
   |
 5 | /     #[fabrique(unknown_attribute = true)]
