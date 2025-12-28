@@ -87,6 +87,42 @@ async fn test_where_not_null(connection: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn test_chained_where_clauses(connection: Pool<Postgres>) {
+    Product::factory()
+        .in_stock(true)
+        .create(&connection)
+        .await
+        .unwrap();
+
+    // where -> where (chained)
+    let result = Product::query()
+        .select()
+        .r#where(Product::IN_STOCK, "=", true)
+        .r#where(Product::PRICE_CENTS, ">", 0)
+        .get(&connection)
+        .await;
+    assert!(result.is_ok());
+
+    // where -> where_null (chained)
+    let result = Product::query()
+        .select()
+        .r#where(Product::IN_STOCK, "=", true)
+        .where_null(Product::NAME)
+        .get(&connection)
+        .await;
+    assert!(result.is_ok());
+
+    // where -> where_not_null (chained)
+    let result = Product::query()
+        .select()
+        .r#where(Product::IN_STOCK, "=", true)
+        .where_not_null(Product::NAME)
+        .get(&connection)
+        .await;
+    assert!(result.is_ok());
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn test_order_by_and_limit(connection: Pool<Postgres>) {
     Product::factory().create(&connection).await.unwrap();
 
