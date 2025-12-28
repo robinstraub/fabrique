@@ -1,11 +1,10 @@
 mod query_builder;
 
-pub use query_builder::QueryBuilder;
-
 use crate::{
     database::{Column, DatabaseAware},
     sql::Updating,
 };
+pub use query_builder::QueryBuilder;
 
 /// Model metadata and identity
 pub trait Model: DatabaseAware {
@@ -59,6 +58,16 @@ where
         QueryBuilder::default().update()
     }
 
+    /// Finds a model instance by its primary key.
+    ///
+    /// Returns an error if no record is found.
+    fn find<'e, E>(
+        executor: E,
+        id: Self::PrimaryKey,
+    ) -> impl Future<Output = Result<Self, Self::Error>> + Send + 'e
+    where
+        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+
     /// Retrieves all instances of this model from the database.
     fn all<'e, E>(executor: E) -> impl Future<Output = Result<Vec<Self>, Self::Error>> + Send + 'e
     where
@@ -68,17 +77,14 @@ where
     {
         async move {
             match Self::soft_delete_column() {
-                Some(column) => QueryBuilder::<Self>::default()
-                    .select()
-                    .where_null(column)
-                    .get(executor)
-                    .await
-                    .map_err(Into::into),
-                None => QueryBuilder::<Self>::default()
-                    .select()
-                    .get(executor)
-                    .await
-                    .map_err(Into::into),
+                Some(column) => {
+                    QueryBuilder::<Self>::default()
+                        .select()
+                        .where_null(column)
+                        .get(executor)
+                        .await
+                }
+                None => QueryBuilder::<Self>::default().select().get(executor).await,
             }
         }
     }

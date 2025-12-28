@@ -128,6 +128,61 @@ macro_rules! impl_where {
                     for<'q> C::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
                 {
                     QueryBuilder {
+                        inner: self.inner.where_null(column.name()),
+                    }
+                }
+            }
+        )+
+    };
+}
+
+/// Implements chained `where` methods for already-filtered states.
+///
+/// Returns the same `Filtered<$state>` type (no nesting).
+macro_rules! impl_chain_where {
+    ($($state:ty),+ $(,)?) => {
+        $(
+            impl<M> QueryBuilder<M, Filtered<$state>>
+            where
+                M: Model,
+                M::Database: sqlx::Database,
+            {
+                /// Adds an additional WHERE clause (AND) to the query.
+                ///
+                /// Remains in [`Filtered`] state.
+                pub fn r#where<C, O>(self, column: C, operator: O, value: C::Type) -> QueryBuilder<M, Filtered<$state>>
+                where
+                    C: Column<M>,
+                    for<'q> C::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
+                    O: Into<Operator>,
+                {
+                    QueryBuilder {
+                        inner: self.inner.r#where(column.name(), operator, value),
+                    }
+                }
+
+                /// Adds an additional WHERE IS NULL clause to the query.
+                ///
+                /// Remains in [`Filtered`] state.
+                pub fn where_null<C>(self, column: C) -> QueryBuilder<M, Filtered<$state>>
+                where
+                    C: Column<M>,
+                    for<'q> C::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
+                {
+                    QueryBuilder {
+                        inner: self.inner.where_null(column.name()),
+                    }
+                }
+
+                /// Adds an additional WHERE IS NOT NULL clause to the query.
+                ///
+                /// Remains in [`Filtered`] state.
+                pub fn where_not_null<C>(self, column: C) -> QueryBuilder<M, Filtered<$state>>
+                where
+                    C: Column<M>,
+                    for<'q> C::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
+                {
+                    QueryBuilder {
                         inner: self.inner.where_not_null(column.name()),
                     }
                 }
@@ -199,15 +254,16 @@ macro_rules! impl_get {
             where
                 M: Model,
                 M::Database: sqlx::Database,
+                M::Error: From<sqlx::Error>,
             {
                 /// Executes the query and returns all matching rows.
-                pub async fn get<'e, E>(self, executor: E) -> Result<Vec<M>, sqlx::Error>
+                pub async fn get<'e, E>(self, executor: E) -> Result<Vec<M>, M::Error>
                 where
                     E: sqlx::Executor<'e, Database = M::Database>,
                     M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
                     <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
                 {
-                    self.inner.get(executor).await
+                    self.inner.get(executor).await.map_err(Into::into)
                 }
             }
         )+
@@ -222,17 +278,18 @@ macro_rules! impl_first {
             where
                 M: Model,
                 M::Database: sqlx::Database,
+                M::Error: From<sqlx::Error>,
             {
                 /// Retrieves the first row from the query result.
                 ///
                 /// Returns `None` if no rows match the query.
-                pub async fn first<'e, E>(self, executor: E) -> Result<Option<M>, sqlx::Error>
+                pub async fn first<'e, E>(self, executor: E) -> Result<Option<M>, M::Error>
                 where
                     E: sqlx::Executor<'e, Database = M::Database>,
                     M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
                     <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
                 {
-                    self.inner.first(executor).await
+                    self.inner.first(executor).await.map_err(Into::into)
                 }
             }
         )+
@@ -247,17 +304,18 @@ macro_rules! impl_first_or_fail {
             where
                 M: Model,
                 M::Database: sqlx::Database,
+                M::Error: From<sqlx::Error>,
             {
                 /// Retrieves the first row from the query result, or fails if none exists.
                 ///
                 /// Returns an error if no rows match the query.
-                pub async fn first_or_fail<'e, E>(self, executor: E) -> Result<M, sqlx::Error>
+                pub async fn first_or_fail<'e, E>(self, executor: E) -> Result<M, M::Error>
                 where
                     E: sqlx::Executor<'e, Database = M::Database>,
                     M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
                     <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
                 {
-                    self.inner.first_or_fail(executor).await
+                    self.inner.first_or_fail(executor).await.map_err(Into::into)
                 }
             }
         )+
@@ -386,6 +444,7 @@ macro_rules! impl_returning {
 // Use macros to implement query execution methods across multiple states
 impl_join!(Selected);
 impl_where!(Selected, Updated, Joined<Selected>);
+impl_chain_where!(Selected, Updated);
 impl_order_by!(
     Selected,
     Filtered<Selected>,
@@ -571,34 +630,35 @@ impl<M> QueryBuilder<M, Returned>
 where
     M: Model,
     M::Database: sqlx::Database,
+    M::Error: From<sqlx::Error>,
 {
     /// Executes the query and returns all resulting rows.
-    pub async fn get<'e, E>(self, executor: E) -> Result<Vec<M>, sqlx::Error>
+    pub async fn get<'e, E>(self, executor: E) -> Result<Vec<M>, M::Error>
     where
         E: sqlx::Executor<'e, Database = M::Database>,
         M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
         <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
     {
-        self.inner.get(executor).await
+        self.inner.get(executor).await.map_err(Into::into)
     }
 
     /// Executes the query and returns the first resulting row.
-    pub async fn first<'e, E>(self, executor: E) -> Result<Option<M>, sqlx::Error>
+    pub async fn first<'e, E>(self, executor: E) -> Result<Option<M>, M::Error>
     where
         E: sqlx::Executor<'e, Database = M::Database>,
         M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
         <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
     {
-        self.inner.first(executor).await
+        self.inner.first(executor).await.map_err(Into::into)
     }
 
     /// Executes the query and returns the first resulting row, or fails.
-    pub async fn first_or_fail<'e, E>(self, executor: E) -> Result<M, sqlx::Error>
+    pub async fn first_or_fail<'e, E>(self, executor: E) -> Result<M, M::Error>
     where
         E: sqlx::Executor<'e, Database = M::Database>,
         M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
         <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
     {
-        self.inner.first_or_fail(executor).await
+        self.inner.first_or_fail(executor).await.map_err(Into::into)
     }
 }

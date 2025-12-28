@@ -5,6 +5,7 @@
 # Tutorials
 
 - [Getting Started](tutorials/getting-started.md)
+- [Building an E-commerce App](tutorials/building-an-ecommerce-app.md)
 
 # Concepts
 
@@ -12,6 +13,8 @@
 - [Relations](concepts/relations.md)
 - [Queries](concepts/queries.md)
 - [Factories](concepts/factories.md)
+- [Type Conversions](concepts/type-conversions.md)
+- [Error Handling](concepts/error-handling.md)
 
 # Guides
 
@@ -19,6 +22,8 @@
 - [Using Soft Deletes](guides/using-soft-deletes.md)
 - [Testing with Factories](guides/testing-with-factories.md)
 - [Handling Multiple belongs_to Relationships](guides/multiple-belongs-to-same-model.md)
+- [Working with Transactions](guides/working-with-transactions.md)
+- [Advanced Querying](guides/advanced-querying.md)
 
 # Reference
 

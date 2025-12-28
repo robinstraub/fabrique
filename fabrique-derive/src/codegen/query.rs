@@ -1,4 +1,5 @@
 use crate::Analysis;
+use crate::codegen::FindCodegen;
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -14,14 +15,14 @@ impl<'a> QueryCodegen<'a> {
     }
 
     /// Generates the `Query` trait implementation.
-    ///
-    /// The Query trait now provides default implementations for all methods,
-    /// so we just need to implement the trait marker.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
+        let fn_find = FindCodegen::new(self.analysis).generate();
 
         quote! {
-            impl ::fabrique::Query for #base_struct_ident {}
+            impl ::fabrique::Query for #base_struct_ident {
+                #fn_find
+            }
         }
     }
 }
@@ -42,12 +43,24 @@ mod tests {
         let result = codegen.generate();
 
         // Assert
-        // The Query trait now provides default implementations,
-        // so we just generate an empty impl block
         assert_eq!(
             result.to_string(),
             quote! {
-                impl ::fabrique::Query for Anvil {}
+                impl ::fabrique::Query for Anvil {
+                    fn find<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        async move {
+                            Self::query()
+                                .select()
+                                .r#where(Self::ID, "=", id)
+                                .first_or_fail(executor)
+                                .await
+                                .map_err(Into::into)
+                        }
+                    }
+                }
             }
             .to_string()
         );
