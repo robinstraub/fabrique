@@ -13,24 +13,33 @@ impl<'a> BelongsToCodegen<'a> {
         Self { analysis }
     }
 
-    /// Generates `impl BelongsTo<Parent>` for each field with a belongs_to
-    /// relation.
+    /// Generates `impl BelongsTo<Parent>` for each unique belongs_to relation.
+    ///
+    /// Only generates the trait implementation when there is exactly ONE field
+    /// referencing a given parent type. When multiple fields reference the same
+    /// parent (e.g., `sender_id` and `recipient_id` both referencing `User`),
+    /// no trait is generated to avoid duplicate implementations.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
+        let belongs_to_by_parent = self.analysis.belongs_to_by_parent();
 
-        let impls = self.analysis.column_fields.iter().filter_map(|field| {
-            field.relation.as_ref().map(|relation| {
-                let parent_type = &relation.referenced_type;
-                let column_type = &field.column_type;
-                let const_column_name = &field.const_column_name;
+        let impls = belongs_to_by_parent.iter().filter_map(|(_, fields)| {
+            // Only generate BelongsTo trait when there's a unique relationship
+            if fields.len() != 1 {
+                return None; // Skip ambiguous cases - no trait generation
+            }
 
-                quote! {
-                    impl ::fabrique::BelongsTo<#parent_type> for #base_struct_ident {
-                        type ForeignKeyColumn = #column_type;
+            let (field, relation) = &fields[0];
+            let parent_type = &relation.referenced_type;
+            let column_type = &field.column_type;
+            let const_column_name = &field.const_column_name;
 
-                        fn foreign_key_column() -> Self::ForeignKeyColumn {
-                            Self::#const_column_name
-                        }
+            Some(quote! {
+                impl ::fabrique::BelongsTo<#parent_type> for #base_struct_ident {
+                    type ForeignKeyColumn = #column_type;
+
+                    fn foreign_key_column() -> Self::ForeignKeyColumn {
+                        Self::#const_column_name
                     }
                 }
             })
@@ -80,8 +89,8 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_multiple_belongs_to_impls() {
-        // Arrange - OrderLine belongs to both Order and Product
+    fn test_generate_multiple_belongs_to_impls_to_different_parents() {
+        // Arrange - OrderLine belongs to both Order and Product (different parents)
         let input = parse_quote! {
             struct OrderLine {
                 id: String,
@@ -96,28 +105,43 @@ mod tests {
         let codegen = BelongsToCodegen::new(&analysis);
 
         // Act
+        let result = codegen.generate().to_string();
+
+        // Assert - both impls should be generated (order doesn't matter due to HashMap)
+        assert!(
+            result.contains("impl :: fabrique :: BelongsTo < Order > for OrderLine"),
+            "Should contain BelongsTo<Order> impl"
+        );
+        assert!(
+            result.contains("impl :: fabrique :: BelongsTo < Product > for OrderLine"),
+            "Should contain BelongsTo<Product> impl"
+        );
+    }
+
+    #[test]
+    fn test_multiple_belongs_to_same_parent_generates_nothing() {
+        // Arrange - Message has two belongs_to to the same parent (User)
+        let input = parse_quote! {
+            struct Message {
+                id: String,
+                #[fabrique(belongs_to = "User")]
+                sender_id: String,
+                #[fabrique(belongs_to = "User")]
+                recipient_id: String,
+                content: String
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = BelongsToCodegen::new(&analysis);
+
+        // Act
         let result = codegen.generate();
 
-        // Assert
+        // Assert - no BelongsTo impl should be generated for ambiguous relationships
         assert_eq!(
             result.to_string(),
-            quote! {
-                impl ::fabrique::BelongsTo<Order> for OrderLine {
-                    type ForeignKeyColumn = OrderLineOrderIdColumn;
-
-                    fn foreign_key_column() -> Self::ForeignKeyColumn {
-                        Self::ORDER_ID
-                    }
-                }
-                impl ::fabrique::BelongsTo<Product> for OrderLine {
-                    type ForeignKeyColumn = OrderLineProductIdColumn;
-
-                    fn foreign_key_column() -> Self::ForeignKeyColumn {
-                        Self::PRODUCT_ID
-                    }
-                }
-            }
-            .to_string()
+            quote! {}.to_string(),
+            "Should not generate BelongsTo trait when multiple fields reference same parent"
         );
     }
 

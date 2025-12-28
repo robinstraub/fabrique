@@ -186,10 +186,21 @@ impl<'a> ModelCodegen<'a> {
                 let method_name = &field.ident;
                 let target_type = &field.target_type;
 
+                // When explicit foreign_key is provided, use the column constant directly.
+                // Otherwise, rely on the BelongsTo trait for foreign key resolution.
+                let fk_expr = match &field.foreign_key_const {
+                    Some(fk_const) => {
+                        quote! { #target_type::#fk_const }
+                    }
+                    None => {
+                        quote! { <#target_type as ::fabrique::BelongsTo<Self>>::foreign_key_column() }
+                    }
+                };
+
                 quote! {
                     pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Filtered<::fabrique::sql::Selected>> {
                         let pk = <Self as ::fabrique::Model>::primary_key(self);
-                        let fk = <#target_type as ::fabrique::BelongsTo<Self>>::foreign_key_column();
+                        let fk = #fk_expr;
                         <#target_type as ::fabrique::Query>::query()
                             .select()
                             .r#where(fk, "=", pk)
@@ -354,6 +365,33 @@ mod tests {
                 }
             }
             .to_string()
+        );
+    }
+
+    #[test]
+    fn test_lazy_loading_with_explicit_foreign_key() {
+        // Arrange - HasMany with explicit foreign_key for disambiguation
+        let input = parse_quote! {
+            struct User {
+                id: String,
+                #[fabrique(foreign_key = "sender_id")]
+                sent_messages: HasMany<Message>
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = ModelCodegen::new(&analysis);
+
+        // Act
+        let result = codegen.generate().to_string();
+
+        // Assert - verify the lazy loading method uses explicit column constant
+        assert!(
+            result.contains("let fk = Message :: SENDER_ID"),
+            "Should use explicit column constant instead of BelongsTo trait"
+        );
+        assert!(
+            !result.contains("BelongsTo"),
+            "Should NOT use BelongsTo trait when foreign_key is explicit"
         );
     }
 }

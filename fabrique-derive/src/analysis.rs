@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::analysis::ast::{ColumnField, HasManyField, Model, Relation};
 use crate::analysis::steps::Input;
 use crate::error::Error;
@@ -38,5 +40,24 @@ impl<'a> Analysis<'a> {
 
             Some((field, relation))
         })
+    }
+
+    /// Groups belongs_to relations by their parent type name.
+    ///
+    /// Returns a map where keys are parent type names (e.g., "User") and values
+    /// are vectors of (ColumnField, Relation) tuples referencing that parent.
+    ///
+    /// This is used to detect when a model has multiple belongs_to relations
+    /// to the same parent type (e.g., Message with sender_id and recipient_id
+    /// both referencing User).
+    pub fn belongs_to_by_parent(&self) -> HashMap<String, Vec<(&ColumnField, &Relation)>> {
+        let mut map: HashMap<String, Vec<(&ColumnField, &Relation)>> = HashMap::new();
+
+        for (field, relation) in self.relations() {
+            let parent_name = relation.referenced_type.to_string();
+            map.entry(parent_name).or_default().push((field, relation));
+        }
+
+        map
     }
 }

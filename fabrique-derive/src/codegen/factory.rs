@@ -87,17 +87,35 @@ impl<'a> FactoryCodegen<'a> {
         }
     }
 
-    fn relations(&self) -> impl Iterator<Item = FactoryRelation<'a>> {
-        self.analysis.relations().map(|(field, relation)| {
-            let factory_field = Ident::new(&format!("{}_relation", &relation.name), field.span);
+    /// Returns belongs_to fields, filtering out non-unique relations.
+    ///
+    /// Only returns relations where there is exactly one belongs_to per parent
+    /// type. When a model has multiple belongs_to to the same parent type
+    /// (e.g., Message with sender_id and recipient_id both referencing User),
+    /// those fields are filtered out to avoid generating duplicate trait impls,
+    /// relation enums, and `for_[relation]` methods.
+    fn belongs_to_fields(&self) -> impl Iterator<Item = FactoryRelation<'a>> {
+        let belongs_to_by_parent = self.analysis.belongs_to_by_parent();
 
-            FactoryRelation {
-                base_ident: &field.ident,
-                factory_field,
-                name: &relation.name,
-                referenced_type: &relation.referenced_type,
-            }
-        })
+        self.analysis
+            .relations()
+            .filter(move |(_, relation)| {
+                let parent_name = relation.referenced_type.to_string();
+                belongs_to_by_parent
+                    .get(&parent_name)
+                    .map(|fields| fields.len() == 1)
+                    .unwrap_or(true)
+            })
+            .map(|(field, relation)| {
+                let factory_field = Ident::new(&format!("{}_relation", &relation.name), field.span);
+
+                FactoryRelation {
+                    base_ident: &field.ident,
+                    factory_field,
+                    name: &relation.name,
+                    referenced_type: &relation.referenced_type,
+                }
+            })
     }
 
     /// Returns one-to-many HasMany fields (without `through`).
@@ -173,7 +191,7 @@ impl<'a> FactoryCodegen<'a> {
     /// Generates factory relation fields for linked factory dependencies.
     fn generate_factory_relation_fields(&self) -> impl Iterator<Item = TokenStream> + '_ {
         let struct_name = self.analysis.ident.to_string();
-        self.relations().map(move |relation| {
+        self.belongs_to_fields().map(move |relation| {
             let factory_field = relation.factory_field;
             let enum_ident = Self::relation_enum_ident(&struct_name, relation.name);
 
@@ -190,7 +208,7 @@ impl<'a> FactoryCodegen<'a> {
     /// Clone on model types.
     fn generate_relation_enums(&self) -> impl Iterator<Item = TokenStream> + '_ {
         let struct_name = self.analysis.ident.to_string();
-        self.relations().map(move |relation| {
+        self.belongs_to_fields().map(move |relation| {
             let enum_ident = Self::relation_enum_ident(&struct_name, relation.name);
             let referenced_type = relation.referenced_type;
             let factory_type = Ident::new(
@@ -211,7 +229,7 @@ impl<'a> FactoryCodegen<'a> {
     /// Generates From implementations for relation enums.
     fn generate_relation_from_impls(&self) -> impl Iterator<Item = TokenStream> + '_ {
         let struct_name = self.analysis.ident.to_string();
-        self.relations().flat_map(move |relation| {
+        self.belongs_to_fields().flat_map(move |relation| {
             let enum_ident = Self::relation_enum_ident(&struct_name, relation.name);
             let referenced_type = relation.referenced_type;
             let factory_type = Ident::new(
@@ -274,7 +292,7 @@ impl<'a> FactoryCodegen<'a> {
 
         // Step 2: Create belongs_to relations
         let struct_name = struct_ident.to_string();
-        let belongs_to_create = self.relations().map(|relation| {
+        let belongs_to_create = self.belongs_to_fields().map(|relation| {
             let field = &relation.base_ident;
             let factory_field = relation.factory_field;
             let enum_ident = Self::relation_enum_ident(&struct_name, relation.name);
@@ -311,7 +329,9 @@ impl<'a> FactoryCodegen<'a> {
 
         let struct_fields = column_fields.chain(has_many_init);
 
-        // Step 4a: Create one-to-many children using SetForeignKey trait
+        // Step 4a: Create one-to-many children
+        // Uses explicit FK setter when foreign_key attribute is specified,
+        // otherwise falls back to SetForeignKey trait (only works for unique relations)
         let one_to_many_create = self.one_to_many_fields().map(|field| {
             let pending_field = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
             let target_factory = Ident::new(
@@ -319,10 +339,21 @@ impl<'a> FactoryCodegen<'a> {
                 field.target_type.span(),
             );
 
+            let set_fk_call = match &field.foreign_key {
+                // Explicit FK: use direct setter method
+                Some(fk_column) => quote! {
+                    let child_factory = factory.clone().#fk_column(pk.clone());
+                },
+                // Implicit FK: use SetForeignKey trait (only works for unique relations)
+                None => quote! {
+                    let child_factory = <#target_factory as fabrique::SetForeignKey<#struct_ident>>::set_foreign_key(factory.clone(), pk.clone());
+                },
+            };
+
             quote! {
                 for (factory, count) in self.#pending_field {
                     for _ in 0..count {
-                        let child_factory = <#target_factory as fabrique::SetForeignKey<#struct_ident>>::set_foreign_key(factory.clone(), pk.clone());
+                        #set_fk_call
                         fabrique::Factory::create(child_factory, &mut *conn).await?;
                     }
                 }
@@ -393,7 +424,7 @@ impl<'a> FactoryCodegen<'a> {
             }
         });
 
-        let initialized_relation_fields = self.relations().map(|relation| {
+        let initialized_relation_fields = self.belongs_to_fields().map(|relation| {
             let name = &relation.factory_field;
             quote! {
                 #name: None
@@ -442,7 +473,7 @@ impl<'a> FactoryCodegen<'a> {
     /// and store them for deferred execution during `create()`.
     fn generate_factory_methods_for_relation(&self) -> impl Iterator<Item = TokenStream> + '_ {
         let struct_name = self.analysis.ident.to_string();
-        self.relations().map(move |relation| {
+        self.belongs_to_fields().map(move |relation| {
             let referenced_type = relation.referenced_type;
             let method_name =
                 Ident::new(&format!("for_{}", &relation.name), referenced_type.span());
@@ -481,7 +512,7 @@ impl<'a> FactoryCodegen<'a> {
     fn generate_set_foreign_key_impls(&self) -> impl Iterator<Item = TokenStream> + '_ {
         let factory_ident = &self.ident;
 
-        self.relations().map(move |relation| {
+        self.belongs_to_fields().map(move |relation| {
             let parent_type = relation.referenced_type;
             let fk_field = relation.base_ident;
 
@@ -1033,6 +1064,88 @@ mod tests {
                 }
             }
             .to_string()
+        );
+    }
+
+    #[test]
+    fn test_multiple_belongs_to_same_parent_generates_no_set_foreign_key() {
+        // Arrange - Message has two belongs_to to the same parent (User)
+        let input = parse_quote! {
+            struct Message {
+                id: u32,
+                #[fabrique(belongs_to = "User")]
+                sender_id: u32,
+                #[fabrique(belongs_to = "User")]
+                recipient_id: u32,
+                content: String
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = FactoryCodegen::new(&analysis);
+
+        // Act
+        let generated: Vec<TokenStream> = codegen.generate_set_foreign_key_impls().collect();
+
+        // Assert - no SetForeignKey should be generated for ambiguous relationships
+        assert!(
+            generated.is_empty(),
+            "Should not generate SetForeignKey when multiple fields reference same parent"
+        );
+    }
+
+    #[test]
+    fn test_has_many_with_explicit_foreign_key_uses_direct_setter() {
+        // Arrange - User has sent_messages with explicit foreign_key
+        let input = parse_quote! {
+            struct User {
+                id: u32,
+                #[fabrique(foreign_key = "sender_id")]
+                sent_messages: HasMany<Message>
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = FactoryCodegen::new(&analysis);
+
+        // Act
+        let generated = codegen.generate_factory_method_create().to_string();
+
+        // Assert - should use direct setter instead of SetForeignKey trait
+        assert!(
+            generated.contains("factory . clone () . sender_id (pk . clone ())"),
+            "Should use direct setter method for explicit FK. Generated: {}",
+            generated
+        );
+        assert!(
+            !generated.contains("SetForeignKey"),
+            "Should not use SetForeignKey trait for explicit FK. Generated: {}",
+            generated
+        );
+    }
+
+    #[test]
+    fn test_multiple_belongs_to_same_parent_generates_no_for_relation() {
+        // Arrange - Message has two belongs_to to the same parent (User)
+        let input = parse_quote! {
+            struct Message {
+                id: u32,
+                #[fabrique(belongs_to = "User")]
+                sender_id: u32,
+                #[fabrique(belongs_to = "User")]
+                recipient_id: u32,
+                content: String
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = FactoryCodegen::new(&analysis);
+
+        // Act
+        let generated: Vec<TokenStream> = codegen.generate_factory_methods_for_relation().collect();
+
+        // Assert - no for_[relation] methods should be generated for ambiguous
+        // relationships
+        assert!(
+            generated.is_empty(),
+            "Should not generate for_[relation] methods when multiple fields reference same parent"
         );
     }
 
