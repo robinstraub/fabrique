@@ -1144,6 +1144,41 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_factory_method_create_with_custom_faker() {
+        // Arrange a struct with a custom faker expression
+        let input = parse_quote! {
+            struct User {
+                id: u32,
+                #[fabrique(faker = "Name()")]
+                name: String,
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let factory = FactoryCodegen::new(&analysis);
+
+        // Act
+        let generated = factory.generate_factory_method_create().to_string();
+
+        // Assert - should contain Fake import and custom faker expression
+        assert!(
+            generated.contains("use :: fabrique :: fake :: Fake"),
+            "Should import Fake trait when custom faker is used. Generated: {}",
+            generated
+        );
+        assert!(
+            generated.contains("Name () . fake ()"),
+            "Should use custom faker expression. Generated: {}",
+            generated
+        );
+        // id should still use seeded_value
+        assert!(
+            generated.contains("seeded_value :: < u32 >"),
+            "Fields without faker should use seeded_value. Generated: {}",
+            generated
+        );
+    }
+
+    #[test]
     fn test_generate_factory_with_many_to_many() {
         // Arrange - Order has many Anvils through OrderLine
         let input = parse_quote! {

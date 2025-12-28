@@ -440,10 +440,7 @@ mod tests {
 
         // Assert
         let parsed = result.expect("should parse successfully");
-        let ParsedField::Column(field) = parsed else {
-            panic!("expected Column");
-        };
-        assert!(field.faker.is_some());
+        assert!(matches!(parsed, ParsedField::Column(ref f) if f.faker.is_some()));
     }
 
     #[test]
@@ -467,10 +464,7 @@ mod tests {
 
         // Assert
         let parsed = result.expect("should parse successfully");
-        let ParsedField::Column(field) = parsed else {
-            panic!("expected Column");
-        };
-        assert!(field.faker.is_some());
+        assert!(matches!(parsed, ParsedField::Column(ref f) if f.faker.is_some()));
     }
 
     #[test]
@@ -494,10 +488,7 @@ mod tests {
 
         // Assert
         let parsed = result.expect("should parse successfully");
-        let ParsedField::Column(field) = parsed else {
-            panic!("expected Column");
-        };
-        assert!(field.faker.is_none());
+        assert!(matches!(parsed, ParsedField::Column(ref f) if f.faker.is_none()));
     }
 
     #[test]
