@@ -21,6 +21,7 @@ impl<'a> ModelCodegen<'a> {
         let fn_primary_key = self.generate_fn_primary_key();
         let fn_table_name = self.generate_fn_table_name();
         let fn_columns = self.generate_fn_columns();
+        let fn_qualified_columns = self.generate_fn_qualified_columns();
         let fn_primary_key_columns = self.generate_fn_primary_key_columns();
         let fn_uses_soft_delete = self.generate_fn_soft_delete_column();
         let lazy_loading_methods = self.generate_lazy_loading_methods();
@@ -35,6 +36,8 @@ impl<'a> ModelCodegen<'a> {
                 #fn_table_name
 
                 #fn_columns
+
+                #fn_qualified_columns
 
                 #fn_primary_key_columns
 
@@ -135,6 +138,22 @@ impl<'a> ModelCodegen<'a> {
         }
     }
 
+    fn generate_fn_qualified_columns(&self) -> TokenStream {
+        let table_name = &self.analysis.model.table_name;
+        let qualified_columns: Vec<_> = self
+            .analysis
+            .column_fields
+            .iter()
+            .map(|field| format!("{}.{}", table_name, field.column))
+            .collect();
+
+        quote! {
+            fn qualified_columns() -> &'static [&'static str] {
+                &[#(#qualified_columns),*]
+            }
+        }
+    }
+
     fn generate_fn_primary_key_columns(&self) -> TokenStream {
         let pk_columns: Vec<_> = self
             .analysis
@@ -175,42 +194,52 @@ impl<'a> ModelCodegen<'a> {
     fn generate_lazy_loading_methods(&self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
 
-        // Only generate lazy loading for one-to-many (no through).
-        // Many-to-many lazy loading requires different query logic.
-        let methods = self
-            .analysis
-            .has_many_fields
-            .iter()
-            .filter(|field| field.through.is_none())
-            .map(|field| {
-                let method_name = &field.ident;
-                let target_type = &field.target_type;
+        // One-to-many lazy loading (without through).
+        let one_to_many_methods = self.analysis.one_to_many_fields().map(|field| {
+            let method_name = &field.ident;
+            let target_type = &field.target_type;
 
-                // When explicit foreign_key is provided, use the column constant directly.
-                // Otherwise, rely on the BelongsTo trait for foreign key resolution.
-                let fk_expr = match &field.foreign_key_const {
-                    Some(fk_const) => {
-                        quote! { #target_type::#fk_const }
-                    }
-                    None => {
-                        quote! { <#target_type as ::fabrique::BelongsTo<Self>>::foreign_key_column() }
-                    }
-                };
-
-                quote! {
-                    pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Filtered<::fabrique::sql::Selected>> {
-                        let pk = <Self as ::fabrique::Model>::primary_key(self);
-                        let fk = #fk_expr;
-                        <#target_type as ::fabrique::Query>::query()
-                            .select()
-                            .r#where(fk, "=", pk)
-                    }
+            // When explicit foreign_key is provided, use the column constant directly.
+            // Otherwise, rely on the BelongsTo trait for foreign key resolution.
+            let fk_expr = match &field.foreign_key_const {
+                Some(fk_const) => {
+                    quote! { #target_type::#fk_const }
                 }
-            });
+                None => {
+                    quote! { <#target_type as ::fabrique::BelongsTo<Self>>::foreign_key_column() }
+                }
+            };
+
+            quote! {
+                pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Filtered<::fabrique::sql::Selected>> {
+                    let pk = <Self as ::fabrique::Model>::primary_key(self);
+                    let fk = #fk_expr;
+                    <#target_type as ::fabrique::Query>::query()
+                        .select()
+                        .r#where(fk, "=", pk)
+                }
+            }
+        });
+
+        // Many-to-many lazy loading (with through).
+        let many_to_many_methods = self.analysis.many_to_many_fields().map(|field| {
+            let method_name = &field.ident;
+            let target_type = &field.target_type;
+            let join_type = field.through.as_ref().unwrap();
+
+            quote! {
+                pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Joined<::fabrique::sql::Selected>> {
+                    <#target_type as ::fabrique::Query>::query()
+                        .select()
+                        .join_through::<#join_type, Self>()
+                }
+            }
+        });
 
         quote! {
             impl #base_struct_ident {
-                #(#methods)*
+                #(#one_to_many_methods)*
+                #(#many_to_many_methods)*
             }
         }
     }
@@ -249,6 +278,10 @@ mod tests {
 
                     fn columns() ->  &'static [&'static str] {
                         &["id"]
+                    }
+
+                    fn qualified_columns() -> &'static [&'static str] {
+                        &["anvils.id"]
                     }
 
                     fn primary_key_columns() -> &'static [&'static str] {
@@ -297,6 +330,10 @@ mod tests {
 
                     fn columns() ->  &'static [&'static str] {
                         &["id", "deleted_at"]
+                    }
+
+                    fn qualified_columns() -> &'static [&'static str] {
+                        &["anvils.id", "anvils.deleted_at"]
                     }
 
                     fn primary_key_columns() -> &'static [&'static str] {
@@ -349,6 +386,10 @@ mod tests {
                         &["id"]
                     }
 
+                    fn qualified_columns() -> &'static [&'static str] {
+                        &["customers.id"]
+                    }
+
                     fn primary_key_columns() -> &'static [&'static str] {
                         &["id"]
                     }
@@ -392,6 +433,63 @@ mod tests {
         assert!(
             !result.contains("BelongsTo"),
             "Should NOT use BelongsTo trait when foreign_key is explicit"
+        );
+    }
+
+    #[test]
+    fn test_many_to_many_lazy_loading() {
+        // Arrange - Order has many Products through OrderLine
+        let input = parse_quote! {
+            struct Order {
+                id: String,
+                #[fabrique(through = "OrderLine")]
+                products: HasMany<Product>
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = ModelCodegen::new(&analysis);
+
+        // Act
+        let result = codegen.generate();
+
+        // Assert - verify the lazy loading method uses join_through
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                impl ::fabrique::Model for Order {
+                    type PrimaryKey = String;
+                    type SoftDeleteColumn = ::fabrique::Nil;
+
+                    fn primary_key(&self) -> Self::PrimaryKey {
+                        self.id.clone()
+                    }
+
+                    fn table_name() -> &'static str {
+                        "orders"
+                    }
+
+                    fn columns() -> &'static [&'static str] {
+                        &["id"]
+                    }
+
+                    fn qualified_columns() -> &'static [&'static str] {
+                        &["orders.id"]
+                    }
+
+                    fn primary_key_columns() -> &'static [&'static str] {
+                        &["id"]
+                    }
+                }
+
+                impl Order {
+                    pub fn products(&self) -> ::fabrique::model::QueryBuilder<Product, ::fabrique::sql::Joined<::fabrique::sql::Selected>> {
+                        <Product as ::fabrique::Query>::query()
+                            .select()
+                            .join_through::<OrderLine, Self>()
+                    }
+                }
+            }
+            .to_string()
         );
     }
 }

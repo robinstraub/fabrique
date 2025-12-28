@@ -21,29 +21,25 @@ impl<'a> BelongsToCodegen<'a> {
     /// no trait is generated to avoid duplicate implementations.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
-        let belongs_to_by_parent = self.analysis.belongs_to_by_parent();
 
-        let impls = belongs_to_by_parent.iter().filter_map(|(_, fields)| {
-            // Only generate BelongsTo trait when there's a unique relationship
-            if fields.len() != 1 {
-                return None; // Skip ambiguous cases - no trait generation
-            }
+        let impls = self
+            .analysis
+            .belongs_to_non_ambiguous()
+            .map(|(field, relation)| {
+                let parent_type = &relation.referenced_type;
+                let column_type = &field.column_type;
+                let const_column_name = &field.const_column_name;
 
-            let (field, relation) = &fields[0];
-            let parent_type = &relation.referenced_type;
-            let column_type = &field.column_type;
-            let const_column_name = &field.const_column_name;
+                quote! {
+                    impl ::fabrique::BelongsTo<#parent_type> for #base_struct_ident {
+                        type ForeignKeyColumn = #column_type;
 
-            Some(quote! {
-                impl ::fabrique::BelongsTo<#parent_type> for #base_struct_ident {
-                    type ForeignKeyColumn = #column_type;
-
-                    fn foreign_key_column() -> Self::ForeignKeyColumn {
-                        Self::#const_column_name
+                        fn foreign_key_column() -> Self::ForeignKeyColumn {
+                            Self::#const_column_name
+                        }
                     }
                 }
-            })
-        });
+            });
 
         quote! {
             #(#impls)*

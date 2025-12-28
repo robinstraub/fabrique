@@ -46,6 +46,7 @@ impl<'a> ColumnsCodegen<'a> {
 
     fn generate_column_impls(&self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
+        let table_name = &self.analysis.model.table_name;
         let impls = self.analysis.column_fields.iter().map(|field| {
             let type_name = &field.column_type;
             let field_type = match &field.r#as {
@@ -56,6 +57,7 @@ impl<'a> ColumnsCodegen<'a> {
                 }
             };
             let column_name = field.ident.to_string();
+            let qualified_name = format!("{}.{}", table_name, field.ident);
 
             quote! {
                 impl ::fabrique::Column<#base_struct_ident> for #type_name {
@@ -63,6 +65,10 @@ impl<'a> ColumnsCodegen<'a> {
 
                     fn name(&self) -> &'static str {
                         #column_name
+                    }
+
+                    fn qualified_name(&self) -> &'static str {
+                        #qualified_name
                     }
                 }
             }
@@ -104,7 +110,7 @@ mod tests {
         // Act
         let result = codegen.generate();
 
-        // Assert
+        // Assert: Column has both name() and qualified_name()
         assert_eq!(
             result.to_string(),
             quote! {
@@ -117,12 +123,20 @@ mod tests {
                     fn name(&self) -> &'static str {
                         "id"
                     }
+
+                    fn qualified_name(&self) -> &'static str {
+                        "anvils.id"
+                    }
                 }
                 impl ::fabrique::Column<Anvil> for AnvilNameColumn {
                     type Type = String;
 
                     fn name(&self) -> &'static str {
                         "name"
+                    }
+
+                    fn qualified_name(&self) -> &'static str {
+                        "anvils.name"
                     }
                 }
 

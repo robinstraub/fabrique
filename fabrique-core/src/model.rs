@@ -21,8 +21,11 @@ pub trait Model: DatabaseAware {
     /// Returns the table name for this model
     fn table_name() -> &'static str;
 
-    /// Returns the column names for this model
+    /// Returns the column names for this model (unqualified)
     fn columns() -> &'static [&'static str];
+
+    /// Returns the column names qualified with table name (e.g., "products.id")
+    fn qualified_columns() -> &'static [&'static str];
 
     /// Returns the primary key column names for this model
     fn primary_key_columns() -> &'static [&'static str];

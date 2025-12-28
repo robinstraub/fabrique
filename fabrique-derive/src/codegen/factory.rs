@@ -1,5 +1,4 @@
 use crate::analysis::Analysis;
-use crate::analysis::ast::HasManyField;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::Ident;
@@ -87,7 +86,7 @@ impl<'a> FactoryCodegen<'a> {
         }
     }
 
-    /// Returns belongs_to fields, filtering out non-unique relations.
+    /// Returns belongs_to fields, filtering out ambiguous relations.
     ///
     /// Only returns relations where there is exactly one belongs_to per parent
     /// type. When a model has multiple belongs_to to the same parent type
@@ -95,17 +94,8 @@ impl<'a> FactoryCodegen<'a> {
     /// those fields are filtered out to avoid generating duplicate trait impls,
     /// relation enums, and `for_[relation]` methods.
     fn belongs_to_fields(&self) -> impl Iterator<Item = FactoryRelation<'a>> {
-        let belongs_to_by_parent = self.analysis.belongs_to_by_parent();
-
         self.analysis
-            .relations()
-            .filter(move |(_, relation)| {
-                let parent_name = relation.referenced_type.to_string();
-                belongs_to_by_parent
-                    .get(&parent_name)
-                    .map(|fields| fields.len() == 1)
-                    .unwrap_or(true)
-            })
+            .belongs_to_non_ambiguous()
             .map(|(field, relation)| {
                 let factory_field = Ident::new(&format!("{}_relation", &relation.name), field.span);
 
@@ -118,30 +108,9 @@ impl<'a> FactoryCodegen<'a> {
             })
     }
 
-    /// Returns one-to-many HasMany fields (without `through`).
-    fn one_to_many_fields(&self) -> impl Iterator<Item = &'a HasManyField> {
-        self.analysis
-            .has_many_fields
-            .iter()
-            .filter(|f| f.through.is_none())
-    }
-
-    /// Returns many-to-many HasMany fields (with `through`).
-    fn many_to_many_fields(&self) -> impl Iterator<Item = &'a HasManyField> {
-        self.analysis
-            .has_many_fields
-            .iter()
-            .filter(|f| f.through.is_some())
-    }
-
-    /// Returns all HasMany fields from the analysis.
-    fn has_many_fields(&self) -> impl Iterator<Item = &'a HasManyField> {
-        self.analysis.has_many_fields.iter()
-    }
-
     /// Generates pending HasMany fields for the factory struct.
     fn generate_has_many_fields(&self) -> impl Iterator<Item = TokenStream> + '_ {
-        self.has_many_fields().map(|field| {
+        self.analysis.has_many_fields.iter().map(|field| {
             let field_name = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
             let target_factory = Ident::new(
                 &format!("{}Factory", field.target_type),
@@ -156,7 +125,7 @@ impl<'a> FactoryCodegen<'a> {
 
     /// Generates `has_<relation>` setter methods for HasMany fields.
     fn generate_has_many_methods(&self) -> impl Iterator<Item = TokenStream> + '_ {
-        self.has_many_fields().map(|field| {
+        self.analysis.has_many_fields.iter().map(|field| {
             let method_name = Ident::new(&format!("has_{}", field.ident), field.ident.span());
             let pending_field = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
             let target_factory = Ident::new(
@@ -320,7 +289,7 @@ impl<'a> FactoryCodegen<'a> {
             }
         });
 
-        let has_many_init = self.has_many_fields().map(|field| {
+        let has_many_init = self.analysis.has_many_fields.iter().map(|field| {
             let name = &field.ident;
             quote! {
                 #name: ::fabrique::HasMany::default()
@@ -332,7 +301,7 @@ impl<'a> FactoryCodegen<'a> {
         // Step 4a: Create one-to-many children
         // Uses explicit FK setter when foreign_key attribute is specified,
         // otherwise falls back to SetForeignKey trait (only works for unique relations)
-        let one_to_many_create = self.one_to_many_fields().map(|field| {
+        let one_to_many_create = self.analysis.one_to_many_fields().map(|field| {
             let pending_field = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
             let target_factory = Ident::new(
                 &format!("{}Factory", field.target_type),
@@ -361,7 +330,7 @@ impl<'a> FactoryCodegen<'a> {
         });
 
         // Step 4b: Create many-to-many relationships through join model
-        let many_to_many_create = self.many_to_many_fields().map(|field| {
+        let many_to_many_create = self.analysis.many_to_many_fields().map(|field| {
             let pending_field = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
             let target_type = &field.target_type;
             let join_type = field.through.as_ref().unwrap();
@@ -431,7 +400,7 @@ impl<'a> FactoryCodegen<'a> {
             }
         });
 
-        let initialized_has_many_fields = self.has_many_fields().map(|field| {
+        let initialized_has_many_fields = self.analysis.has_many_fields.iter().map(|field| {
             let name = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
             quote! {
                 #name: Vec::new()

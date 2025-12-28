@@ -1,10 +1,84 @@
 use crate::database::Column;
 use crate::model::Model;
+use crate::relation::BelongsTo;
 use crate::sql::operators::{Direction, Operator};
 use crate::sql::{
-    Conflicted, Filtered, Initial, Inserted, Inserting, Limited, Offsetted, Ordered,
+    Conflicted, Filtered, Initial, Inserted, Inserting, Joined, Limited, Offsetted, Ordered,
     QueryBuilder as SqlQueryBuilder, Returned, Selected, Updated, Updating, Upserted,
 };
+
+/// Implements the `join` and `join_through` methods for base states and their
+/// joined variants.
+///
+/// For each base state, generates:
+/// - `Base` → `Joined<Base>` (initial join)
+/// - `Joined<Base>` → `Joined<Base>` (chained joins)
+///
+/// - `join::<J>()`: Simple join, ON clause links J to M via `BelongsTo<M>`
+/// - `join_through::<Pivot, Target>()`: Many-to-many join via pivot table
+macro_rules! impl_join {
+    // Shared body - takes input state and output base
+    (@body $state:ty, $base:ty) => {
+        impl<M> QueryBuilder<M, $state>
+        where
+            M: Model,
+            M::Database: sqlx::Database,
+        {
+            /// Adds an INNER JOIN clause to the query.
+            ///
+            /// The ON clause is automatically inferred from the `BelongsTo<M>` trait
+            /// implementation on the join model `J`.
+            ///
+            /// Transitions to [`Joined`] state.
+            pub fn join<J>(self) -> QueryBuilder<M, Joined<$base>>
+            where
+                J: Model<Database = M::Database> + BelongsTo<M>,
+            {
+                QueryBuilder {
+                    inner: self.inner.join(
+                        J::table_name(),
+                        J::foreign_key_column().qualified_name(),
+                        M::primary_key_columns()[0],
+                    ),
+                }
+            }
+
+            /// Adds a many-to-many JOIN through a pivot table.
+            ///
+            /// Joins `Pivot` to `M`, then `Target` to `Pivot`.
+            ///
+            /// Transitions to [`Joined`] state.
+            pub fn join_through<Pivot, Target>(self) -> QueryBuilder<M, Joined<$base>>
+            where
+                Pivot: Model<Database = M::Database>,
+                Pivot: BelongsTo<M>,
+                Pivot: BelongsTo<Target>,
+                Target: Model<Database = M::Database>,
+            {
+                QueryBuilder {
+                    inner: self.inner
+                        .join(
+                            Pivot::table_name(),
+                            <Pivot as BelongsTo<M>>::foreign_key_column().qualified_name(),
+                            &format!("{}.{}", M::table_name(), M::primary_key_columns()[0]),
+                        )
+                        .join(
+                            Target::table_name(),
+                            <Pivot as BelongsTo<Target>>::foreign_key_column().qualified_name(),
+                            &format!("{}.{}", Target::table_name(), Target::primary_key_columns()[0]),
+                        )
+                }
+            }
+        }
+    };
+    // Entry: for each base, generate both impls
+    ($($base:ty),+ $(,)?) => {
+        $(
+            impl_join!(@body $base, $base);
+            impl_join!(@body Joined<$base>, $base);
+        )+
+    };
+}
 
 /// Implements the `where` method for states that start a WHERE clause.
 ///
@@ -243,7 +317,7 @@ where
     /// Transitions to [`Selected`] state.
     pub fn select(self) -> QueryBuilder<M, Selected> {
         QueryBuilder {
-            inner: self.inner.select(M::columns()),
+            inner: self.inner.select(M::qualified_columns()),
         }
     }
 
@@ -310,12 +384,44 @@ macro_rules! impl_returning {
 }
 
 // Use macros to implement query execution methods across multiple states
-impl_where!(Selected, Updated);
-impl_order_by!(Selected, Filtered<Selected>);
-impl_limit!(Selected, Filtered<Selected>, Ordered);
-impl_get!(Selected, Filtered<Selected>, Ordered, Limited, Offsetted);
-impl_first!(Selected, Filtered<Selected>, Ordered);
-impl_first_or_fail!(Selected, Filtered<Selected>, Ordered);
+impl_join!(Selected);
+impl_where!(Selected, Updated, Joined<Selected>);
+impl_order_by!(
+    Selected,
+    Filtered<Selected>,
+    Joined<Selected>,
+    Filtered<Joined<Selected>>
+);
+impl_limit!(
+    Selected,
+    Filtered<Selected>,
+    Ordered,
+    Joined<Selected>,
+    Filtered<Joined<Selected>>
+);
+impl_get!(
+    Selected,
+    Filtered<Selected>,
+    Ordered,
+    Limited,
+    Offsetted,
+    Joined<Selected>,
+    Filtered<Joined<Selected>>
+);
+impl_first!(
+    Selected,
+    Filtered<Selected>,
+    Ordered,
+    Joined<Selected>,
+    Filtered<Joined<Selected>>
+);
+impl_first_or_fail!(
+    Selected,
+    Filtered<Selected>,
+    Ordered,
+    Joined<Selected>,
+    Filtered<Joined<Selected>>
+);
 impl_returning!(Updated, Filtered<Updated>);
 impl_execute!(Filtered<Updated>, Inserted<M::Database>, Upserted);
 
@@ -534,6 +640,15 @@ mod tests {
             &["id", "name", "price_cents", "in_stock"]
         }
 
+        fn qualified_columns() -> &'static [&'static str] {
+            &[
+                "products.id",
+                "products.name",
+                "products.price_cents",
+                "products.in_stock",
+            ]
+        }
+
         fn primary_key_columns() -> &'static [&'static str] {
             &["id"]
         }
@@ -548,6 +663,10 @@ mod tests {
         fn name(&self) -> &'static str {
             "id"
         }
+
+        fn qualified_name(&self) -> &'static str {
+            "products.id"
+        }
     }
 
     /// Type-safe column marker for the `name` column.
@@ -558,6 +677,10 @@ mod tests {
 
         fn name(&self) -> &'static str {
             "name"
+        }
+
+        fn qualified_name(&self) -> &'static str {
+            "products.name"
         }
     }
 
@@ -570,6 +693,10 @@ mod tests {
         fn name(&self) -> &'static str {
             "price_cents"
         }
+
+        fn qualified_name(&self) -> &'static str {
+            "products.price_cents"
+        }
     }
 
     /// Type-safe column marker for the `in_stock` column.
@@ -580,6 +707,10 @@ mod tests {
 
         fn name(&self) -> &'static str {
             "in_stock"
+        }
+
+        fn qualified_name(&self) -> &'static str {
+            "products.in_stock"
         }
     }
 
