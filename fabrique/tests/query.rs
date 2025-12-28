@@ -56,14 +56,12 @@ async fn test_join_many_to_many_lazy_loading(connection: Pool<Postgres>) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn test_join_one_to_many(connection: Pool<Postgres>) {
-    // Arrange
     let user = User::factory()
         .has_orders(Order::factory().status("shipped".to_string()), 1)
         .create(&connection)
         .await
         .unwrap();
 
-    // Act
     let result = User::query()
         .select()
         .join::<Order>()
@@ -71,8 +69,276 @@ async fn test_join_one_to_many(connection: Pool<Postgres>) {
         .get(&connection)
         .await;
 
-    // Assert
-    println!("{:#?}", &result);
     assert!(result.is_ok());
     assert_eq!(result.unwrap().len(), 1);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn test_where_not_null(connection: Pool<Postgres>) {
+    Product::factory().create(&connection).await.unwrap();
+
+    let result = Product::query()
+        .select()
+        .where_not_null(Product::NAME)
+        .get(&connection)
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn test_order_by_and_limit(connection: Pool<Postgres>) {
+    Product::factory().create(&connection).await.unwrap();
+
+    // order_by on Selected
+    let result = Product::query()
+        .select()
+        .order_by("name", "ASC")
+        .get(&connection)
+        .await;
+    assert!(result.is_ok());
+
+    // order_by on Filtered
+    let result = Product::query()
+        .select()
+        .r#where(Product::IN_STOCK, "=", true)
+        .order_by("name", "ASC")
+        .get(&connection)
+        .await;
+    assert!(result.is_ok());
+
+    // limit on Selected
+    let result = Product::query().select().limit(10).get(&connection).await;
+    assert!(result.is_ok());
+
+    // limit on Filtered
+    let result = Product::query()
+        .select()
+        .r#where(Product::IN_STOCK, "=", true)
+        .limit(10)
+        .get(&connection)
+        .await;
+    assert!(result.is_ok());
+
+    // limit on Ordered
+    let result = Product::query()
+        .select()
+        .order_by("name", "ASC")
+        .limit(10)
+        .get(&connection)
+        .await;
+    assert!(result.is_ok());
+
+    // offset on Limited
+    let result = Product::query()
+        .select()
+        .limit(10)
+        .offset(5)
+        .get(&connection)
+        .await;
+    assert!(result.is_ok());
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn test_first_and_first_or_fail(connection: Pool<Postgres>) {
+    Product::factory()
+        .in_stock(true)
+        .create(&connection)
+        .await
+        .unwrap();
+
+    // first on Selected
+    let result = Product::query().select().first(&connection).await;
+    assert!(result.is_ok());
+
+    // first on Filtered
+    let result = Product::query()
+        .select()
+        .r#where(Product::IN_STOCK, "=", true)
+        .first(&connection)
+        .await;
+    assert!(result.is_ok());
+
+    // first on Ordered
+    let result = Product::query()
+        .select()
+        .order_by("name", "ASC")
+        .first(&connection)
+        .await;
+    assert!(result.is_ok());
+
+    // first_or_fail on Selected (with existing data)
+    let result = Product::query().select().first_or_fail(&connection).await;
+    assert!(result.is_ok());
+
+    // first_or_fail on Filtered
+    let result = Product::query()
+        .select()
+        .r#where(Product::IN_STOCK, "=", true)
+        .first_or_fail(&connection)
+        .await;
+    assert!(
+        result.is_ok(),
+        "first_or_fail filtered failed: {:?}",
+        result
+    );
+
+    // first_or_fail on Ordered
+    let result = Product::query()
+        .select()
+        .order_by("name", "ASC")
+        .first_or_fail(&connection)
+        .await;
+    assert!(result.is_ok());
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn test_update_query(connection: Pool<Postgres>) {
+    let product = Product::factory().create(&connection).await.unwrap();
+
+    // update -> set -> where -> execute
+    let result = Product::update()
+        .set(Product::NAME, "Updated".to_string())
+        .r#where(Product::ID, "=", product.id)
+        .execute(&connection)
+        .await;
+    assert!(result.is_ok(), "execute failed: {:?}", result);
+
+    // update -> set -> set (chained) -> where -> returning -> first
+    let result = Product::update()
+        .set(Product::NAME, "Updated2".to_string())
+        .set(Product::PRICE_CENTS, 999)
+        .r#where(Product::ID, "=", product.id)
+        .returning(Product::columns())
+        .first(&connection)
+        .await;
+    assert!(result.is_ok(), "returning first failed: {:?}", result);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn test_insert_query(connection: Pool<Postgres>) {
+    // insert -> set -> set (chained) -> returning -> first
+    let result = Product::query()
+        .insert()
+        .set(Product::ID, Uuid::new_v4())
+        .set(Product::NAME, "New Product".to_string())
+        .set(Product::PRICE_CENTS, 100)
+        .set(Product::IN_STOCK, true)
+        .returning()
+        .first(&connection)
+        .await;
+    assert!(result.is_ok());
+
+    // insert -> on_conflict -> do_nothing -> execute
+    let existing_id = result.unwrap().unwrap().id;
+    let result = Product::query()
+        .insert()
+        .set(Product::ID, existing_id)
+        .set(Product::NAME, "Conflict".to_string())
+        .set(Product::PRICE_CENTS, 200)
+        .set(Product::IN_STOCK, false)
+        .on_conflict()
+        .do_nothing()
+        .execute(&connection)
+        .await;
+    assert!(result.is_ok());
+
+    // insert -> on_conflict -> do_update -> returning -> get
+    let result = Product::query()
+        .insert()
+        .set(Product::ID, existing_id)
+        .set(Product::NAME, "Upserted".to_string())
+        .set(Product::PRICE_CENTS, 300)
+        .set(Product::IN_STOCK, true)
+        .on_conflict()
+        .do_update()
+        .returning()
+        .get(&connection)
+        .await;
+    assert!(result.is_ok());
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn test_joined_state_methods(connection: Pool<Postgres>) {
+    let user = User::factory()
+        .has_orders(Order::factory(), 1)
+        .create(&connection)
+        .await
+        .unwrap();
+
+    // Joined<Selected> -> order_by, limit, first, first_or_fail
+    assert!(
+        User::query()
+            .select()
+            .join::<Order>()
+            .order_by("users.name", "ASC")
+            .get(&connection)
+            .await
+            .is_ok()
+    );
+    assert!(
+        User::query()
+            .select()
+            .join::<Order>()
+            .limit(10)
+            .get(&connection)
+            .await
+            .is_ok()
+    );
+    assert!(
+        User::query()
+            .select()
+            .join::<Order>()
+            .first(&connection)
+            .await
+            .is_ok()
+    );
+    assert!(
+        User::query()
+            .select()
+            .join::<Order>()
+            .first_or_fail(&connection)
+            .await
+            .is_ok()
+    );
+
+    // Joined<Selected> -> where -> order_by, limit, first, first_or_fail
+    assert!(
+        User::query()
+            .select()
+            .join::<Order>()
+            .r#where(User::EMAIL, "=", user.email.clone())
+            .order_by("users.name", "ASC")
+            .get(&connection)
+            .await
+            .is_ok()
+    );
+    assert!(
+        User::query()
+            .select()
+            .join::<Order>()
+            .r#where(User::EMAIL, "=", user.email.clone())
+            .limit(10)
+            .get(&connection)
+            .await
+            .is_ok()
+    );
+    assert!(
+        User::query()
+            .select()
+            .join::<Order>()
+            .r#where(User::EMAIL, "=", user.email.clone())
+            .first(&connection)
+            .await
+            .is_ok()
+    );
+    assert!(
+        User::query()
+            .select()
+            .join::<Order>()
+            .r#where(User::EMAIL, "=", user.email)
+            .first_or_fail(&connection)
+            .await
+            .is_ok()
+    );
 }
