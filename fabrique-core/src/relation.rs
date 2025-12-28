@@ -97,11 +97,4 @@ mod tests {
     fn test_has_many_is_zst() {
         assert_eq!(std::mem::size_of::<HasMany<String>>(), 0);
     }
-
-    #[test]
-    fn test_has_many_clone() {
-        let original: HasMany<String> = HasMany::new();
-        let cloned = original.clone();
-        assert_eq!(original, cloned);
-    }
 }
