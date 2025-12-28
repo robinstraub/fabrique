@@ -28,15 +28,10 @@ async fn test_create(connection: Pool<Postgres>) {
         .await;
 
     assert!(result.is_ok());
-    assert_eq!(
-        result.unwrap(),
-        Product {
-            id: Uuid::default(),
-            name: "Anvil 3000".to_owned(),
-            price_cents: 9999,
-            in_stock: true,
-        }
-    )
+    let product = result.unwrap();
+    assert_eq!(product.name, "Anvil 3000");
+    assert_eq!(product.price_cents, 9999);
+    assert!(product.in_stock);
 }
 
 #[sqlx::test(migrations = "../migrations")]
@@ -62,11 +57,11 @@ async fn test_destroy(connection: Pool<Postgres>) {
 
 #[sqlx::test(migrations = "../migrations")]
 async fn test_all(connection: Pool<Postgres>) {
-    Product::factory().create(&connection).await.unwrap();
+    let product = Product::factory().create(&connection).await.unwrap();
 
     let result = Product::all(&connection).await;
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), vec![Product::default()]);
+    assert_eq!(result.unwrap(), vec![product]);
 }
 
 #[sqlx::test(migrations = "../migrations")]

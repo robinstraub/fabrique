@@ -11,9 +11,14 @@ documentation = "https://docs.rs/fabrique"
 [package.metadata.docs.rs]
 all-features = true
 
+[features]
+default = ["fake"]
+fake = ["dep:fake"]
+
 [dependencies]
 fabrique-core = { path = "../fabrique-core", version = "0.1.1" }
 fabrique-derive = { path = "../fabrique-derive", version = "0.1.1" }
+fake = { workspace = true, optional = true }
 
 [dev-dependencies]
 cargo-husky = { workspace = true }

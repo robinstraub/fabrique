@@ -281,11 +281,34 @@ impl<'a> FactoryCodegen<'a> {
         });
 
         // Step 3: Create the main instance
+        // Check if any field has a custom faker expression (requires Fake trait import)
+        let has_custom_faker = self
+            .analysis
+            .column_fields
+            .iter()
+            .any(|f| f.faker.is_some());
+
+        // Only import Fake trait when custom faker expressions are used
+        // seeded_value() handles the import internally for auto-generated values
+        let fake_import = if has_custom_faker {
+            quote! { use ::fabrique::fake::Fake; }
+        } else {
+            quote! {}
+        };
+
         let column_fields = self.analysis.column_fields.iter().map(|field| {
             let name = &field.ident;
             let ty = &field.ty;
-            quote! {
-                #name: self.#name.unwrap_or(<#ty as Default>::default())
+
+            match &field.faker {
+                // Custom faker expression provided - requires fake feature
+                Some(faker_expr) => quote! {
+                    #name: self.#name.unwrap_or_else(|| #faker_expr.fake())
+                },
+                // Default: use seeded_value (works with or without fake feature)
+                None => quote! {
+                    #name: self.#name.unwrap_or_else(::fabrique::seeded_value::<#ty>)
+                },
             }
         });
 
@@ -364,6 +387,8 @@ impl<'a> FactoryCodegen<'a> {
                 // Box::pin breaks recursive async type cycles that occur when
                 // Parent has HasMany<Child> and Child belongs_to Parent
                 ::std::boxed::Box::pin(async move {
+                    #fake_import
+
                     let mut conn = executor.acquire().await
                         .map_err(|e| <#struct_ident as fabrique::DatabaseAware>::Error::from(e))?;
 
@@ -593,10 +618,10 @@ mod tests {
                             }
 
                             let instance = Anvil {
-                                id: self.id.unwrap_or(<u32 as Default>::default()),
-                                hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
-                                hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
-                                weight: self.weight.unwrap_or(<u32 as Default>::default()),
+                                id: self.id.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                                hammer_id: self.hammer_id.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                                hardness: self.hardness.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                                weight: self.weight.unwrap_or_else(::fabrique::seeded_value::<u32>),
                             };
 
                             let instance = <Anvil as fabrique::Persist>::create(instance, &mut *conn).await?;
@@ -751,10 +776,10 @@ mod tests {
                         }
 
                         let instance = Anvil {
-                            id: self.id.unwrap_or(<u32 as Default>::default()),
-                            hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
-                            hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
-                            weight: self.weight.unwrap_or(<u32 as Default>::default()),
+                            id: self.id.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                            hammer_id: self.hammer_id.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                            hardness: self.hardness.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                            weight: self.weight.unwrap_or_else(::fabrique::seeded_value::<u32>),
                         };
 
                         let instance = <Anvil as fabrique::Persist>::create(instance, &mut *conn).await?;
@@ -914,7 +939,7 @@ mod tests {
                                 .map_err(|e| <Customer as fabrique::DatabaseAware>::Error::from(e))?;
 
                             let instance = Customer {
-                                id: self.id.unwrap_or(<u32 as Default>::default()),
+                                id: self.id.unwrap_or_else(::fabrique::seeded_value::<u32>),
                                 orders: ::fabrique::HasMany::default(),
                             };
 
@@ -1119,6 +1144,41 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_factory_method_create_with_custom_faker() {
+        // Arrange a struct with a custom faker expression
+        let input = parse_quote! {
+            struct User {
+                id: u32,
+                #[fabrique(faker = "Name()")]
+                name: String,
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let factory = FactoryCodegen::new(&analysis);
+
+        // Act
+        let generated = factory.generate_factory_method_create().to_string();
+
+        // Assert - should contain Fake import and custom faker expression
+        assert!(
+            generated.contains("use :: fabrique :: fake :: Fake"),
+            "Should import Fake trait when custom faker is used. Generated: {}",
+            generated
+        );
+        assert!(
+            generated.contains("Name () . fake ()"),
+            "Should use custom faker expression. Generated: {}",
+            generated
+        );
+        // id should still use seeded_value
+        assert!(
+            generated.contains("seeded_value :: < u32 >"),
+            "Fields without faker should use seeded_value. Generated: {}",
+            generated
+        );
+    }
+
+    #[test]
     fn test_generate_factory_with_many_to_many() {
         // Arrange - Order has many Anvils through OrderLine
         let input = parse_quote! {
@@ -1165,7 +1225,7 @@ mod tests {
                                 .map_err(|e| <Order as fabrique::DatabaseAware>::Error::from(e))?;
 
                             let instance = Order {
-                                id: self.id.unwrap_or(<u32 as Default>::default()),
+                                id: self.id.unwrap_or_else(::fabrique::seeded_value::<u32>),
                                 anvils: ::fabrique::HasMany::default(),
                             };
 

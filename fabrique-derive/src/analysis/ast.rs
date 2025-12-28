@@ -1,7 +1,7 @@
 use darling::{FromDeriveInput, FromField};
 use heck::{ToPascalCase, ToShoutySnakeCase, ToSnakeCase};
 use proc_macro2::Span;
-use syn::{Ident, Type};
+use syn::{Expr, Ident, Type};
 
 use crate::error::{Error, ErrorKind};
 
@@ -69,6 +69,11 @@ pub struct ModelFieldAttrs {
     /// same parent type.
     #[darling(default)]
     foreign_key: Option<Ident>,
+
+    /// Custom faker expression for generating random values.
+    /// If not specified, `Faker.fake::<FieldType>()` is used by default.
+    #[darling(default)]
+    faker: Option<String>,
 }
 
 #[derive(Debug)]
@@ -108,6 +113,10 @@ pub struct ColumnField {
     pub relation: Option<Relation>,
 
     pub soft_delete: bool,
+
+    /// Parsed faker expression for random value generation.
+    /// If None, uses `Faker.fake::<FieldType>()` by default.
+    pub faker: Option<Expr>,
 }
 
 /// A HasMany relationship field (not stored in database).
@@ -175,6 +184,15 @@ impl ParsedField {
             referenced_type,
         });
 
+        // Parse faker expression if provided
+        let faker = attrs
+            .faker
+            .map(|s| syn::parse_str::<Expr>(&s))
+            .transpose()
+            .map_err(|e| {
+                Error::new(attrs.span, ErrorKind::InvalidFakerExpression(e.to_string()))
+            })?;
+
         Ok(ParsedField::Column(Box::new(ColumnField {
             ident,
             span: attrs.span,
@@ -186,6 +204,7 @@ impl ParsedField {
             primary_key: attrs.primary_key,
             relation,
             soft_delete: attrs.soft_delete,
+            faker,
         })))
     }
 
@@ -227,6 +246,7 @@ mod tests {
             belongs_to: None,
             through: None,
             foreign_key: None,
+            faker: None,
         };
 
         // Act
@@ -254,6 +274,7 @@ mod tests {
             belongs_to: None,
             through: None,
             foreign_key: None,
+            faker: None,
         };
 
         // Act
@@ -283,6 +304,7 @@ mod tests {
             belongs_to: None,
             through: Some(parse_quote!(OrderLine)),
             foreign_key: None,
+            faker: None,
         };
 
         // Act
@@ -308,6 +330,7 @@ mod tests {
             belongs_to: None,
             through: None,
             foreign_key: None,
+            faker: None,
         };
 
         // Act
@@ -331,6 +354,7 @@ mod tests {
             belongs_to: None,
             through: None,
             foreign_key: None,
+            faker: None,
         };
 
         // Act
@@ -354,6 +378,7 @@ mod tests {
             belongs_to: None,
             through: None,
             foreign_key: None,
+            faker: None,
         };
 
         // Act
@@ -377,6 +402,7 @@ mod tests {
             belongs_to: None,
             through: None,
             foreign_key: Some(parse_quote!(sender_id)),
+            faker: None,
         };
 
         // Act
@@ -391,5 +417,102 @@ mod tests {
                 && f.foreign_key.as_ref().unwrap() == "sender_id"
                 && f.foreign_key_const.as_ref().unwrap() == "SENDER_ID"
         ));
+    }
+
+    #[test]
+    fn test_faker_attribute_parsed() {
+        // Arrange a field with custom faker expression
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(name)),
+            ty: parse_quote!(String),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            belongs_to: None,
+            through: None,
+            foreign_key: None,
+            faker: Some("Name()".to_string()),
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "User".to_owned());
+
+        // Assert
+        let parsed = result.expect("should parse successfully");
+        assert!(matches!(parsed, ParsedField::Column(ref f) if f.faker.is_some()));
+    }
+
+    #[test]
+    fn test_faker_range_expression_parsed() {
+        // Arrange a field with range faker expression
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(age)),
+            ty: parse_quote!(i32),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            belongs_to: None,
+            through: None,
+            foreign_key: None,
+            faker: Some("0..99".to_string()),
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "User".to_owned());
+
+        // Assert
+        let parsed = result.expect("should parse successfully");
+        assert!(matches!(parsed, ParsedField::Column(ref f) if f.faker.is_some()));
+    }
+
+    #[test]
+    fn test_faker_without_attribute_is_none() {
+        // Arrange a field without faker expression
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(name)),
+            ty: parse_quote!(String),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            belongs_to: None,
+            through: None,
+            foreign_key: None,
+            faker: None,
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "User".to_owned());
+
+        // Assert
+        let parsed = result.expect("should parse successfully");
+        assert!(matches!(parsed, ParsedField::Column(ref f) if f.faker.is_none()));
+    }
+
+    #[test]
+    fn test_invalid_faker_expression_fails() {
+        // Arrange a field with invalid faker expression
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(name)),
+            ty: parse_quote!(String),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            belongs_to: None,
+            through: None,
+            foreign_key: None,
+            faker: Some("invalid { expression".to_string()),
+        };
+
+        // Act
+        let result = ParsedField::try_from(attrs, "User".to_owned());
+
+        // Assert
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(matches!(error.kind, ErrorKind::InvalidFakerExpression(_)));
     }
 }

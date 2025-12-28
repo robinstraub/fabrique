@@ -16,7 +16,12 @@ pub struct User {
 async fn test_soft_delete(connection: Pool<Postgres>) {
     // Create a new row
     let id = Uuid::new_v4();
-    let user = User::factory().id(id).create(&connection).await.unwrap();
+    let user = User::factory()
+        .id(id)
+        .deleted_at(None)
+        .create(&connection)
+        .await
+        .unwrap();
     assert_eq!(User::all(&connection).await.unwrap(), vec![user.clone()]);
 
     // Soft delete the row

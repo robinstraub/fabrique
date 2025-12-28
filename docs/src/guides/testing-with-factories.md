@@ -155,3 +155,58 @@ for i in 0..5 {
 # }
 # fn main() {}
 ```
+
+## Generating Realistic Data
+
+By default, factories generate random values for each field. For more realistic test data, use the `faker` attribute with expressions from the [fake](https://crates.io/crates/fake) crate:
+
+```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use fabrique::fake::faker::name::en::Name;
+# use fabrique::fake::faker::internet::en::SafeEmail;
+# use fabrique::fake::faker::phone_number::en::PhoneNumber;
+# use uuid::Uuid;
+#
+#[derive(Factory, Model)]
+pub struct Customer {
+    #[fabrique(primary_key)]
+    id: Uuid,
+
+    #[fabrique(faker = "Name()")]
+    name: String,
+
+    #[fabrique(faker = "SafeEmail()")]
+    email: String,
+
+    #[fabrique(faker = "PhoneNumber()")]
+    phone: String,
+}
+# fn main() {}
+```
+
+Common faker expressions:
+
+| Expression | Example Output |
+|------------|----------------|
+| `Name()` | "John Smith" |
+| `SafeEmail()` | "john.smith@example.com" |
+| `PhoneNumber()` | "+1 555-123-4567" |
+| `CompanyName()` | "Acme Industries" |
+| `CityName()` | "Springfield" |
+| `(1..100)` | Random integer 1-99 |
+| `(100..10000)` | Random integer for cents |
+
+Import fakers from `fabrique::fake::faker`:
+
+```rust,no_run
+# extern crate fabrique;
+use fabrique::fake::faker::company::en::CompanyName;
+use fabrique::fake::faker::address::en::CityName;
+use fabrique::fake::faker::lorem::en::Sentence;
+# fn main() {}
+```
+
+Each factory call generates fresh random values, so you get unique data across tests without hardcoding strings.
