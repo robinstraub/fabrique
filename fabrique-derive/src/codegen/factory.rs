@@ -282,13 +282,19 @@ impl<'a> FactoryCodegen<'a> {
 
         // Step 3: Create the main instance
         // Check if any field has a custom faker expression (requires Fake trait import)
-        // Currently unused but kept for potential future conditional import
-        // optimization
-        let _has_custom_faker = self
+        let has_custom_faker = self
             .analysis
             .column_fields
             .iter()
             .any(|f| f.faker.is_some());
+
+        // Only import Fake trait when custom faker expressions are used
+        // seeded_value() handles the import internally for auto-generated values
+        let fake_import = if has_custom_faker {
+            quote! { use ::fabrique::fake::Fake; }
+        } else {
+            quote! {}
+        };
 
         let column_fields = self.analysis.column_fields.iter().map(|field| {
             let name = &field.ident;
@@ -381,8 +387,7 @@ impl<'a> FactoryCodegen<'a> {
                 // Box::pin breaks recursive async type cycles that occur when
                 // Parent has HasMany<Child> and Child belongs_to Parent
                 ::std::boxed::Box::pin(async move {
-                    #[cfg(feature = "fake")]
-                    use ::fabrique::fake::Fake;
+                    #fake_import
 
                     let mut conn = executor.acquire().await
                         .map_err(|e| <#struct_ident as fabrique::DatabaseAware>::Error::from(e))?;
@@ -598,9 +603,6 @@ mod tests {
                         A: ::sqlx::Acquire<'a, Database = <Anvil as fabrique::DatabaseAware>::Database> + Send + 'a,
                     {
                         ::std::boxed::Box::pin(async move {
-                            #[cfg(feature = "fake")]
-                            use ::fabrique::fake::Fake;
-
                             let mut conn = executor.acquire().await
                                 .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
 
@@ -759,9 +761,6 @@ mod tests {
                     A: ::sqlx::Acquire<'a, Database = <Anvil as fabrique::DatabaseAware>::Database> + Send + 'a,
                 {
                     ::std::boxed::Box::pin(async move {
-                        #[cfg(feature = "fake")]
-                        use ::fabrique::fake::Fake;
-
                         let mut conn = executor.acquire().await
                             .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
 
@@ -936,9 +935,6 @@ mod tests {
                         A: ::sqlx::Acquire<'a, Database = <Customer as fabrique::DatabaseAware>::Database> + Send + 'a,
                     {
                         ::std::boxed::Box::pin(async move {
-                            #[cfg(feature = "fake")]
-                            use ::fabrique::fake::Fake;
-
                             let mut conn = executor.acquire().await
                                 .map_err(|e| <Customer as fabrique::DatabaseAware>::Error::from(e))?;
 
@@ -1190,9 +1186,6 @@ mod tests {
                         A: ::sqlx::Acquire<'a, Database = <Order as fabrique::DatabaseAware>::Database> + Send + 'a,
                     {
                         ::std::boxed::Box::pin(async move {
-                            #[cfg(feature = "fake")]
-                            use ::fabrique::fake::Fake;
-
                             let mut conn = executor.acquire().await
                                 .map_err(|e| <Order as fabrique::DatabaseAware>::Error::from(e))?;
 
