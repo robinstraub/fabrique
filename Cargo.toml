@@ -16,3 +16,4 @@ cargo-husky = { version = "1", default-features = false, features = [
   "run-cargo-clippy",
   "run-cargo-test",
 ] }
+fake = { version = "4", features = ["uuid", "chrono"] }

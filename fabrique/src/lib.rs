@@ -81,6 +81,37 @@ pub use factory::*;
 pub use model::*;
 pub use relation::*;
 
+#[cfg(feature = "fake")]
+pub use fake;
+
+/// Generates a seeded value for factory fields.
+///
+/// When the `fake` feature is enabled, this generates random test data using
+/// the `fake` crate. When disabled, it falls back to `Default::default()`.
+///
+/// This function is used internally by the `#[derive(Factory)]` macro and
+/// should not typically be called directly.
+#[cfg(feature = "fake")]
+pub fn seeded_value<T>() -> T
+where
+    T: fake::Dummy<fake::Faker>,
+{
+    use fake::Fake;
+    fake::Faker.fake()
+}
+
+/// Generates a seeded value for factory fields.
+///
+/// When the `fake` feature is disabled, this falls back to
+/// `Default::default()`.
+#[cfg(not(feature = "fake"))]
+pub fn seeded_value<T>() -> T
+where
+    T: Default,
+{
+    T::default()
+}
+
 pub mod database;
 pub mod error;
 pub mod factory;

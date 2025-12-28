@@ -45,6 +45,9 @@ pub enum ErrorKind {
 
     #[error("Missing primary key, either add an id column or mark an existing column as primary")]
     MissingPrimaryKey,
+
+    #[error("Invalid faker expression: {0}")]
+    InvalidFakerExpression(String),
 }
 
 impl From<Error> for syn::Error {

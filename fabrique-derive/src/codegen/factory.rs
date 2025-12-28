@@ -281,11 +281,28 @@ impl<'a> FactoryCodegen<'a> {
         });
 
         // Step 3: Create the main instance
+        // Check if any field has a custom faker expression (requires Fake trait import)
+        // Currently unused but kept for potential future conditional import
+        // optimization
+        let _has_custom_faker = self
+            .analysis
+            .column_fields
+            .iter()
+            .any(|f| f.faker.is_some());
+
         let column_fields = self.analysis.column_fields.iter().map(|field| {
             let name = &field.ident;
             let ty = &field.ty;
-            quote! {
-                #name: self.#name.unwrap_or(<#ty as Default>::default())
+
+            match &field.faker {
+                // Custom faker expression provided - requires fake feature
+                Some(faker_expr) => quote! {
+                    #name: self.#name.unwrap_or_else(|| #faker_expr.fake())
+                },
+                // Default: use seeded_value (works with or without fake feature)
+                None => quote! {
+                    #name: self.#name.unwrap_or_else(::fabrique::seeded_value::<#ty>)
+                },
             }
         });
 
@@ -364,6 +381,9 @@ impl<'a> FactoryCodegen<'a> {
                 // Box::pin breaks recursive async type cycles that occur when
                 // Parent has HasMany<Child> and Child belongs_to Parent
                 ::std::boxed::Box::pin(async move {
+                    #[cfg(feature = "fake")]
+                    use ::fabrique::fake::Fake;
+
                     let mut conn = executor.acquire().await
                         .map_err(|e| <#struct_ident as fabrique::DatabaseAware>::Error::from(e))?;
 
@@ -578,6 +598,9 @@ mod tests {
                         A: ::sqlx::Acquire<'a, Database = <Anvil as fabrique::DatabaseAware>::Database> + Send + 'a,
                     {
                         ::std::boxed::Box::pin(async move {
+                            #[cfg(feature = "fake")]
+                            use ::fabrique::fake::Fake;
+
                             let mut conn = executor.acquire().await
                                 .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
 
@@ -593,10 +616,10 @@ mod tests {
                             }
 
                             let instance = Anvil {
-                                id: self.id.unwrap_or(<u32 as Default>::default()),
-                                hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
-                                hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
-                                weight: self.weight.unwrap_or(<u32 as Default>::default()),
+                                id: self.id.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                                hammer_id: self.hammer_id.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                                hardness: self.hardness.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                                weight: self.weight.unwrap_or_else(::fabrique::seeded_value::<u32>),
                             };
 
                             let instance = <Anvil as fabrique::Persist>::create(instance, &mut *conn).await?;
@@ -736,6 +759,9 @@ mod tests {
                     A: ::sqlx::Acquire<'a, Database = <Anvil as fabrique::DatabaseAware>::Database> + Send + 'a,
                 {
                     ::std::boxed::Box::pin(async move {
+                        #[cfg(feature = "fake")]
+                        use ::fabrique::fake::Fake;
+
                         let mut conn = executor.acquire().await
                             .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
 
@@ -751,10 +777,10 @@ mod tests {
                         }
 
                         let instance = Anvil {
-                            id: self.id.unwrap_or(<u32 as Default>::default()),
-                            hammer_id: self.hammer_id.unwrap_or(<u32 as Default>::default()),
-                            hardness: self.hardness.unwrap_or(<u32 as Default>::default()),
-                            weight: self.weight.unwrap_or(<u32 as Default>::default()),
+                            id: self.id.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                            hammer_id: self.hammer_id.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                            hardness: self.hardness.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                            weight: self.weight.unwrap_or_else(::fabrique::seeded_value::<u32>),
                         };
 
                         let instance = <Anvil as fabrique::Persist>::create(instance, &mut *conn).await?;
@@ -910,11 +936,14 @@ mod tests {
                         A: ::sqlx::Acquire<'a, Database = <Customer as fabrique::DatabaseAware>::Database> + Send + 'a,
                     {
                         ::std::boxed::Box::pin(async move {
+                            #[cfg(feature = "fake")]
+                            use ::fabrique::fake::Fake;
+
                             let mut conn = executor.acquire().await
                                 .map_err(|e| <Customer as fabrique::DatabaseAware>::Error::from(e))?;
 
                             let instance = Customer {
-                                id: self.id.unwrap_or(<u32 as Default>::default()),
+                                id: self.id.unwrap_or_else(::fabrique::seeded_value::<u32>),
                                 orders: ::fabrique::HasMany::default(),
                             };
 
@@ -1161,11 +1190,14 @@ mod tests {
                         A: ::sqlx::Acquire<'a, Database = <Order as fabrique::DatabaseAware>::Database> + Send + 'a,
                     {
                         ::std::boxed::Box::pin(async move {
+                            #[cfg(feature = "fake")]
+                            use ::fabrique::fake::Fake;
+
                             let mut conn = executor.acquire().await
                                 .map_err(|e| <Order as fabrique::DatabaseAware>::Error::from(e))?;
 
                             let instance = Order {
-                                id: self.id.unwrap_or(<u32 as Default>::default()),
+                                id: self.id.unwrap_or_else(::fabrique::seeded_value::<u32>),
                                 anvils: ::fabrique::HasMany::default(),
                             };
 

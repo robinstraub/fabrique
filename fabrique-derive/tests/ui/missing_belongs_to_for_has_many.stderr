@@ -1,3 +1,30 @@
+warning: unexpected `cfg` condition value: `fake`
+ --> tests/ui/missing_belongs_to_for_has_many.rs:4:10
+  |
+4 | #[derive(Factory, Model)]
+  |          ^^^^^^^
+  |
+  = note: no expected values for `feature`
+  = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+  = help: try referring to `Factory` crate for guidance on how handle this unexpected cfg
+  = help: the derive macro `Factory` may come from an old version of the `fabrique_derive` crate, try updating your dependency with `cargo update -p fabrique_derive`
+  = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+  = note: `#[warn(unexpected_cfgs)]` on by default
+  = note: this warning originates in the derive macro `Factory` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unexpected `cfg` condition value: `fake`
+  --> tests/ui/missing_belongs_to_for_has_many.rs:12:10
+   |
+12 | #[derive(Factory, Model)]
+   |          ^^^^^^^
+   |
+   = note: no expected values for `feature`
+   = note: using a cfg inside a derive macro will use the cfgs from the destination crate and not the ones from the defining crate
+   = help: try referring to `Factory` crate for guidance on how handle this unexpected cfg
+   = help: the derive macro `Factory` may come from an old version of the `fabrique_derive` crate, try updating your dependency with `cargo update -p fabrique_derive`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: this warning originates in the derive macro `Factory` (in Nightly builds, run with -Z macro-backtrace for more info)
+
 error[E0277]: the trait bound `ChildFactory: SetForeignKey<Parent>` is not satisfied
   --> tests/ui/missing_belongs_to_for_has_many.rs:8:23
    |
