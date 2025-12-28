@@ -61,7 +61,7 @@ This generates an `orders()` method on `User` that returns a [query builder](que
 
 ## Many-to-Many Relationships
 
-For many-to-many relationships, use the `through` attribute to specify a join model:
+For many-to-many relationships, use the `through` attribute to specify a join model. The join model must have `belongs_to` relationships to both sides of the many-to-many relationship:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -69,19 +69,37 @@ For many-to-many relationships, use the `through` attribute to specify a join mo
 # extern crate uuid;
 # use fabrique::prelude::*;
 # use uuid::Uuid;
-# #[derive(Model)]
-# pub struct Anvil { id: Uuid }
-# #[derive(Model)]
-# pub struct OrderLine { id: Uuid, order_id: Uuid, anvil_id: Uuid }
+#[derive(Model)]
+pub struct Anvil {
+    id: Uuid,
+    name: String,
+}
+
+/// The join model must belong to both sides
+#[derive(Model)]
+#[fabrique(table = "order_lines")]
+pub struct OrderLine {
+    #[fabrique(primary_key, belongs_to = "Order")]
+    order_id: Uuid,
+
+    #[fabrique(primary_key, belongs_to = "Anvil")]
+    anvil_id: Uuid,
+
+    quantity: i32,
+}
+
 #[derive(Model)]
 pub struct Order {
     id: Uuid,
 
+    /// Use `through` to specify the join model
     #[fabrique(through = "OrderLine")]
     anvils: HasMany<Anvil>,
 }
 # fn main() {}
 ```
+
+This generates an `anvils()` method on `Order` that performs the necessary joins to fetch related `Anvil` records through the `OrderLine` join table.
 
 ## Multiple Relationships to the Same Model
 

@@ -34,7 +34,7 @@ impl<'a> Analysis<'a> {
     }
 
     /// Returns column fields with their belongs_to relations.
-    pub fn relations(&self) -> impl Iterator<Item = (&ColumnField, &Relation)> {
+    pub fn belongs_to(&self) -> impl Iterator<Item = (&ColumnField, &Relation)> {
         self.column_fields.iter().filter_map(|field| {
             let relation = field.relation.as_ref()?;
 
@@ -42,22 +42,38 @@ impl<'a> Analysis<'a> {
         })
     }
 
-    /// Groups belongs_to relations by their parent type name.
+    /// Returns non-ambiguous belongs_to relations (one per parent type).
     ///
-    /// Returns a map where keys are parent type names (e.g., "User") and values
-    /// are vectors of (ColumnField, Relation) tuples referencing that parent.
-    ///
-    /// This is used to detect when a model has multiple belongs_to relations
-    /// to the same parent type (e.g., Message with sender_id and recipient_id
-    /// both referencing User).
-    pub fn belongs_to_by_parent(&self) -> HashMap<String, Vec<(&ColumnField, &Relation)>> {
-        let mut map: HashMap<String, Vec<(&ColumnField, &Relation)>> = HashMap::new();
-
-        for (field, relation) in self.relations() {
+    /// When a model has multiple belongs_to to the same parent type
+    /// (e.g., Message with sender_id and recipient_id both referencing User),
+    /// those fields are filtered out to avoid ambiguity.
+    pub fn belongs_to_non_ambiguous(&self) -> impl Iterator<Item = (&ColumnField, &Relation)> {
+        // Group by parent type to detect duplicates
+        let mut by_parent: HashMap<String, Vec<(&ColumnField, &Relation)>> = HashMap::new();
+        for (field, relation) in self.belongs_to() {
             let parent_name = relation.referenced_type.to_string();
-            map.entry(parent_name).or_default().push((field, relation));
+            by_parent
+                .entry(parent_name)
+                .or_default()
+                .push((field, relation));
         }
 
-        map
+        self.belongs_to().filter(move |(_, relation)| {
+            let parent_name = relation.referenced_type.to_string();
+            by_parent
+                .get(&parent_name)
+                .map(|fields| fields.len() == 1)
+                .unwrap_or(true)
+        })
+    }
+
+    /// Returns one-to-many HasMany fields (without `through`).
+    pub fn one_to_many_fields(&self) -> impl Iterator<Item = &HasManyField> {
+        self.has_many_fields.iter().filter(|f| f.through.is_none())
+    }
+
+    /// Returns many-to-many HasMany fields (with `through`).
+    pub fn many_to_many_fields(&self) -> impl Iterator<Item = &HasManyField> {
+        self.has_many_fields.iter().filter(|f| f.through.is_some())
     }
 }

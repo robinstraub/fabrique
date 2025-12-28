@@ -3,6 +3,49 @@ use std::marker::PhantomData;
 use crate::sql::operators::{Direction, Operator};
 use sqlx::{Database, Executor, FromRow, IntoArguments};
 
+/// Implements the `join` method for base states and their joined variants.
+///
+/// For each base state, generates:
+/// - `Base` → `Joined<Base>` (initial join)
+/// - `Joined<Base>` → `Joined<Base>` (chained joins)
+macro_rules! impl_join {
+    // Shared body - takes input state and output base
+    (@body $state:ty, $base:ty) => {
+        impl<DB: Database> QueryBuilder<DB, $state> {
+            /// Adds an INNER JOIN clause to the query.
+            ///
+            /// Transitions to [`Joined`] state. Use additional `join()` calls to chain
+            /// multiple joins.
+            pub fn join(
+                mut self,
+                table: &str,
+                left_column: &str,
+                right_column: &str,
+            ) -> QueryBuilder<DB, Joined<$base>> {
+                self.inner.push(" JOIN ");
+                self.inner.push(table);
+                self.inner.push(" ON ");
+                self.inner.push(left_column);
+                self.inner.push(" = ");
+                self.inner.push(right_column);
+
+                QueryBuilder {
+                    inner: self.inner,
+                    table: self.table,
+                    state: Joined { _marker: PhantomData },
+                }
+            }
+        }
+    };
+    // Entry: for each base, generate both impls
+    ($($base:ty),+ $(,)?) => {
+        $(
+            impl_join!(@body $base, $base);
+            impl_join!(@body Joined<$base>, $base);
+        )+
+    };
+}
+
 /// Implements the `where` method for states that start a WHERE clause.
 ///
 /// Pushes " WHERE " and transitions to [`Filtered<$state>`].
@@ -278,6 +321,11 @@ macro_rules! impl_execute {
 ///      ┌──────────┐◀─┐              ┌──────────┐                       ┌──────────┐◀─┐
 ///      │ Inserted │  │ set()        │ Selected │                       │ Updated  │  │ set()
 ///      └────┬─────┘──┘              └────┬─────┘                       └────┬─────┘──┘
+///           │                            │ join()                           │ join()
+///           │                            ▼                                  │
+///           │                   ┌──────────────────┐ ◀─┐           ┌─────────────────┐ ◀─┐
+///           │                   │ Joined<Selected> │   │ join()    │ Joined<Updated> │   │ join()
+///           │                   └────────┬─────────┘ ──┘           └────────┬────────┘ ──┘
 ///           │                            │ where()                          │ where()
 ///           │                            ▼                                  ▼
 ///           │                  ┌───────────────────┐◀─┐            ┌──────────────────┐◀─┐
@@ -319,6 +367,14 @@ pub struct Initial;
 
 /// Selected state - SELECT clause added.
 pub struct Selected;
+
+/// Joined state - JOIN clause(s) added.
+///
+/// Generic over the source state to enable chained joins and control
+/// which methods are available after joining.
+pub struct Joined<Source = Selected> {
+    _marker: PhantomData<Source>,
+}
 
 /// Filtered state - WHERE clause(s) added.
 ///
@@ -838,13 +894,45 @@ impl<DB: Database> QueryBuilder<DB, Limited> {
 }
 
 // Use macros to implement common methods across multiple states
-impl_where!(Selected, Updated);
-impl_order_by!(Selected, Filtered<Selected>);
-impl_limit!(Selected, Filtered<Selected>, Ordered);
+impl_join!(Selected, Updated);
+impl_where!(Selected, Updated, Joined<Selected>);
+impl_order_by!(
+    Selected,
+    Filtered<Selected>,
+    Joined<Selected>,
+    Filtered<Joined<Selected>>
+);
+impl_limit!(
+    Selected,
+    Filtered<Selected>,
+    Ordered,
+    Joined<Selected>,
+    Filtered<Joined<Selected>>
+);
 impl_returning!(Updated);
-impl_get!(Selected, Filtered<Selected>, Ordered, Limited, Offsetted);
-impl_first!(Selected, Filtered<Selected>, Ordered);
-impl_first_or_fail!(Selected, Filtered<Selected>, Ordered);
+impl_get!(
+    Selected,
+    Filtered<Selected>,
+    Ordered,
+    Limited,
+    Offsetted,
+    Joined<Selected>,
+    Filtered<Joined<Selected>>
+);
+impl_first!(
+    Selected,
+    Filtered<Selected>,
+    Ordered,
+    Joined<Selected>,
+    Filtered<Joined<Selected>>
+);
+impl_first_or_fail!(
+    Selected,
+    Filtered<Selected>,
+    Ordered,
+    Joined<Selected>,
+    Filtered<Joined<Selected>>
+);
 impl_execute!(Filtered<Updated>, Upserted);
 
 #[cfg(test)]

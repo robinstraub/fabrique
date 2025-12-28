@@ -190,3 +190,62 @@ let customer = Customer::factory()
 # }
 # fn main() {}
 ```
+
+## Many-to-Many Relations
+
+For many-to-many relationships using a join table, define the relationship with
+`through` on the `HasMany` field, and use `has_<relation>()` in factories:
+
+```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use sqlx::{Pool, Postgres};
+# use uuid::Uuid;
+#
+#[derive(Model, Factory)]
+pub struct Order {
+    #[fabrique(primary_key)]
+    id: Uuid,
+
+    #[fabrique(through = "OrderLine")]
+    products: HasMany<Product>,
+}
+
+#[derive(Model, Factory)]
+pub struct Product {
+    #[fabrique(primary_key)]
+    id: Uuid,
+    name: String,
+}
+
+/// Join table with composite primary key
+#[derive(Model, Factory)]
+#[fabrique(table = "order_lines")]
+pub struct OrderLine {
+    #[fabrique(primary_key, belongs_to = "Order")]
+    order_id: Uuid,
+
+    #[fabrique(primary_key, belongs_to = "Product")]
+    product_id: Uuid,
+
+    quantity: i32,
+}
+
+# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+// Create an order with 3 products
+let order = Order::factory()
+    .has_products(Product::factory().name("Anvil".to_string()), 3)
+    .create(&pool)
+    .await?;
+# Ok(())
+# }
+# fn main() {}
+```
+
+The `has_products` method:
+
+- Creates the parent `Order` first
+- Creates the specified number of `Product` records
+- Automatically creates `OrderLine` join records linking them
