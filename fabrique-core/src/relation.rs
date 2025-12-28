@@ -99,9 +99,17 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::clone_on_copy)]
+    fn test_has_many_clone() {
+        let original: HasMany<String> = HasMany::new();
+        let cloned = original.clone();
+        assert_eq!(original, cloned);
+    }
+
+    #[test]
     fn test_has_many_copy() {
         let original: HasMany<String> = HasMany::new();
-        let cloned = original;
-        assert_eq!(original, cloned);
+        let copied = original; // Copy semantics
+        assert_eq!(original, copied); // original still usable after copy
     }
 }
