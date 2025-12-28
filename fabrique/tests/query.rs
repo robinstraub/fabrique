@@ -53,3 +53,26 @@ async fn test_join_many_to_many_lazy_loading(connection: Pool<Postgres>) {
     assert!(result.is_ok());
     assert_eq!(result.unwrap().len(), 1);
 }
+
+#[sqlx::test(migrations = "../migrations")]
+async fn test_join_one_to_many(connection: Pool<Postgres>) {
+    // Arrange
+    let user = User::factory()
+        .has_orders(Order::factory().status("shipped".to_string()), 1)
+        .create(&connection)
+        .await
+        .unwrap();
+
+    // Act
+    let result = User::query()
+        .select()
+        .join::<Order>()
+        .r#where(User::EMAIL, "=", user.email)
+        .get(&connection)
+        .await;
+
+    // Assert
+    println!("{:#?}", &result);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().len(), 1);
+}

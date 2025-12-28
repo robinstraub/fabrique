@@ -38,7 +38,7 @@ macro_rules! impl_join {
                     inner: self.inner.join(
                         J::table_name(),
                         J::foreign_key_column().qualified_name(),
-                        M::primary_key_columns()[0],
+                        &format!("{}.{}", M::table_name(), M::primary_key_columns()[0]),
                     ),
                 }
             }
