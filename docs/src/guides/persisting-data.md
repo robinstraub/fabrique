@@ -34,6 +34,8 @@ product.save(&pool).await?;
 
 The `save` method performs an UPSERT: it inserts if the record is new, or updates if a record with the same primary key already exists.
 
+> **Tip:** For more control over upsert behavior (e.g., specifying conflict columns or choosing which fields to update), see [Advanced Querying](advanced-querying.md#on-conflict-upsert).
+
 Alternatively, use `create` to insert a new record. This method fails if a record with the same primary key already exists:
 
 ```rust,no_run
