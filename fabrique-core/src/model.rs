@@ -1,3 +1,4 @@
+pub mod join;
 mod query_builder;
 
 use crate::{

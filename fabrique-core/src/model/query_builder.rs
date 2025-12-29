@@ -1,11 +1,13 @@
-use crate::database::Column;
+use crate::database::{self, Column};
 use crate::model::Model;
+use crate::model::join::{Contains, Joined};
 use crate::relation::{BelongsTo, Joinable};
-use crate::sql::operators::{Direction, Operator};
+use crate::sql::operators::{self, Direction};
 use crate::sql::{
-    Conflicted, Filtered, Initial, Inserted, Inserting, Joined, Limited, Offsetted, Ordered,
-    QueryBuilder as SqlQueryBuilder, Returned, Selected, Updated, Updating, Upserted,
+    Conflicted, Filtered, Initial, Inserted, Inserting, Joined as SqlJoined, Limited, Offsetted,
+    Ordered, QueryBuilder as SqlQueryBuilder, Returned, Selected, Updated, Updating, Upserted,
 };
+use std::marker::PhantomData;
 
 /// Implements the `join` and `join_through` methods for base states and their
 /// joined variants.
@@ -19,7 +21,7 @@ use crate::sql::{
 macro_rules! impl_join {
     // Shared body - takes input state and output base
     (@body $state:ty, $base:ty) => {
-        impl<M> QueryBuilder<M, $state>
+        impl<M, Joins> QueryBuilder<M, $state, Joins>
         where
             M: Model,
             M::Database: sqlx::Database,
@@ -30,7 +32,7 @@ macro_rules! impl_join {
             /// Works bidirectionally - both parent→child and child→parent joins.
             ///
             /// Transitions to [`Joined`] state.
-            pub fn join<J>(self) -> QueryBuilder<M, Joined<$base>>
+            pub fn join<J>(self) -> QueryBuilder<M, SqlJoined<$base>, Joined<J, Joins>>
             where
                 J: Model<Database = M::Database> + Joinable<M>,
             {
@@ -40,6 +42,7 @@ macro_rules! impl_join {
                         <J as Joinable<M>>::left_column().qualified_name(),
                         <J as Joinable<M>>::right_column().qualified_name(),
                     ),
+                    _joins: PhantomData,
                 }
             }
 
@@ -48,7 +51,7 @@ macro_rules! impl_join {
             /// Joins `Pivot` to `M`, then `Target` to `Pivot`.
             ///
             /// Transitions to [`Joined`] state.
-            pub fn join_through<Pivot, Target>(self) -> QueryBuilder<M, Joined<$base>>
+            pub fn join_through<Pivot, Target>(self) -> QueryBuilder<M, SqlJoined<$base>, Joined<Target, Joins>>
             where
                 Pivot: Model<Database = M::Database>,
                 Pivot: BelongsTo<M>,
@@ -66,7 +69,8 @@ macro_rules! impl_join {
                             Target::table_name(),
                             <Pivot as BelongsTo<Target>>::foreign_key_column().qualified_name(),
                             &format!("{}.{}", Target::table_name(), Target::primary_key_columns()[0]),
-                        )
+                        ),
+                    _joins: PhantomData,
                 }
             }
         }
@@ -75,63 +79,96 @@ macro_rules! impl_join {
     ($($base:ty),+ $(,)?) => {
         $(
             impl_join!(@body $base, $base);
-            impl_join!(@body Joined<$base>, $base);
+            impl_join!(@body SqlJoined<$base>, $base);
         )+
     };
 }
 
 /// Implements the `where` method for states that start a WHERE clause.
 ///
-/// Pushes " WHERE " and transitions to [`Filtered<$state>`].
+/// Supports two syntaxes:
+/// - `impl_where!(State)` - transitions to `Filtered<State>`
+/// - `impl_where!(InputState => OutputState)` - transitions to
+///   `Filtered<OutputState>`
 macro_rules! impl_where {
-    ($($state:ty),+ $(,)?) => {
-        $(
-            impl<M> QueryBuilder<M, $state>
+    // Handle input => output syntax
+    (@impl $input:ty => $output:ty) => {
+        impl<M, Joins> QueryBuilder<M, $input, Joins>
+        where
+            M: Model,
+            M::Database: sqlx::Database,
+        {
+            /// Adds a WHERE clause to the query.
+            ///
+            /// Requires a type-safe column from the model to ensure compile-time safety.
+            /// Transitions to [`Filtered`] state.
+            pub fn r#where<Column, Operator, JoinedModel, Index>(
+                self,
+                column: Column,
+                operator: Operator,
+                value: Column::Type
+            ) -> QueryBuilder<M, Filtered<$output>, Joins>
             where
-                M: Model,
-                M::Database: sqlx::Database,
+                Column: database::Column<JoinedModel>,
+                Joins: Contains<JoinedModel, Index>,
+                for<'q> Column::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
+                Operator: Into<operators::Operator>,
             {
-                /// Adds a WHERE clause to the query.
-                ///
-                /// Requires a type-safe column from the model to ensure compile-time safety.
-                /// Transitions to [`Filtered`] state.
-                pub fn r#where<C, O>(self, column: C, operator: O, value: C::Type) -> QueryBuilder<M, Filtered<$state>>
-                where
-                    C: Column<M>,
-                    for<'q> C::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
-                    O: Into<Operator>,
-                {
-                    QueryBuilder {
-                        inner: self.inner.r#where(column.name(), operator, value),
-                    }
-                }
-
-                /// Adds a WHERE IS NULL clause to the query.
-                ///
-                /// Transitions to [`Filtered`] state.
-                pub fn where_null<C>(self, column: C) -> QueryBuilder<M, Filtered<$state>>
-                where
-                    C: Column<M>,
-                    for<'q> C::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
-                {
-                    QueryBuilder {
-                        inner: self.inner.where_null(column.name()),
-                    }
-                }
-
-                /// Adds a WHERE IS NOT NULL clause to the query.
-                ///
-                /// Transitions to [`Filtered`] state.
-                pub fn where_not_null<C>(self, column: C) -> QueryBuilder<M, Filtered<$state>>
-                where
-                    C: Column<M>,
-                    for<'q> C::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
-                {
-                    QueryBuilder {
-                        inner: self.inner.where_null(column.name()),
-                    }
+                QueryBuilder {
+                    inner: self.inner.r#where(column.qualified_name(), operator, value),
+                    _joins: self._joins,
                 }
             }
+
+            /// Adds a WHERE IS NULL clause to the query.
+            ///
+            /// Transitions to [`Filtered`] state.
+            pub fn where_null<Column, JoinedModel, Index>(
+                self,
+                column: Column
+            ) -> QueryBuilder<M, Filtered<$output>, Joins>
+            where
+                Column: database::Column<JoinedModel>,
+                Joins: Contains<JoinedModel, Index>,
+                for<'q> Column::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
+            {
+                QueryBuilder {
+                    inner: self.inner.where_null(column.qualified_name()),
+                    _joins: self._joins,
+                }
+            }
+
+            /// Adds a WHERE IS NOT NULL clause to the query.
+            ///
+            /// Transitions to [`Filtered`] state.
+            pub fn where_not_null<Column, JoinedModel, Index>(
+                self,
+                column: Column
+            ) -> QueryBuilder<M, Filtered<$output>, Joins>
+            where
+                Column: database::Column<JoinedModel>,
+                Joins: Contains<JoinedModel, Index>,
+                for<'q> Column::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
+            {
+                QueryBuilder {
+                    inner: self.inner.where_not_null(column.qualified_name()),
+                    _joins: self._joins,
+                }
+            }
+        }
+    };
+    // Entry point: simple state (input = output)
+    ($state:ty) => {
+        impl_where!(@impl $state => $state);
+    };
+    // Entry point: explicit input => output
+    ($input:ty => $output:ty) => {
+        impl_where!(@impl $input => $output);
+    };
+    // Entry point: multiple states
+    ($($state:ty),+ $(,)?) => {
+        $(
+            impl_where!($state);
         )+
     };
 }
@@ -139,51 +176,75 @@ macro_rules! impl_where {
 /// Implements chained `where` methods for already-filtered states.
 ///
 /// Returns the same `Filtered<$state>` type (no nesting).
+/// Uses `Contains` trait for compile-time validation of joined models.
 macro_rules! impl_chain_where {
     ($($state:ty),+ $(,)?) => {
         $(
-            impl<M> QueryBuilder<M, Filtered<$state>>
+            impl<M, Joins> QueryBuilder<M, Filtered<$state>, Joins>
             where
                 M: Model,
                 M::Database: sqlx::Database,
             {
                 /// Adds an additional WHERE clause (AND) to the query.
                 ///
+                /// The column must belong to a model that is joined in this query.
+                ///
                 /// Remains in [`Filtered`] state.
-                pub fn r#where<C, O>(self, column: C, operator: O, value: C::Type) -> QueryBuilder<M, Filtered<$state>>
+                pub fn r#where<Column, Operator, JoinedModel, Index>(
+                    self,
+                    column: Column,
+                    operator: Operator,
+                    value: Column::Type,
+                ) -> QueryBuilder<M, Filtered<$state>, Joins>
                 where
-                    C: Column<M>,
-                    for<'q> C::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
-                    O: Into<Operator>,
+                    Column: database::Column<JoinedModel>,
+                    Joins: Contains<JoinedModel, Index>,
+                    for<'q> Column::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
+                    Operator: Into<operators::Operator>,
                 {
                     QueryBuilder {
-                        inner: self.inner.r#where(column.name(), operator, value),
+                        inner: self.inner.r#where(column.qualified_name(), operator, value),
+                        _joins: self._joins,
                     }
                 }
 
                 /// Adds an additional WHERE IS NULL clause to the query.
                 ///
+                /// The column must belong to a model that is joined in this query.
+                ///
                 /// Remains in [`Filtered`] state.
-                pub fn where_null<C>(self, column: C) -> QueryBuilder<M, Filtered<$state>>
+                pub fn where_null<Column, JoinedModel, Index>(
+                    self,
+                    column: Column,
+                ) -> QueryBuilder<M, Filtered<$state>, Joins>
                 where
-                    C: Column<M>,
-                    for<'q> C::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
+                    Column: database::Column<JoinedModel>,
+                    Joins: Contains<JoinedModel, Index>,
+                    for<'q> Column::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
                 {
                     QueryBuilder {
-                        inner: self.inner.where_null(column.name()),
+                        inner: self.inner.where_null(column.qualified_name()),
+                        _joins: self._joins,
                     }
                 }
 
                 /// Adds an additional WHERE IS NOT NULL clause to the query.
                 ///
+                /// The column must belong to a model that is joined in this query.
+                ///
                 /// Remains in [`Filtered`] state.
-                pub fn where_not_null<C>(self, column: C) -> QueryBuilder<M, Filtered<$state>>
+                pub fn where_not_null<Column, JoinedModel, Index>(
+                    self,
+                    column: Column,
+                ) -> QueryBuilder<M, Filtered<$state>, Joins>
                 where
-                    C: Column<M>,
-                    for<'q> C::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
+                    Column: database::Column<JoinedModel>,
+                    Joins: Contains<JoinedModel, Index>,
+                    for<'q> Column::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
                 {
                     QueryBuilder {
-                        inner: self.inner.where_not_null(column.name()),
+                        inner: self.inner.where_not_null(column.qualified_name()),
+                        _joins: self._joins,
                     }
                 }
             }
@@ -197,7 +258,7 @@ macro_rules! impl_chain_where {
 macro_rules! impl_order_by {
     ($($state:ty),+ $(,)?) => {
         $(
-            impl<M> QueryBuilder<M, $state>
+            impl<M, Joins> QueryBuilder<M, $state, Joins>
             where
                 M: Model,
                 M::Database: sqlx::Database,
@@ -209,9 +270,10 @@ macro_rules! impl_order_by {
                     self,
                     column: &str,
                     direction: impl Into<Direction>,
-                ) -> QueryBuilder<M, Ordered> {
+                ) -> QueryBuilder<M, Ordered, Joins> {
                     QueryBuilder {
                         inner: self.inner.order_by(column, direction),
+                        _joins: self._joins,
                     }
                 }
             }
@@ -225,7 +287,7 @@ macro_rules! impl_order_by {
 macro_rules! impl_limit {
     ($($state:ty),+ $(,)?) => {
         $(
-            impl<M> QueryBuilder<M, $state>
+            impl<M, Joins> QueryBuilder<M, $state, Joins>
             where
                 M: Model,
                 M::Database: sqlx::Database,
@@ -233,12 +295,13 @@ macro_rules! impl_limit {
                 /// Adds a `LIMIT` clause to the query.
                 ///
                 /// Transitions to [`Limited`] state, allowing `OFFSET` or execution.
-                pub fn limit<'a>(self, count: i64) -> QueryBuilder<M, Limited>
+                pub fn limit<'a>(self, count: i64) -> QueryBuilder<M, Limited, Joins>
                 where
                     i64: sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
                 {
                     QueryBuilder {
                         inner: self.inner.limit(count),
+                        _joins: self._joins,
                     }
                 }
             }
@@ -250,7 +313,7 @@ macro_rules! impl_limit {
 macro_rules! impl_get {
     ($($state:ty),+ $(,)?) => {
         $(
-            impl<M> QueryBuilder<M, $state>
+            impl<M, Joins> QueryBuilder<M, $state, Joins>
             where
                 M: Model,
                 M::Database: sqlx::Database,
@@ -274,7 +337,7 @@ macro_rules! impl_get {
 macro_rules! impl_first {
     ($($state:ty),+ $(,)?) => {
         $(
-            impl<M> QueryBuilder<M, $state>
+            impl<M, Joins> QueryBuilder<M, $state, Joins>
             where
                 M: Model,
                 M::Database: sqlx::Database,
@@ -300,7 +363,7 @@ macro_rules! impl_first {
 macro_rules! impl_first_or_fail {
     ($($state:ty),+ $(,)?) => {
         $(
-            impl<M> QueryBuilder<M, $state>
+            impl<M, Joins> QueryBuilder<M, $state, Joins>
             where
                 M: Model,
                 M::Database: sqlx::Database,
@@ -328,7 +391,7 @@ macro_rules! impl_first_or_fail {
 macro_rules! impl_execute {
     ($($state:ty),+ $(,)?) => {
         $(
-            impl<M> QueryBuilder<M, $state>
+            impl<M, Joins> QueryBuilder<M, $state, Joins>
             where
                 M: Model,
                 M::Database: sqlx::Database,
@@ -346,12 +409,13 @@ macro_rules! impl_execute {
     };
 }
 
-pub struct QueryBuilder<M, S = Initial>
+pub struct QueryBuilder<M, S = Initial, Joins = Joined<M, ()>>
 where
     M: Model,
     M::Database: sqlx::Database,
 {
     inner: SqlQueryBuilder<M::Database, S>,
+    _joins: PhantomData<Joins>,
 }
 
 impl<M> Default for QueryBuilder<M, Initial>
@@ -361,11 +425,14 @@ where
 {
     fn default() -> Self {
         let inner = SqlQueryBuilder::<M::Database, Initial>::table(M::table_name());
-        Self { inner }
+        Self {
+            inner,
+            _joins: PhantomData,
+        }
     }
 }
 
-impl<M> QueryBuilder<M, Initial>
+impl<M, Joins> QueryBuilder<M, Initial, Joins>
 where
     M: Model,
     M::Database: sqlx::Database,
@@ -373,32 +440,35 @@ where
     /// Starts a SELECT query for this model.
     ///
     /// Transitions to [`Selected`] state.
-    pub fn select(self) -> QueryBuilder<M, Selected> {
+    pub fn select(self) -> QueryBuilder<M, Selected, Joins> {
         QueryBuilder {
             inner: self.inner.select(M::qualified_columns()),
+            _joins: self._joins,
         }
     }
 
     /// Starts an UPDATE query for this model.
     ///
     /// Transitions to [`Updating`] state.
-    pub fn update(self) -> QueryBuilder<M, Updating> {
+    pub fn update(self) -> QueryBuilder<M, Updating, Joins> {
         QueryBuilder {
             inner: self.inner.update(),
+            _joins: self._joins,
         }
     }
 
     /// Starts an INSERT query for this model.
     ///
     /// Transitions to [`Inserting`] state.
-    pub fn insert(self) -> QueryBuilder<M, Inserting> {
+    pub fn insert(self) -> QueryBuilder<M, Inserting, Joins> {
         QueryBuilder {
             inner: self.inner.insert(),
+            _joins: self._joins,
         }
     }
 }
 
-impl<M> QueryBuilder<M, Limited>
+impl<M, Joins> QueryBuilder<M, Limited, Joins>
 where
     M: Model,
     M::Database: sqlx::Database,
@@ -406,12 +476,13 @@ where
     /// Adds an `OFFSET` clause to the query.
     ///
     /// Remains in [`Limited`] state, allowing execution.
-    pub fn offset<'a>(self, count: i64) -> QueryBuilder<M, Offsetted>
+    pub fn offset<'a>(self, count: i64) -> QueryBuilder<M, Offsetted, Joins>
     where
         i64: sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
     {
         QueryBuilder {
             inner: self.inner.offset(count),
+            _joins: self._joins,
         }
     }
 }
@@ -422,7 +493,7 @@ where
 macro_rules! impl_returning {
     ($($state:ty),+ $(,)?) => {
         $(
-            impl<M> QueryBuilder<M, $state>
+            impl<M, Joins> QueryBuilder<M, $state, Joins>
             where
                 M: Model,
                 M::Database: sqlx::Database,
@@ -431,9 +502,10 @@ macro_rules! impl_returning {
                 ///
                 /// Generates `RETURNING col1, col2, ...`.
                 /// Transitions to [`Returned`] state.
-                pub fn returning(self, columns: &[&str]) -> QueryBuilder<M, Returned> {
+                pub fn returning(self, columns: &[&str]) -> QueryBuilder<M, Returned, Joins> {
                     QueryBuilder {
                         inner: self.inner.returning(columns),
+                        _joins: self._joins,
                     }
                 }
             }
@@ -443,20 +515,22 @@ macro_rules! impl_returning {
 
 // Use macros to implement query execution methods across multiple states
 impl_join!(Selected);
-impl_where!(Selected, Updated, Joined<Selected>);
+impl_where!(Selected, Updated);
+impl_where!(SqlJoined<Selected> => Selected);
+impl_where!(SqlJoined<Updated> => Updated);
 impl_chain_where!(Selected, Updated);
 impl_order_by!(
     Selected,
     Filtered<Selected>,
-    Joined<Selected>,
-    Filtered<Joined<Selected>>
+    SqlJoined<Selected>,
+    Filtered<SqlJoined<Selected>>
 );
 impl_limit!(
     Selected,
     Filtered<Selected>,
     Ordered,
-    Joined<Selected>,
-    Filtered<Joined<Selected>>
+    SqlJoined<Selected>,
+    Filtered<SqlJoined<Selected>>
 );
 impl_get!(
     Selected,
@@ -464,27 +538,27 @@ impl_get!(
     Ordered,
     Limited,
     Offsetted,
-    Joined<Selected>,
-    Filtered<Joined<Selected>>
+    SqlJoined<Selected>,
+    Filtered<SqlJoined<Selected>>
 );
 impl_first!(
     Selected,
     Filtered<Selected>,
     Ordered,
-    Joined<Selected>,
-    Filtered<Joined<Selected>>
+    SqlJoined<Selected>,
+    Filtered<SqlJoined<Selected>>
 );
 impl_first_or_fail!(
     Selected,
     Filtered<Selected>,
     Ordered,
-    Joined<Selected>,
-    Filtered<Joined<Selected>>
+    SqlJoined<Selected>,
+    Filtered<SqlJoined<Selected>>
 );
 impl_returning!(Updated, Filtered<Updated>);
 impl_execute!(Filtered<Updated>, Inserted<M::Database>, Upserted);
 
-impl<M> QueryBuilder<M, Updating>
+impl<M, Joins> QueryBuilder<M, Updating, Joins>
 where
     M: Model,
     M::Database: sqlx::Database,
@@ -492,18 +566,19 @@ where
     /// Sets a column value for the UPDATE statement.
     ///
     /// Transitions to [`Updated`] state.
-    pub fn set<'a, C>(self, column: C, value: C::Type) -> QueryBuilder<M, Updated>
+    pub fn set<'a, C>(self, column: C, value: C::Type) -> QueryBuilder<M, Updated, Joins>
     where
         C: Column<M>,
         C::Type: 'a + sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
     {
         QueryBuilder {
             inner: self.inner.set(column.name(), value),
+            _joins: self._joins,
         }
     }
 }
 
-impl<M> QueryBuilder<M, Updated>
+impl<M, Joins> QueryBuilder<M, Updated, Joins>
 where
     M: Model,
     M::Database: sqlx::Database,
@@ -511,18 +586,19 @@ where
     /// Sets an additional column value for the UPDATE statement.
     ///
     /// Remains in [`Updated`] state.
-    pub fn set<'a, C>(self, column: C, value: C::Type) -> QueryBuilder<M, Updated>
+    pub fn set<'a, C>(self, column: C, value: C::Type) -> QueryBuilder<M, Updated, Joins>
     where
         C: Column<M>,
         C::Type: 'a + sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
     {
         QueryBuilder {
             inner: self.inner.set(column.name(), value),
+            _joins: self._joins,
         }
     }
 }
 
-impl<M> QueryBuilder<M, Inserting>
+impl<M, Joins> QueryBuilder<M, Inserting, Joins>
 where
     M: Model,
     M::Database: sqlx::Database,
@@ -530,18 +606,23 @@ where
     /// Sets a column value for the INSERT statement.
     ///
     /// Transitions to [`Inserted`] state.
-    pub fn set<'a, C>(self, column: C, value: C::Type) -> QueryBuilder<M, Inserted<M::Database>>
+    pub fn set<'a, C>(
+        self,
+        column: C,
+        value: C::Type,
+    ) -> QueryBuilder<M, Inserted<M::Database>, Joins>
     where
         C: Column<M>,
         C::Type: 'a + sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database> + Send + 'static,
     {
         QueryBuilder {
             inner: self.inner.set(column.name(), value),
+            _joins: self._joins,
         }
     }
 }
 
-impl<M> QueryBuilder<M, Inserted<M::Database>>
+impl<M, Joins> QueryBuilder<M, Inserted<M::Database>, Joins>
 where
     M: Model,
     M::Database: sqlx::Database,
@@ -549,13 +630,18 @@ where
     /// Sets an additional column value for the INSERT statement.
     ///
     /// Remains in [`Inserted`] state.
-    pub fn set<'a, C>(self, column: C, value: C::Type) -> QueryBuilder<M, Inserted<M::Database>>
+    pub fn set<'a, C>(
+        self,
+        column: C,
+        value: C::Type,
+    ) -> QueryBuilder<M, Inserted<M::Database>, Joins>
     where
         C: Column<M>,
         C::Type: 'a + sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database> + Send + 'static,
     {
         QueryBuilder {
             inner: self.inner.set(column.name(), value),
+            _joins: self._joins,
         }
     }
 
@@ -563,23 +649,25 @@ where
     ///
     /// Uses the model's primary key columns as the conflict target.
     /// Transitions to [`Conflicted`] state.
-    pub fn on_conflict(self) -> QueryBuilder<M, Conflicted> {
+    pub fn on_conflict(self) -> QueryBuilder<M, Conflicted, Joins> {
         QueryBuilder {
             inner: self.inner.on_conflict(M::primary_key_columns()),
+            _joins: self._joins,
         }
     }
 
     /// Specifies the columns to return after the INSERT.
     ///
     /// Uses all model columns. Transitions to [`Returned`] state.
-    pub fn returning(self) -> QueryBuilder<M, Returned> {
+    pub fn returning(self) -> QueryBuilder<M, Returned, Joins> {
         QueryBuilder {
             inner: self.inner.returning(M::columns()),
+            _joins: self._joins,
         }
     }
 }
 
-impl<M> QueryBuilder<M, Conflicted>
+impl<M, Joins> QueryBuilder<M, Conflicted, Joins>
 where
     M: Model,
     M::Database: sqlx::Database,
@@ -588,7 +676,7 @@ where
     ///
     /// Updates all non-primary-key columns with `col = EXCLUDED.col`.
     /// Transitions to [`Upserted`] state.
-    pub fn do_update(self) -> QueryBuilder<M, Upserted> {
+    pub fn do_update(self) -> QueryBuilder<M, Upserted, Joins> {
         let pk_columns = M::primary_key_columns();
         let update_columns: Vec<&str> = M::columns()
             .iter()
@@ -598,20 +686,22 @@ where
 
         QueryBuilder {
             inner: self.inner.do_update(&update_columns),
+            _joins: self._joins,
         }
     }
 
     /// Specifies that conflicting rows should be ignored.
     ///
     /// Generates `DO NOTHING`. Transitions to [`Upserted`] state.
-    pub fn do_nothing(self) -> QueryBuilder<M, Upserted> {
+    pub fn do_nothing(self) -> QueryBuilder<M, Upserted, Joins> {
         QueryBuilder {
             inner: self.inner.do_nothing(),
+            _joins: self._joins,
         }
     }
 }
 
-impl<M> QueryBuilder<M, Upserted>
+impl<M, Joins> QueryBuilder<M, Upserted, Joins>
 where
     M: Model,
     M::Database: sqlx::Database,
@@ -619,14 +709,15 @@ where
     /// Specifies the columns to return after the UPSERT.
     ///
     /// Uses all model columns. Transitions to [`Returned`] state.
-    pub fn returning(self) -> QueryBuilder<M, Returned> {
+    pub fn returning(self) -> QueryBuilder<M, Returned, Joins> {
         QueryBuilder {
             inner: self.inner.returning(M::columns()),
+            _joins: self._joins,
         }
     }
 }
 
-impl<M> QueryBuilder<M, Returned>
+impl<M, Joins> QueryBuilder<M, Returned, Joins>
 where
     M: Model,
     M::Database: sqlx::Database,

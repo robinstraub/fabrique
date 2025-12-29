@@ -41,6 +41,22 @@ pub struct OrderLine {
 }
 
 #[sqlx::test(migrations = "../migrations")]
+async fn test_where_with_joined_model_columns(connection: Pool<Postgres>) {
+    // This test validates compile-time safety: only columns from joined models
+    // can be used in WHERE clauses. Using a non-joined model's column would fail to
+    // compile.
+    let result = Order::query()
+        .select()
+        .join::<User>()
+        .r#where(Order::STATUS, "=", "pending".to_owned())
+        .r#where(User::NAME, "=", "john".to_string())
+        .get(&connection)
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[sqlx::test(migrations = "../migrations")]
 async fn test_join_many_to_many_lazy_loading(connection: Pool<Postgres>) {
     let order = Order::factory()
         .for_user(User::factory())

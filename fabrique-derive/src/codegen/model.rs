@@ -211,7 +211,7 @@ impl<'a> ModelCodegen<'a> {
             };
 
             quote! {
-                pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Filtered<::fabrique::sql::Selected>> {
+                pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Filtered<::fabrique::sql::Selected>, ::fabrique::model::join::Joined<#target_type, ()>> {
                     let pk = <Self as ::fabrique::Model>::primary_key(self);
                     let fk = #fk_expr;
                     <#target_type as ::fabrique::Query>::query()
@@ -228,7 +228,7 @@ impl<'a> ModelCodegen<'a> {
             let join_type = field.through.as_ref().unwrap();
 
             quote! {
-                pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Joined<::fabrique::sql::Selected>> {
+                pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Joined<::fabrique::sql::Selected>, ::fabrique::model::join::Joined<#base_struct_ident, ::fabrique::model::join::Joined<#target_type, ()>>> {
                     <#target_type as ::fabrique::Query>::query()
                         .select()
                         .join_through::<#join_type, Self>()
@@ -396,7 +396,7 @@ mod tests {
                 }
 
                 impl Customer {
-                    pub fn orders(&self) -> ::fabrique::model::QueryBuilder<Order, ::fabrique::sql::Filtered<::fabrique::sql::Selected>> {
+                    pub fn orders(&self) -> ::fabrique::model::QueryBuilder<Order, ::fabrique::sql::Filtered<::fabrique::sql::Selected>, ::fabrique::model::join::Joined<Order, ()>> {
                         let pk = <Self as ::fabrique::Model>::primary_key(self);
                         let fk = <Order as ::fabrique::BelongsTo<Self>>::foreign_key_column();
                         <Order as ::fabrique::Query>::query()
@@ -482,7 +482,7 @@ mod tests {
                 }
 
                 impl Order {
-                    pub fn products(&self) -> ::fabrique::model::QueryBuilder<Product, ::fabrique::sql::Joined<::fabrique::sql::Selected>> {
+                    pub fn products(&self) -> ::fabrique::model::QueryBuilder<Product, ::fabrique::sql::Joined<::fabrique::sql::Selected>, ::fabrique::model::join::Joined<Order, ::fabrique::model::join::Joined<Product, ()>>> {
                         <Product as ::fabrique::Query>::query()
                             .select()
                             .join_through::<OrderLine, Self>()
