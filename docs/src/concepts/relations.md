@@ -5,7 +5,10 @@ Fabrique supports two types of relationships between models:
 - **Belongs to**: A model references another model via a foreign key (e.g., an order belongs to a user)
 - **Has many**: A model has multiple related records in another table (e.g., a user has many orders)
 
-These relationships enable lazy loading of related records and automatic foreign key handling in [factories](factories.md).
+These relationships enable:
+- Lazy loading of related records
+- Automatic foreign key handling in [factories](factories.md)
+- Bidirectional [joins](queries.md#joins) between related models
 
 ## Belongs To
 
@@ -29,7 +32,13 @@ pub struct Order {
 # fn main() {}
 ```
 
-Here, `Order` holds the foreign key (`customer_id`) that references `User`'s primary key (`id`). Fabrique generates a `BelongsTo<User>` trait for `Order`, which exposes the foreign key column for use in queries and [factories](factories.md).
+Here, `Order` holds the foreign key (`customer_id`) that references `User`'s primary key (`id`). Fabrique generates:
+
+- `BelongsTo<User>` for `Order` — exposes the foreign key column for queries and factories
+- `Joinable<User>` for `Order` — enables `Order::query().select().join::<User>()`
+- `Joinable<Order>` for `User` — enables `User::query().select().join::<Order>()`
+
+This bidirectional join support means you can join in either direction regardless of which model holds the foreign key.
 
 ## Has Many
 

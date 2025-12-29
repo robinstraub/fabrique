@@ -161,6 +161,80 @@ pub struct Product {
 # fn main() {}
 ```
 
+## Joins
+
+Fabrique supports bidirectional joins between related models. When you define a `belongs_to` relationship, both directions of the join become available automatically via the `Joinable` trait.
+
+### Basic Join
+
+Use the `join::<T>()` method to add an INNER JOIN to your query:
+
+```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use sqlx::{Pool, Postgres};
+# use uuid::Uuid;
+#
+# #[derive(Factory, Model)]
+# pub struct User { id: Uuid, email: String, orders: HasMany<Order> }
+# #[derive(Factory, Model)]
+# pub struct Order { id: Uuid, #[fabrique(belongs_to = "User")] user_id: Uuid }
+#
+# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+// Parent → Child: User joining Orders
+let users = User::query()
+    .select()
+    .join::<Order>()
+    .r#where(User::EMAIL, "=", "john@example.com".to_string())
+    .get(&pool)
+    .await?;
+
+// Child → Parent: Order joining User
+let orders = Order::query()
+    .select()
+    .join::<User>()
+    .get(&pool)
+    .await?;
+# Ok(())
+# }
+# fn main() {}
+```
+
+Both directions work seamlessly — Fabrique generates the appropriate `Joinable` implementations when you define a `belongs_to` relationship.
+
+### Many-to-Many Joins
+
+For many-to-many relationships with a join table, use `join_through`:
+
+```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use sqlx::{Pool, Postgres};
+# use uuid::Uuid;
+#
+# #[derive(Factory, Model)]
+# pub struct Order { id: Uuid, #[fabrique(through = "OrderLine")] products: HasMany<Product> }
+# #[derive(Factory, Model)]
+# pub struct Product { id: Uuid }
+# #[derive(Factory, Model)]
+# #[fabrique(table = "order_lines")]
+# pub struct OrderLine { #[fabrique(primary_key, belongs_to = "Order")] order_id: Uuid, #[fabrique(primary_key, belongs_to = "Product")] product_id: Uuid }
+#
+# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+let orders = Order::query()
+    .select()
+    .join_through::<OrderLine, Product>()
+    .get(&pool)
+    .await?;
+# Ok(())
+# }
+# fn main() {}
+```
+
 ## Type-Safe Columns
 
 Column constants are not just names — they carry type information. When using `r#where`, the value must match the column's type:
