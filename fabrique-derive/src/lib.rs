@@ -44,6 +44,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let model = ModelCodegen::new(&analysis).generate();
     let columns = ColumnsCodegen::new(&analysis).generate();
     let belongs_to = BelongsToCodegen::new(&analysis).generate();
+    let joinable = JoinableCodegen::new(&analysis).generate();
     let query = QueryCodegen::new(&analysis).generate();
     let persist = PersistCodegen::new(&analysis).generate();
     let delete = DeleteCodegen::new(&analysis).generate();
@@ -56,6 +57,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         #model
         #columns
         #belongs_to
+        #joinable
         #query
         #persist
         #delete

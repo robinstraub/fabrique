@@ -1,6 +1,6 @@
 use crate::database::Column;
 use crate::model::Model;
-use crate::relation::BelongsTo;
+use crate::relation::{BelongsTo, Joinable};
 use crate::sql::operators::{Direction, Operator};
 use crate::sql::{
     Conflicted, Filtered, Initial, Inserted, Inserting, Joined, Limited, Offsetted, Ordered,
@@ -14,7 +14,7 @@ use crate::sql::{
 /// - `Base` → `Joined<Base>` (initial join)
 /// - `Joined<Base>` → `Joined<Base>` (chained joins)
 ///
-/// - `join::<J>()`: Simple join, ON clause links J to M via `BelongsTo<M>`
+/// - `join::<J>()`: Bidirectional join via `Joinable<M>` trait
 /// - `join_through::<Pivot, Target>()`: Many-to-many join via pivot table
 macro_rules! impl_join {
     // Shared body - takes input state and output base
@@ -26,19 +26,19 @@ macro_rules! impl_join {
         {
             /// Adds an INNER JOIN clause to the query.
             ///
-            /// The ON clause is automatically inferred from the `BelongsTo<M>` trait
-            /// implementation on the join model `J`.
+            /// The ON clause is automatically inferred from the `Joinable<M>` trait.
+            /// Works bidirectionally - both parent→child and child→parent joins.
             ///
             /// Transitions to [`Joined`] state.
             pub fn join<J>(self) -> QueryBuilder<M, Joined<$base>>
             where
-                J: Model<Database = M::Database> + BelongsTo<M>,
+                J: Model<Database = M::Database> + Joinable<M>,
             {
                 QueryBuilder {
                     inner: self.inner.join(
                         J::table_name(),
-                        J::foreign_key_column().qualified_name(),
-                        &format!("{}.{}", M::table_name(), M::primary_key_columns()[0]),
+                        <J as Joinable<M>>::left_column().qualified_name(),
+                        <J as Joinable<M>>::right_column().qualified_name(),
                     ),
                 }
             }

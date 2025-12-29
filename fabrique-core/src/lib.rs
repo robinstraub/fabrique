@@ -11,3 +11,4 @@ pub use error::Error;
 pub use factory::SetForeignKey;
 pub use relation::BelongsTo;
 pub use relation::HasMany;
+pub use relation::Joinable;

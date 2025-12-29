@@ -41,6 +41,25 @@ pub trait BelongsTo<Parent: Model>: Model {
     fn foreign_key_column() -> Self::ForeignKeyColumn;
 }
 
+/// Trait for models that can be joined with another model.
+///
+/// Enables bidirectional joins between related models. When a `belongs_to`
+/// relationship is defined, the derive macro generates `Joinable`
+/// implementations in both directions.
+pub trait Joinable<J: Model>: Model {
+    /// The column type from `Self` used in the join.
+    type LeftColumn: Column<Self>;
+
+    /// The column type from `J` used in the join.
+    type RightColumn: Column<J>;
+
+    /// Returns the column from `Self` for the join ON clause.
+    fn left_column() -> Self::LeftColumn;
+
+    /// Returns the column from `J` for the join ON clause.
+    fn right_column() -> Self::RightColumn;
+}
+
 /// Marker type for one-to-many relationships.
 ///
 /// `HasMany<T>` is a zero-sized type (ZST) that represents a one-to-many

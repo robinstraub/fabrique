@@ -55,17 +55,38 @@ async fn test_join_many_to_many_lazy_loading(connection: Pool<Postgres>) {
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn test_join_one_to_many(connection: Pool<Postgres>) {
+async fn test_join_parent_to_child(connection: Pool<Postgres>) {
     let user = User::factory()
         .has_orders(Order::factory().status("shipped".to_string()), 1)
         .create(&connection)
         .await
         .unwrap();
 
+    // Parent → Child: User joining Order
     let result = User::query()
         .select()
         .join::<Order>()
         .r#where(User::EMAIL, "=", user.email)
+        .get(&connection)
+        .await;
+
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().len(), 1);
+}
+
+#[sqlx::test(migrations = "../migrations")]
+async fn test_join_child_to_parent(connection: Pool<Postgres>) {
+    User::factory()
+        .has_orders(Order::factory().status("pending".to_string()), 1)
+        .create(&connection)
+        .await
+        .unwrap();
+
+    // Child → Parent: Order joining User
+    let result = Order::query()
+        .select()
+        .join::<User>()
+        .r#where(Order::STATUS, "=", "pending".to_string())
         .get(&connection)
         .await;
 
