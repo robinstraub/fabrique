@@ -48,71 +48,87 @@ macro_rules! impl_join {
 
 /// Implements the `where` method for states that start a WHERE clause.
 ///
-/// Pushes " WHERE " and transitions to [`Filtered<$state>`].
+/// Supports two syntaxes:
+/// - `impl_where!(State)` - transitions to `Filtered<State>`
+/// - `impl_where!(InputState => OutputState)` - transitions to
+///   `Filtered<OutputState>`
 macro_rules! impl_where {
-    ($($state:ty),+ $(,)?) => {
-        $(
-            impl<DB: Database> QueryBuilder<DB, $state> {
-                /// Adds a WHERE clause to the query.
-                ///
-                /// Transitions to [`Filtered`] state. Use additional `where()` calls to add
-                /// AND conditions.
-                pub fn r#where<'a, T, O>(
-                    mut self,
-                    column: &str,
-                    operator: O,
-                    value: T,
-                ) -> QueryBuilder<DB, Filtered<$state>>
-                where
-                    T: 'a + sqlx::Encode<'a, DB> + sqlx::Type<DB>,
-                    O: Into<Operator>,
-                {
-                    self.inner.push(" WHERE ");
-                    self.inner.push(column);
-                    self.inner.push(" ");
-                    self.inner.push(operator.into().as_str());
-                    self.inner.push(" ");
-                    self.inner.push_bind(value);
+    // Handle input => output syntax
+    (@impl $input:ty => $output:ty) => {
+        impl<DB: Database> QueryBuilder<DB, $input> {
+            /// Adds a WHERE clause to the query.
+            ///
+            /// Transitions to [`Filtered`] state. Use additional `where()` calls to add
+            /// AND conditions.
+            pub fn r#where<'a, T, O>(
+                mut self,
+                column: &str,
+                operator: O,
+                value: T,
+            ) -> QueryBuilder<DB, Filtered<$output>>
+            where
+                T: 'a + sqlx::Encode<'a, DB> + sqlx::Type<DB>,
+                O: Into<Operator>,
+            {
+                self.inner.push(" WHERE ");
+                self.inner.push(column);
+                self.inner.push(" ");
+                self.inner.push(operator.into().as_str());
+                self.inner.push(" ");
+                self.inner.push_bind(value);
 
-                    QueryBuilder {
-                        inner: self.inner,
-                        table: self.table,
-                        state: Filtered { _marker: PhantomData },
-                    }
-                }
-
-                /// Adds a WHERE NULL clause to the query.
-                ///
-                /// Transitions to [`Filtered`] state. Use additional `where()` calls to add
-                /// AND conditions.
-                pub fn where_null(mut self, column: &str) -> QueryBuilder<DB, Filtered<$state>> {
-                    self.inner.push(" WHERE ");
-                    self.inner.push(column);
-                    self.inner.push(" IS NULL");
-
-                    QueryBuilder {
-                        inner: self.inner,
-                        table: self.table,
-                        state: Filtered { _marker: PhantomData },
-                    }
-                }
-
-                /// Adds a WHERE NOT NULL clause to the query.
-                ///
-                /// Transitions to [`Filtered`] state. Use additional `where()` calls to add
-                /// AND conditions.
-                pub fn where_not_null(mut self, column: &str) -> QueryBuilder<DB, Filtered<$state>> {
-                    self.inner.push(" WHERE ");
-                    self.inner.push(column);
-                    self.inner.push(" IS NOT NULL");
-
-                    QueryBuilder {
-                        inner: self.inner,
-                        table: self.table,
-                        state: Filtered { _marker: PhantomData },
-                    }
+                QueryBuilder {
+                    inner: self.inner,
+                    table: self.table,
+                    state: Filtered { _marker: PhantomData },
                 }
             }
+
+            /// Adds a WHERE NULL clause to the query.
+            ///
+            /// Transitions to [`Filtered`] state. Use additional `where()` calls to add
+            /// AND conditions.
+            pub fn where_null(mut self, column: &str) -> QueryBuilder<DB, Filtered<$output>> {
+                self.inner.push(" WHERE ");
+                self.inner.push(column);
+                self.inner.push(" IS NULL");
+
+                QueryBuilder {
+                    inner: self.inner,
+                    table: self.table,
+                    state: Filtered { _marker: PhantomData },
+                }
+            }
+
+            /// Adds a WHERE NOT NULL clause to the query.
+            ///
+            /// Transitions to [`Filtered`] state. Use additional `where()` calls to add
+            /// AND conditions.
+            pub fn where_not_null(mut self, column: &str) -> QueryBuilder<DB, Filtered<$output>> {
+                self.inner.push(" WHERE ");
+                self.inner.push(column);
+                self.inner.push(" IS NOT NULL");
+
+                QueryBuilder {
+                    inner: self.inner,
+                    table: self.table,
+                    state: Filtered { _marker: PhantomData },
+                }
+            }
+        }
+    };
+    // Entry point: simple state (input = output)
+    ($state:ty) => {
+        impl_where!(@impl $state => $state);
+    };
+    // Entry point: explicit input => output
+    ($input:ty => $output:ty) => {
+        impl_where!(@impl $input => $output);
+    };
+    // Entry point: multiple states
+    ($($state:ty),+ $(,)?) => {
+        $(
+            impl_where!($state);
         )+
     };
 }
@@ -895,7 +911,9 @@ impl<DB: Database> QueryBuilder<DB, Limited> {
 
 // Use macros to implement common methods across multiple states
 impl_join!(Selected, Updated);
-impl_where!(Selected, Updated, Joined<Selected>);
+impl_where!(Selected, Updated);
+impl_where!(Joined<Selected> => Selected);
+impl_where!(Joined<Updated> => Updated);
 impl_order_by!(
     Selected,
     Filtered<Selected>,
