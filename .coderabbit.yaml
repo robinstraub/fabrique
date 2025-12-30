@@ -8,5 +8,5 @@ reviews:
 knowledge_base:
   code_guidelines:
     enabled: true
-    file_patterns:
+    filePatterns:
       - "docs/README.md"
