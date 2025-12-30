@@ -11,6 +11,12 @@ create-missing = false
 [output.html]
 git-repository-url = "https://github.com/robinstraub/fabrique"
 edit-url-template = "https://github.com/robinstraub/fabrique/edit/master/docs/{path}"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
 
 [output.html.code.hidelines]
 rust = "# "
+
+[preprocessor]
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"

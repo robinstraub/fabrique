@@ -73,7 +73,7 @@ Get back the updated rows with `.returning()`:
 let updated: Vec<Product> = Product::update()
     .set(Product::IN_STOCK, false)
     .r#where(Product::PRICE_CENTS, ">", 10000)
-    .returning(Product::columns())
+    .returning()
     .get(pool)
     .await?;
 
