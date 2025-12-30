@@ -6,13 +6,12 @@ reviewing documentation.
 
 ## Folder Structure
 
-| Folder | Diataxis Type | Purpose |
+| Location | Diataxis Type | Purpose |
 |--------|---------------|---------|
 | `tutorials/` | Tutorials | Learning-oriented lessons |
 | `concepts/` | Explanation | Understanding-oriented background |
 | `guides/` | How-to Guides | Task-oriented problem solving |
-| Rustdoc | Reference | Information-oriented technical descriptions |
-
+| Rustdoc (generated) | Reference | Information-oriented technical descriptions |
 ## Tutorials (`tutorials/`)
 
 > [diataxis.fr/tutorials](https://diataxis.fr/tutorials/)
