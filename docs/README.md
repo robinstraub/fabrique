@@ -12,6 +12,7 @@ reviewing documentation.
 | `concepts/` | Explanation | Understanding-oriented background |
 | `guides/` | How-to Guides | Task-oriented problem solving |
 | Rustdoc (generated) | Reference | Information-oriented technical descriptions |
+
 ## Tutorials (`tutorials/`)
 
 > [diataxis.fr/tutorials](https://diataxis.fr/tutorials/)
