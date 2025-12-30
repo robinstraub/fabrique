@@ -12,6 +12,7 @@
 - [Models](concepts/models.md)
 - [Relations](concepts/relations.md)
 - [Queries](concepts/queries.md)
+- [Query Builder](concepts/query-builder.md)
 - [Factories](concepts/factories.md)
 - [Type Conversions](concepts/type-conversions.md)
 - [Error Handling](concepts/error-handling.md)

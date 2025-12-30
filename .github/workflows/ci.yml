@@ -127,8 +127,10 @@ jobs:
       - name: Install Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
-      - name: Install mdBook
-        uses: taiki-e/install-action@mdbook
+      - name: Install mdBook and preprocessors
+        uses: taiki-e/install-action@v2
+        with:
+          tool: mdbook,mdbook-mermaid
 
       - name: Build dependencies for doctests
         run: cargo build

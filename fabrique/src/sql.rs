@@ -27,6 +27,7 @@
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
 //! let rows: Vec<(uuid::Uuid, String, i32)> = QueryBuilder::table("products")
+//!     .select(&["id", "name", "price_cents"])
 //!     .get(&connection)
 //!     .await?;
 //! #     Ok(())
@@ -43,6 +44,7 @@
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
 //! # let rows: Vec<(uuid::Uuid, String, i32)> = QueryBuilder::table("products")
+//! #     .select(&["id", "name", "price_cents"])
 //! #     .get(&connection)
 //! #     .await?;
 //! #
@@ -65,6 +67,7 @@
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
 //! let row: Option<(uuid::Uuid, String, i32)> = QueryBuilder::table("products")
+//!     .select(&["id", "name", "price_cents"])
 //!     .first(&connection)
 //!     .await?;
 //! #     Ok(())
@@ -81,6 +84,7 @@
 //! #
 //! # async fn example(connection: Pool<Postgres>) -> Result<(), sqlx::Error> {
 //! let row: (uuid::Uuid, String, i32) = QueryBuilder::table("products")
+//!     .select(&["id", "name", "price_cents"])
 //!     .first_or_fail(&connection)
 //!     .await?;
 //! #     Ok(())

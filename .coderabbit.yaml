@@ -2,3 +2,5 @@
 
 reviews:
   profile: assertive
+  path_filters:
+    - "!**/*.js"

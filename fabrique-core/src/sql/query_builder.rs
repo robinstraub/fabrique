@@ -1,17 +1,97 @@
+//! # SQL Query Builder (Layer 1)
+//!
+//! Low-level SQL query builder using the **typestate pattern** for compile-time
+//! query validation.
+//!
+//! This is the foundation layer of Fabrique's 2-layer query builder
+//! architecture. It handles raw SQL construction and is designed to work with
+//! any sqlx backend. For a detailed explanation of the architecture, see the
+//! [Query Builder Internals](https://fabrique.rs/internals/query-builder.html) documentation.
+//!
+//! # Database Compatibility
+//!
+//! > **Note:** While the architecture is designed to be database-agnostic, the
+//! > current
+//! > implementation generates **PostgreSQL-specific SQL** in several places
+//! > (e.g.,
+//! > `RETURNING` clause, `ON CONFLICT` syntax). Support for other databases
+//! > (MySQL,
+//! > SQLite) requires specializing these implementations with alternative
+//! > syntax.
+//! > See [#69](https://github.com/robinstraub/fabrique/issues/69) for progress.
+//!
+//! # Typestate Pattern
+//!
+//! This module implements a **state machine** through a **typestate pattern**
+//! where:
+//! - Each state is a **zero-sized marker type** (e.g., [`Initial`],
+//!   [`Selected`], [`Filtered<S>`])
+//! - Method signatures encode **valid transitions** as return types
+//! - **Invalid transitions are compile errors**, not runtime errors
+//! - The builder is **consumed** by each method, preventing reuse after
+//!   transition
+//!
+//! ## Example: Valid Transition Chain
+//!
+//! ```rust,no_run
+//! # use fabrique_core::sql::QueryBuilder;
+//! # use sqlx::PgPool;
+//! # async fn example(pool: &PgPool) -> Result<(), sqlx::Error> {
+//! let products: Vec<(i32, String)> = QueryBuilder::table("products")  // Initial
+//!     .select(&["id", "name"])     // → Selected
+//!     .r#where("price", ">", 100)  // → Filtered<Selected>
+//!     .order_by("name", "asc")     // → Ordered
+//!     .limit(10)                   // → Limited
+//!     .get(pool).await?;           // → Executed
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # State Transitions
+//!
+//! See the documentation of [`QueryBuilder`] for the complete state diagram.
+//!
+//! # Usage
+//!
+//! This layer is typically **not used directly**. Use
+//! [`crate::model::QueryBuilder`] for the type-safe API that validates columns
+//! against model definitions.
+//!
+//! Direct usage is appropriate for:
+//! - Custom queries that don't map to a model
+//! - Raw SQL escape hatches
+//! - Testing the SQL layer in isolation
+//!
+//! # Module Organization
+//!
+//! This file declares all macros first (shared infrastructure for generating
+//! methods across multiple states), then defines each state in sequence. For
+//! each state, you will find its marker type definition, followed by its impl
+//! blocks and any relevant macro invocations. States are ordered following the
+//! logical sequence of query construction.
+
 use std::marker::PhantomData;
 
 use crate::sql::operators::{Direction, Operator};
 use sqlx::{Database, Executor, FromRow, IntoArguments};
 
-/// Implements the `join` method for base states and their joined variants.
+// ############################################################################
+// MACRO DEFINITIONS
+// ############################################################################
+//
+// Shared infrastructure for generating methods across multiple states.
+// These macros reduce boilerplate by implementing common patterns (where,
+// order_by, limit, get, first, etc.) for multiple builder states at once.
+
+/// Implements the `join` method for a given input state.
 ///
-/// For each base state, generates:
-/// - `Base` → `Joined<Base>` (initial join)
-/// - `Joined<Base>` → `Joined<Base>` (chained joins)
+/// Syntax: `impl_join!(InputState => OutputState)`
+///
+/// Generates `join()` method on `QueryBuilder<DB, InputState>` that
+/// transitions to `QueryBuilder<DB, OutputState>`.
 macro_rules! impl_join {
-    // Shared body - takes input state and output base
-    (@body $state:ty, $base:ty) => {
-        impl<DB: Database> QueryBuilder<DB, $state> {
+    ($input:ty => $output:ty) => {
+        impl<DB: Database> QueryBuilder<DB, $input> {
             /// Adds an INNER JOIN clause to the query.
             ///
             /// Transitions to [`Joined`] state. Use additional `join()` calls to chain
@@ -21,7 +101,7 @@ macro_rules! impl_join {
                 table: &str,
                 left_column: &str,
                 right_column: &str,
-            ) -> QueryBuilder<DB, Joined<$base>> {
+            ) -> QueryBuilder<DB, $output> {
                 self.inner.push(" JOIN ");
                 self.inner.push(table);
                 self.inner.push(" ON ");
@@ -32,33 +112,34 @@ macro_rules! impl_join {
                 QueryBuilder {
                     inner: self.inner,
                     table: self.table,
-                    state: Joined { _marker: PhantomData },
+                    state: Joined {
+                        _marker: PhantomData,
+                    },
                 }
             }
         }
     };
-    // Entry: for each base, generate both impls
-    ($($base:ty),+ $(,)?) => {
-        $(
-            impl_join!(@body $base, $base);
-            impl_join!(@body Joined<$base>, $base);
-        )+
-    };
 }
 
-/// Implements the `where` method for states that start a WHERE clause.
+/// Implements the `where` methods for a given input state.
 ///
-/// Supports two syntaxes:
+/// Syntax:
 /// - `impl_where!(State)` - transitions to `Filtered<State>`
 /// - `impl_where!(InputState => OutputState)` - transitions to
 ///   `Filtered<OutputState>`
+///
+/// Generates `r#where()`, `where_null()`, and `where_not_null()` methods.
 macro_rules! impl_where {
-    // Handle input => output syntax
-    (@impl $input:ty => $output:ty) => {
+    // Entry point: simple state (input = output)
+    ($state:ty) => {
+        impl_where!($state => $state);
+    };
+    // Entry point: explicit input => output
+    ($input:ty => $output:ty) => {
         impl<DB: Database> QueryBuilder<DB, $input> {
             /// Adds a WHERE clause to the query.
             ///
-            /// Transitions to [`Filtered`] state. Use additional `where()` calls to add
+            /// Transitions to [`Filtered`] state. Use additional `r#where()` calls to add
             /// AND conditions.
             pub fn r#where<'a, T, O>(
                 mut self,
@@ -84,10 +165,9 @@ macro_rules! impl_where {
                 }
             }
 
-            /// Adds a WHERE NULL clause to the query.
+            /// Adds a WHERE IS NULL clause to the query.
             ///
-            /// Transitions to [`Filtered`] state. Use additional `where()` calls to add
-            /// AND conditions.
+            /// Transitions to [`Filtered`] state.
             pub fn where_null(mut self, column: &str) -> QueryBuilder<DB, Filtered<$output>> {
                 self.inner.push(" WHERE ");
                 self.inner.push(column);
@@ -100,10 +180,9 @@ macro_rules! impl_where {
                 }
             }
 
-            /// Adds a WHERE NOT NULL clause to the query.
+            /// Adds a WHERE IS NOT NULL clause to the query.
             ///
-            /// Transitions to [`Filtered`] state. Use additional `where()` calls to add
-            /// AND conditions.
+            /// Transitions to [`Filtered`] state.
             pub fn where_not_null(mut self, column: &str) -> QueryBuilder<DB, Filtered<$output>> {
                 self.inner.push(" WHERE ");
                 self.inner.push(column);
@@ -117,198 +196,190 @@ macro_rules! impl_where {
             }
         }
     };
-    // Entry point: simple state (input = output)
-    ($state:ty) => {
-        impl_where!(@impl $state => $state);
-    };
-    // Entry point: explicit input => output
-    ($input:ty => $output:ty) => {
-        impl_where!(@impl $input => $output);
-    };
-    // Entry point: multiple states
-    ($($state:ty),+ $(,)?) => {
-        $(
-            impl_where!($state);
-        )+
-    };
 }
 
-/// Implements the `returning` method for multiple builder states.
+/// Implements the `returning` method for a given input state.
 ///
-/// Always transitions to [`Returned`] state.
+/// Syntax: `impl_returning!(State)` - transitions to [`Returned`]
 macro_rules! impl_returning {
-    ($($state:ty),+ $(,)?) => {
-        $(
-            impl<DB: Database> QueryBuilder<DB, $state> {
-                /// Specifies the columns to return after the statement.
-                ///
-                /// Generates `RETURNING col1, col2, ...`.
-                pub fn returning(mut self, columns: &[&str]) -> QueryBuilder<DB, Returned> {
-                    self.inner.push(" RETURNING ");
-                    self.inner.push(columns.join(", "));
+    ($state:ty) => {
+        impl<DB: Database> QueryBuilder<DB, $state> {
+            /// Specifies the columns to return after the statement.
+            ///
+            /// Generates `RETURNING col1, col2, ...`. Transitions to [`Returned`]
+            /// state.
+            pub fn returning(mut self, columns: &[&str]) -> QueryBuilder<DB, Returned> {
+                self.inner.push(" RETURNING ");
+                self.inner.push(columns.join(", "));
 
-                    QueryBuilder {
-                        inner: self.inner,
-                        table: self.table,
-                        state: Returned,
-                    }
+                QueryBuilder {
+                    inner: self.inner,
+                    table: self.table,
+                    state: Returned,
                 }
             }
-        )+
+        }
     };
 }
 
-/// Implements the `order_by` method for multiple builder states.
+/// Implements the `order_by` method for a given input state.
 ///
-/// Always transitions to [`Ordered`] state.
+/// Syntax: `impl_order_by!(State)` - transitions to [`Ordered`]
 macro_rules! impl_order_by {
-    ($($state:ty),+ $(,)?) => {
-        $(
-            impl<DB: Database> QueryBuilder<DB, $state> {
-                /// Adds an `ORDER BY` clause to the query.
-                ///
-                /// Transitions to [`Ordered`] state, allowing `LIMIT` or execution.
-                pub fn order_by(
-                    mut self,
-                    column: &str,
-                    direction: impl Into<Direction>,
-                ) -> QueryBuilder<DB, Ordered> {
-                    let direction: Direction = direction.into();
-                    self.inner.push(" ORDER BY ");
-                    self.inner.push(column);
-                    self.inner.push(" ");
-                    self.inner.push(direction.as_str());
+    ($state:ty) => {
+        impl<DB: Database> QueryBuilder<DB, $state> {
+            /// Adds an `ORDER BY` clause to the query.
+            ///
+            /// Transitions to [`Ordered`] state.
+            pub fn order_by(
+                mut self,
+                column: &str,
+                direction: impl Into<Direction>,
+            ) -> QueryBuilder<DB, Ordered> {
+                let direction: Direction = direction.into();
+                self.inner.push(" ORDER BY ");
+                self.inner.push(column);
+                self.inner.push(" ");
+                self.inner.push(direction.as_str());
 
-                    QueryBuilder {
-                        inner: self.inner,
-                        table: self.table,
-                        state: Ordered,
-                    }
+                QueryBuilder {
+                    inner: self.inner,
+                    table: self.table,
+                    state: Ordered,
                 }
             }
-        )+
+        }
     };
 }
 
-/// Implements the `limit` method for multiple builder states.
+/// Implements the `limit` method for a given input state.
 ///
-/// Always transitions to [`Limited`] state.
+/// Syntax: `impl_limit!(State)` - transitions to [`Limited`]
 macro_rules! impl_limit {
-    ($($state:ty),+ $(,)?) => {
-        $(
-            impl<DB: Database> QueryBuilder<DB, $state> {
-                /// Adds a `LIMIT` clause to the query.
-                ///
-                /// Transitions to [`Limited`] state, allowing `OFFSET` or execution.
-                pub fn limit<'a>(mut self, count: i64) -> QueryBuilder<DB, Limited>
-                where
-                    i64: sqlx::Encode<'a, DB> + sqlx::Type<DB>,
-                {
-                    self.inner.push(" LIMIT ");
-                    self.inner.push_bind(count);
+    ($state:ty) => {
+        impl<DB: Database> QueryBuilder<DB, $state> {
+            /// Adds a `LIMIT` clause to the query.
+            ///
+            /// Transitions to [`Limited`] state.
+            pub fn limit<'a>(mut self, count: i64) -> QueryBuilder<DB, Limited>
+            where
+                i64: sqlx::Encode<'a, DB> + sqlx::Type<DB>,
+            {
+                self.inner.push(" LIMIT ");
+                self.inner.push_bind(count);
 
-                    QueryBuilder {
-                        inner: self.inner,
-                        table: self.table,
-                        state: Limited,
-                    }
+                QueryBuilder {
+                    inner: self.inner,
+                    table: self.table,
+                    state: Limited,
                 }
             }
-        )+
+        }
     };
 }
 
-/// Implements the `get` method for multiple builder states.
-macro_rules! impl_get {
-    ($($state:ty),+ $(,)?) => {
-        $(
-            impl<DB: Database> QueryBuilder<DB, $state> {
-                /// Executes the query and returns all matching rows.
-                ///
-                /// Supports both connection pools and transactions via the `Executor`
-                /// trait.
-                pub async fn get<'e, T, E>(mut self, executor: E) -> Result<Vec<T>, sqlx::Error>
-                where
-                    E:  Executor<'e, Database = DB>,
-                    T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
-                    <DB as Database>::Arguments: IntoArguments<DB>,
-                {
-                    self.inner.build_query_as::<T>().fetch_all(executor).await
-                }
-            }
-        )+
-    };
-}
-
-/// Implements the `first` method for multiple builder states.
-macro_rules! impl_first {
-    ($($state:ty),+ $(,)?) => {
-        $(
-            impl<DB: Database> QueryBuilder<DB, $state> {
-                /// Retrieves the first row from the query result.
-                ///
-                /// Returns `None` if no rows match the query. Automatically adds
-                /// `LIMIT 1` to the query.
-                pub async fn first<'e, T, E>(mut self, executor: E) -> Result<Option<T>, sqlx::Error>
-                where
-                    E: Executor<'e, Database = DB>,
-                    T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
-                    <DB as Database>::Arguments: IntoArguments<DB>,
-                {
-                    self.inner.push(" LIMIT 1");
-                    self.inner.build_query_as::<T>().fetch_optional(executor).await
-                }
-            }
-        )+
-    };
-}
-
-/// Implements the `first_or_fail` method for multiple builder states.
-macro_rules! impl_first_or_fail {
-    ($($state:ty),+ $(,)?) => {
-        $(
-            impl<DB: Database> QueryBuilder<DB, $state> {
-                /// Retrieves the first row from the query result, or fails if none exists.
-                ///
-                /// Returns an error if no rows match the query. Automatically adds
-                /// `LIMIT 1` to the query.
-                pub async fn first_or_fail<'e, T, E>(mut self, executor: E) -> Result<T, sqlx::Error>
-                where
-                    E: Executor<'e, Database = DB>,
-                    T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
-                    <DB as Database>::Arguments: IntoArguments<DB>,
-                {
-                    self.inner.push(" LIMIT 1");
-                    self.inner.build_query_as::<T>().fetch_one(executor).await
-                }
-            }
-        )+
-    };
-}
-
-/// Implements the `execute` method for multiple builder states.
+/// Implements the `get` method for a given state.
 ///
-/// Executes the query without returning rows.
-macro_rules! impl_execute {
-    ($($state:ty),+ $(,)?) => {
-        $(
-            impl<DB: Database> QueryBuilder<DB, $state> {
-                /// Executes the statement without returning any rows.
-                pub async fn execute<'e, E>(mut self, executor: E) -> Result<(), sqlx::Error>
-                where
-                    E: Executor<'e, Database = DB>,
-                    <DB as Database>::Arguments: IntoArguments<DB>,
-                {
-                    self.inner
-                        .build()
-                        .execute(executor)
-                        .await
-                        .map(|_| ())
-                }
+/// Syntax: `impl_get!(State)` - adds execution capability (no state transition)
+macro_rules! impl_get {
+    ($state:ty) => {
+        impl<DB: Database> QueryBuilder<DB, $state> {
+            /// Executes the query and returns all matching rows.
+            ///
+            /// Supports both connection pools and transactions via the `Executor`
+            /// trait.
+            pub async fn get<'e, T, E>(mut self, executor: E) -> Result<Vec<T>, sqlx::Error>
+            where
+                E: Executor<'e, Database = DB>,
+                T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
+                <DB as Database>::Arguments: IntoArguments<DB>,
+            {
+                self.inner.build_query_as::<T>().fetch_all(executor).await
             }
-        )+
+        }
     };
 }
+
+/// Implements the `first` method for a given state.
+///
+/// Syntax: `impl_first!(State)` - adds execution capability (no state
+/// transition)
+macro_rules! impl_first {
+    ($state:ty) => {
+        impl<DB: Database> QueryBuilder<DB, $state> {
+            /// Retrieves the first row from the query result.
+            ///
+            /// Returns `None` if no rows match. Automatically adds `LIMIT 1`.
+            pub async fn first<'e, T, E>(mut self, executor: E) -> Result<Option<T>, sqlx::Error>
+            where
+                E: Executor<'e, Database = DB>,
+                T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
+                <DB as Database>::Arguments: IntoArguments<DB>,
+            {
+                self.inner.push(" LIMIT 1");
+                self.inner
+                    .build_query_as::<T>()
+                    .fetch_optional(executor)
+                    .await
+            }
+        }
+    };
+}
+
+/// Implements the `first_or_fail` method for a given state.
+///
+/// Syntax: `impl_first_or_fail!(State)` - adds execution capability (no state
+/// transition)
+macro_rules! impl_first_or_fail {
+    ($state:ty) => {
+        impl<DB: Database> QueryBuilder<DB, $state> {
+            /// Retrieves the first row from the query result, or fails if none exists.
+            ///
+            /// Returns an error if no rows match. Automatically adds `LIMIT 1`.
+            pub async fn first_or_fail<'e, T, E>(mut self, executor: E) -> Result<T, sqlx::Error>
+            where
+                E: Executor<'e, Database = DB>,
+                T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
+                <DB as Database>::Arguments: IntoArguments<DB>,
+            {
+                self.inner.push(" LIMIT 1");
+                self.inner.build_query_as::<T>().fetch_one(executor).await
+            }
+        }
+    };
+}
+
+/// Implements the `execute` method for a given state.
+///
+/// Syntax: `impl_execute!(State)` - adds execution capability (no state
+/// transition)
+macro_rules! impl_execute {
+    ($state:ty) => {
+        impl<DB: Database> QueryBuilder<DB, $state> {
+            /// Executes the statement without returning any rows.
+            pub async fn execute<'e, E>(mut self, executor: E) -> Result<(), sqlx::Error>
+            where
+                E: Executor<'e, Database = DB>,
+                <DB as Database>::Arguments: IntoArguments<DB>,
+            {
+                self.inner.build().execute(executor).await.map(|_| ())
+            }
+        }
+    };
+}
+
+// ############################################################################
+// STATES
+// ############################################################################
+//
+// Each state is a zero-sized marker type that encodes the current position
+// in the query building process. The QueryBuilder struct is generic over
+// its state, and method availability is controlled by impl blocks or
+// macro invocations on specific state types.
+
+// ============================================================================
+// QueryBuilder
+// ============================================================================
 
 /// Type-safe SQL query builder using the typestate pattern.
 ///
@@ -373,72 +444,248 @@ macro_rules! impl_execute {
 /// └─────────────────────────────────────────────────────────────────────────────────────┘
 /// ```
 pub struct QueryBuilder<DB: Database, S = Initial> {
+    /// Underlying sqlx query builder, used for safe parameter binding and
+    /// SQL string construction. This handles input sanitization.
     inner: sqlx::QueryBuilder<DB>,
+    /// The table name specified at construction. Used when generating the
+    /// opening clause (`SELECT ... FROM`, `INSERT INTO`, `UPDATE`).
     table: String,
+    /// Current state marker. Most states are zero-sized types (ZST), but some
+    /// like [`Inserted`] carry data needed for deferred SQL generation.
     state: S,
 }
 
-/// Initial state - table specified, ready for query construction.
+// ============================================================================
+// Initial
+// ============================================================================
+
+/// Entry point for query building.
+///
+/// In this state, the table name is captured but no SQL is generated yet.
+/// This deferred generation is intentional: the opening clause differs based
+/// on the operation (`SELECT ... FROM`, `INSERT INTO`, `UPDATE ... SET`),
+/// so we wait until the operation is known.
+///
+/// From here, transition to:
+/// - [`Selected`] via [`Initial::select`]
+/// - [`Inserting`] via [`Initial::insert`]
+/// - [`Updating`] via [`Initial::update`]
 pub struct Initial;
 
-/// Selected state - SELECT clause added.
+// ============================================================================
+// Selected
+// ============================================================================
+
+/// State after `SELECT columns FROM table` has been generated.
+///
+/// From here, transition to:
+/// - [`Joined`] via [`QueryBuilder::join`]
+/// - [`Filtered`] via [`QueryBuilder::r#where`]
+/// - [`Ordered`] via [`QueryBuilder::order_by`]
+/// - [`Limited`] via [`QueryBuilder::limit`]
+/// - Or execute directly with [`QueryBuilder::get`], [`QueryBuilder::first`]
 pub struct Selected;
 
-/// Joined state - JOIN clause(s) added.
+// Transitions from Selected
+impl_join!(Selected => Joined<Selected>);
+impl_where!(Selected);
+impl_order_by!(Selected);
+impl_limit!(Selected);
+
+// Execution from Selected
+impl_get!(Selected);
+impl_first!(Selected);
+impl_first_or_fail!(Selected);
+
+// ============================================================================
+// Joined
+// ============================================================================
+
+/// State after one or more `JOIN` clauses have been added.
 ///
-/// Generic over the source state to enable chained joins and control
-/// which methods are available after joining.
+/// Generic over `Source` to track which base state we joined from (e.g.,
+/// `Joined<Selected>` or `Joined<Updated>`). This controls which methods
+/// remain available after joining.
 pub struct Joined<Source = Selected> {
     _marker: PhantomData<Source>,
 }
 
-/// Filtered state - WHERE clause(s) added.
+// Transitions from Joined<Selected>
+impl_join!(Joined<Selected> => Joined<Selected>);
+impl_where!(Joined<Selected> => Selected);
+impl_order_by!(Joined<Selected>);
+impl_limit!(Joined<Selected>);
+
+// Execution from Joined<Selected>
+impl_get!(Joined<Selected>);
+impl_first!(Joined<Selected>);
+impl_first_or_fail!(Joined<Selected>);
+
+// Transitions from Joined<Updated>
+impl_join!(Joined<Updated> => Joined<Updated>);
+impl_where!(Joined<Updated> => Updated);
+
+// ============================================================================
+// Filtered
+// ============================================================================
+
+/// State after one or more `WHERE` clauses have been added.
 ///
-/// Generic over the source state to control which methods are available:
-/// - `Filtered<Selected>`: Allows ORDER BY, LIMIT, OFFSET (valid for SELECT)
-/// - `Filtered<Updated>`: Only allows RETURNING (UPDATE doesn't support ORDER
-///   BY/LIMIT)
+/// Generic over `Source` to control which states are reachable:
+/// - `Filtered<Selected>`: can transition to [`Ordered`], [`Limited`],
+///   [`Offsetted`]
+/// - `Filtered<Updated>`: can transition to [`Returned`]
 pub struct Filtered<Source = Selected> {
     _marker: PhantomData<Source>,
 }
 
-/// Ordered state - ORDER BY added.
+// Transitions from Filtered
+impl_order_by!(Filtered<Selected>);
+impl_limit!(Filtered<Selected>);
+impl_returning!(Filtered<Updated>);
+
+// Execution from Filtered
+impl_get!(Filtered<Selected>);
+impl_first!(Filtered<Selected>);
+impl_first_or_fail!(Filtered<Selected>);
+impl_execute!(Filtered<Updated>);
+
+// ============================================================================
+// Ordered
+// ============================================================================
+
+/// State after an `ORDER BY` clause has been added.
+///
+/// Can transition to [`Limited`] or execute directly.
 pub struct Ordered;
 
-/// Limited state - LIMIT added.
+// Transitions from Ordered
+impl_limit!(Ordered);
+
+// Execution from Ordered
+impl_get!(Ordered);
+impl_first!(Ordered);
+impl_first_or_fail!(Ordered);
+
+// ============================================================================
+// Limited
+// ============================================================================
+
+/// State after a `LIMIT` clause has been added.
+///
+/// Can transition to [`Offsetted`] or execute directly.
 pub struct Limited;
 
-/// Offsetted state - OFFSET added.
+// Execution from Limited
+impl_get!(Limited);
+
+// ============================================================================
+// Offsetted
+// ============================================================================
+
+/// State after an `OFFSET` clause has been added.
+///
+/// Leaf state in the [`Selected`] flow - can only execute from here.
 pub struct Offsetted;
 
-/// Inserting state - INSERT INTO added, waiting for at least one `.set()`.
+// Execution from Offsetted
+impl_get!(Offsetted);
+
+// ============================================================================
+// Inserting
+// ============================================================================
+
+/// State after `INSERT INTO table` - waiting for at least one column.
+///
+/// Must transition to [`Inserted`] by calling `set()` at least once.
 pub struct Inserting;
 
-/// Type alias for boxed bind functions used in INSERT statements.
+// ============================================================================
+// Inserted
+// ============================================================================
+
+/// Type alias for boxed bind functions used to defer value binding.
 type BindFn<DB> = Box<dyn FnOnce(&mut sqlx::QueryBuilder<DB>) + Send>;
 
-/// Inserted state - at least one column set for INSERT.
+/// State after one or more columns have been set for INSERT.
 ///
-/// Accumulates columns and their bound values until the INSERT statement
-/// is finalized via `.on_conflict()`, `.returning()`, or execution.
+/// Unlike most states, this is **not** a ZST: it accumulates column names and
+/// bound values until the statement is finalized. SQL generation is deferred
+/// because the full column list must be known before generating the query.
+///
+/// Can transition to:
+/// - [`Conflicted`] via `on_conflict()`
+/// - [`Returned`] via `returning()`
+/// - Or execute directly
 pub struct Inserted<DB: Database> {
+    /// Column names accumulated via `set()` calls.
     columns: Vec<String>,
+    /// Closures that bind values, executed when finalizing the statement.
     bind_fns: Vec<BindFn<DB>>,
 }
 
-/// Updating state - UPDATE added, waiting for at least one `.set()`.
+// ============================================================================
+// Updating
+// ============================================================================
+
+/// State after `UPDATE table` - waiting for at least one column.
+///
+/// Must transition to [`Updated`] by calling `set()` at least once.
 pub struct Updating;
 
-/// Updated state - at least one column set for UPDATE.
+// ============================================================================
+// Updated
+// ============================================================================
+
+/// State after one or more columns have been set for UPDATE.
+///
+/// Can call `set()` again to remain in this state, or transition to:
+/// - [`Joined`] via `join()`
+/// - [`Filtered`] via `r#where()`
 pub struct Updated;
 
-/// Upserted state - DO UPDATE clause added to an INSERT ON CONFLICT.
-pub struct Upserted;
+// Transitions from Updated
+impl_join!(Updated => Joined<Updated>);
+impl_where!(Updated);
+impl_returning!(Updated);
 
-/// Conflicted state - ON CONFLICT added.
+// Execution from Updated
+impl_execute!(Updated);
+
+// ============================================================================
+// Conflicted
+// ============================================================================
+
+/// State after `ON CONFLICT (columns)` has been added to an INSERT.
+///
+/// Must transition to [`Upserted`] via either:
+/// - `do_update()` - update conflicting rows
+/// - `do_nothing()` - ignore conflicts
 pub struct Conflicted;
 
-/// Returned state - RETURNING clause added.
+// ============================================================================
+// Upserted
+// ============================================================================
+
+/// State after `DO UPDATE` or `DO NOTHING` has been added.
+///
+/// Can transition to [`Returned`] via `returning()` or execute directly.
+pub struct Upserted;
+
+// Transitions from Upserted
+impl_returning!(Upserted);
+
+// Execution from Upserted
+impl_execute!(Upserted);
+
+// ============================================================================
+// Returned
+// ============================================================================
+
+/// State after a `RETURNING` clause has been added.
+///
+/// Terminal state - can only execute from here. Execution returns the
+/// specified columns from affected rows.
 pub struct Returned;
 
 impl<DB: Database> QueryBuilder<DB, Initial> {
@@ -465,54 +712,6 @@ impl<DB: Database> QueryBuilder<DB, Initial> {
             table: self.table,
             state: Selected,
         }
-    }
-
-    /// Executes `SELECT * FROM {table}` and returns all matching rows.
-    ///
-    /// Automatically selects all columns from the table.
-    pub async fn get<'e, T, E>(mut self, executor: E) -> Result<Vec<T>, sqlx::Error>
-    where
-        E: Executor<'e, Database = DB>,
-        T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
-        <DB as Database>::Arguments: IntoArguments<DB>,
-    {
-        let query = format!("SELECT * FROM {}", &self.table);
-        self.inner.push(query);
-        self.inner.build_query_as::<T>().fetch_all(executor).await
-    }
-
-    /// Executes `SELECT * FROM {table} LIMIT 1` and returns the first row.
-    ///
-    /// Returns `None` if no rows exist. Automatically selects all columns.
-    pub async fn first<'e, T, E>(mut self, executor: E) -> Result<Option<T>, sqlx::Error>
-    where
-        E: Executor<'e, Database = DB>,
-        T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
-        <DB as Database>::Arguments: IntoArguments<DB>,
-    {
-        let query = format!("SELECT * FROM {}", &self.table);
-        self.inner.push(query);
-        self.inner.push(" LIMIT 1");
-        self.inner
-            .build_query_as::<T>()
-            .fetch_optional(executor)
-            .await
-    }
-
-    /// Executes `SELECT * FROM {table} LIMIT 1` and returns the first row, or
-    /// fails.
-    ///
-    /// Returns an error if no rows exist. Automatically selects all columns.
-    pub async fn first_or_fail<'e, T, E>(mut self, executor: E) -> Result<T, sqlx::Error>
-    where
-        E: Executor<'e, Database = DB>,
-        T: for<'r> FromRow<'r, DB::Row> + Send + Unpin,
-        <DB as Database>::Arguments: IntoArguments<DB>,
-    {
-        let query = format!("SELECT * FROM {}", &self.table);
-        self.inner.push(query);
-        self.inner.push(" LIMIT 1");
-        self.inner.build_query_as::<T>().fetch_one(executor).await
     }
 
     /// Starts an INSERT statement.
@@ -609,8 +808,6 @@ impl<DB: Database, Source> QueryBuilder<DB, Filtered<Source>> {
         }
     }
 }
-
-impl<DB: Database> QueryBuilder<DB, Ordered> {}
 
 impl<DB: Database> QueryBuilder<DB, Inserting> {
     /// Sets a column value for the INSERT statement.
@@ -783,22 +980,6 @@ impl<DB: Database> QueryBuilder<DB, Conflicted> {
     }
 }
 
-impl<DB: Database> QueryBuilder<DB, Upserted> {
-    /// Specifies the columns to return after the UPSERT.
-    ///
-    /// Generates `RETURNING col1, col2, ...`.
-    pub fn returning(mut self, columns: &[&str]) -> QueryBuilder<DB, Returned> {
-        self.inner.push(" RETURNING ");
-        self.inner.push(columns.join(", "));
-
-        QueryBuilder {
-            inner: self.inner,
-            table: self.table,
-            state: Returned,
-        }
-    }
-}
-
 impl<DB: Database> QueryBuilder<DB, Updating> {
     /// Sets a column value for the UPDATE statement.
     ///
@@ -836,22 +1017,6 @@ impl<DB: Database> QueryBuilder<DB, Updated> {
         self.inner.push_bind(value);
 
         self
-    }
-}
-
-impl<DB: Database> QueryBuilder<DB, Filtered<Updated>> {
-    /// Specifies the columns to return after the UPDATE statement.
-    ///
-    /// Generates `RETURNING col1, col2, ...`.
-    pub fn returning(mut self, columns: &[&str]) -> QueryBuilder<DB, Returned> {
-        self.inner.push(" RETURNING ");
-        self.inner.push(columns.join(", "));
-
-        QueryBuilder {
-            inner: self.inner,
-            table: self.table,
-            state: Returned,
-        }
     }
 }
 
@@ -906,551 +1071,5 @@ impl<DB: Database> QueryBuilder<DB, Limited> {
             table: self.table,
             state: Offsetted,
         }
-    }
-}
-
-// Use macros to implement common methods across multiple states
-impl_join!(Selected, Updated);
-impl_where!(Selected, Updated);
-impl_where!(Joined<Selected> => Selected);
-impl_where!(Joined<Updated> => Updated);
-impl_order_by!(
-    Selected,
-    Filtered<Selected>,
-    Joined<Selected>,
-    Filtered<Joined<Selected>>
-);
-impl_limit!(
-    Selected,
-    Filtered<Selected>,
-    Ordered,
-    Joined<Selected>,
-    Filtered<Joined<Selected>>
-);
-impl_returning!(Updated);
-impl_get!(
-    Selected,
-    Filtered<Selected>,
-    Ordered,
-    Limited,
-    Offsetted,
-    Joined<Selected>,
-    Filtered<Joined<Selected>>
-);
-impl_first!(
-    Selected,
-    Filtered<Selected>,
-    Ordered,
-    Joined<Selected>,
-    Filtered<Joined<Selected>>
-);
-impl_first_or_fail!(
-    Selected,
-    Filtered<Selected>,
-    Ordered,
-    Joined<Selected>,
-    Filtered<Joined<Selected>>
-);
-impl_execute!(Filtered<Updated>, Upserted);
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use sqlx::{Pool, Postgres};
-    use uuid::Uuid;
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_where(connection: Pool<Postgres>) {
-        let result: Result<Vec<(Uuid, String, i32)>, sqlx::Error> = QueryBuilder::table("products")
-            .select(&["id", "name", "price_cents"])
-            // Call where on `Selected`, transitionning to `Filtered`
-            .r#where("price_cents", ">=", 10)
-            // Call where on `Filtered`, allowing chains
-            .r#where("price_cents", ">=", 10)
-            .r#where("price_cents", ">=", 10)
-            // Ensure the generated query can be executed
-            .get(&connection)
-            .await;
-
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), vec![]);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_where_null(connection: Pool<Postgres>) {
-        let result: Result<Vec<(Uuid, String, i32)>, sqlx::Error> = QueryBuilder::table("products")
-            .select(&["id", "name", "price_cents"])
-            // Call `where_null` on `Selected`, transitionning to `Filtered`
-            .r#where_null("price_cents")
-            // Call `where_null` on `Filtered`, allowing chains
-            .r#where_null("price_cents")
-            .r#where_null("price_cents")
-            // Ensure the generated query can be executed
-            .get(&connection)
-            .await;
-
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), vec![]);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_where_not_null(connection: Pool<Postgres>) {
-        let result: Result<Vec<(Uuid, String, i32)>, sqlx::Error> = QueryBuilder::table("products")
-            .select(&["id", "name", "price_cents"])
-            // Call `where_not_null` on `Selected`, transitionning to `Filtered`
-            .r#where_not_null("price_cents")
-            // Call `where_not_null` on `Filtered`, allowing chains
-            .r#where_not_null("price_cents")
-            .r#where_not_null("price_cents")
-            // Ensure the generated query can be executed
-            .get(&connection)
-            .await;
-
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), vec![]);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_order_by(connection: Pool<Postgres>) {
-        // `order_by` can be called on `Selected`;
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .order_by("price_cents", Direction::Asc)
-                .get::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-
-        // `order_by` can be called on `Filtered`;
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .where_not_null("price_cents")
-                .order_by("price_cents", Direction::Asc)
-                .get::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_limit(connection: Pool<Postgres>) {
-        // `limit` can be called on `Selected`;
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .limit(10)
-                .get::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-
-        // `limit` can be called on `Filtered`;
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .where_not_null("price_cents")
-                .limit(10)
-                .get::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-
-        // `limit` can be called on `Ordered`;
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .order_by("price_cents", Direction::Asc)
-                .limit(10)
-                .get::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_offset(connection: Pool<Postgres>) {
-        let result: Result<Vec<(Uuid, String, i32)>, sqlx::Error> = QueryBuilder::table("products")
-            .select(&["id", "name", "price_cents"])
-            // Call `limit` on `Selected`, transitionning to `Limited`
-            .limit(10)
-            // Call `offset` on `Limited`, transitionning to `Offsetted`
-            .offset(20)
-            // Ensure the generated query can be executed
-            .get(&connection)
-            .await;
-
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), vec![]);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_get(connection: Pool<Postgres>) {
-        // `get` can be called on `Initial`
-        assert!(
-            QueryBuilder::<Postgres, _>::table("products")
-                .get::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-
-        // `get` can be called on `Selected`
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .get::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-
-        // `get` can be called on `Filtered`;
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .r#where("price_cents", ">=", 0)
-                .get::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-
-        // `get` can be called on `Ordered`;
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .r#where("price_cents", ">=", 0)
-                .order_by("price_cents", Direction::Asc)
-                .get::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-
-        // `get` can be called on `Limited`;
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .r#where("price_cents", ">=", 0)
-                .order_by("price_cents", Direction::Asc)
-                .limit(10)
-                .get::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-
-        // `get` can be called on `Offsetted`;
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .r#where("price_cents", ">=", 0)
-                .order_by("price_cents", Direction::Asc)
-                .limit(10)
-                .offset(20)
-                .get::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_first(connection: Pool<Postgres>) {
-        // `first` can be called on `Initial`
-        assert!(
-            QueryBuilder::<Postgres, _>::table("products")
-                .first::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-
-        // `first` can be called on `Selected`
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .first::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-
-        // `first` can be called on `Filtered`
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .r#where("price_cents", ">=", 0)
-                .first::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-
-        // `first` can be called on `Ordered`
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .r#where("price_cents", ">=", 0)
-                .order_by("price_cents", Direction::Asc)
-                .first::<(), _>(&connection)
-                .await
-                .is_ok()
-        );
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_first_or_fail(connection: Pool<Postgres>) {
-        // `first_or_fail` can be called on `Initial`
-        assert!(
-            QueryBuilder::<Postgres, _>::table("products")
-                .first_or_fail::<(), _>(&connection)
-                .await
-                .is_err() // No rows exist, so this should fail
-        );
-
-        // `first_or_fail` can be called on `Selected`
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .first_or_fail::<(), _>(&connection)
-                .await
-                .is_err() // No rows exist, so this should fail
-        );
-
-        // `first_or_fail` can be called on `Filtered`
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .r#where("price_cents", ">=", 0)
-                .first_or_fail::<(), _>(&connection)
-                .await
-                .is_err() // No rows exist, so this should fail
-        );
-
-        // `first_or_fail` can be called on `Ordered`
-        assert!(
-            QueryBuilder::table("products")
-                .select(&["id", "name", "price_cents"])
-                .r#where("price_cents", ">=", 0)
-                .order_by("price_cents", Direction::Asc)
-                .first_or_fail::<(), _>(&connection)
-                .await
-                .is_err() // No rows exist, so this should fail
-        );
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_insert(connection: Pool<Postgres>) {
-        // INSERT ... RETURNING (simple insert)
-        let result: (Uuid, String, i32) = QueryBuilder::table("products")
-            .insert()
-            .set("id", Uuid::new_v4())
-            .set("in_stock", true)
-            .set("name", "Anvil")
-            .set("price_cents", 100i32)
-            .returning(&["id", "name", "price_cents"])
-            .first_or_fail(&connection)
-            .await
-            .unwrap();
-        assert_eq!(result.1, "Anvil");
-
-        // INSERT ... ON CONFLICT ... DO UPDATE
-        let id = result.0;
-        let result: (String, i32) = QueryBuilder::table("products")
-            .insert()
-            .set("id", id)
-            .set("in_stock", true)
-            .set("name", "Updated")
-            .set("price_cents", 200i32)
-            .on_conflict(&["id"])
-            .do_update(&["name", "price_cents"])
-            .returning(&["name", "price_cents"])
-            .first_or_fail(&connection)
-            .await
-            .unwrap();
-        assert_eq!(result.0, "Updated");
-        assert_eq!(result.1, 200);
-
-        // INSERT ... ON CONFLICT ... DO NOTHING
-        let result: Option<(Uuid,)> = QueryBuilder::table("products")
-            .insert()
-            .set("id", id)
-            .set("in_stock", true)
-            .set("name", "Ignored")
-            .set("price_cents", 300i32)
-            .on_conflict(&["id"])
-            .do_nothing()
-            .returning(&["id"])
-            .first(&connection)
-            .await
-            .unwrap();
-        assert!(result.is_none());
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_update(connection: Pool<Postgres>) {
-        // Setup: insert a row
-        let id = Uuid::new_v4();
-        QueryBuilder::table("products")
-            .insert()
-            .set("id", id)
-            .set("in_stock", true)
-            .set("name", "Original")
-            .set("price_cents", 100i32)
-            .returning(&["id"])
-            .first_or_fail::<(Uuid,), _>(&connection)
-            .await
-            .unwrap();
-
-        // UPDATE ... SET ... WHERE ... RETURNING
-        let result: (String, i32) = QueryBuilder::table("products")
-            .update()
-            .set("name", "Updated")
-            .set("price_cents", 200i32)
-            .r#where("id", "=", id)
-            .returning(&["name", "price_cents"])
-            .first_or_fail(&connection)
-            .await
-            .unwrap();
-        assert_eq!(result.0, "Updated");
-        assert_eq!(result.1, 200);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_returning(connection: Pool<Postgres>) {
-        // Setup: insert a row
-        let id = Uuid::new_v4();
-        QueryBuilder::table("products")
-            .insert()
-            .set("id", id)
-            .set("in_stock", true)
-            .set("name", "Original")
-            .set("price_cents", 100i32)
-            .returning(&["id"])
-            .first_or_fail::<(Uuid,), _>(&connection)
-            .await
-            .unwrap();
-
-        // `returning` can be called on `Updated`
-        let result: (String,) = QueryBuilder::table("products")
-            .update()
-            .set("name", "Updated")
-            .returning(&["name"])
-            .first_or_fail(&connection)
-            .await
-            .unwrap();
-        assert_eq!(result.0, "Updated");
-
-        // `returning` can be called on `Filtered<Updated>`
-        let result: (String,) = QueryBuilder::table("products")
-            .update()
-            .set("name", "Filtered Update")
-            .r#where("id", "=", id)
-            .returning(&["name"])
-            .first_or_fail(&connection)
-            .await
-            .unwrap();
-        assert_eq!(result.0, "Filtered Update");
-
-        // `returning` can be called on `Inserted`
-        let new_id = Uuid::new_v4();
-        let result: (Uuid, String) = QueryBuilder::table("products")
-            .insert()
-            .set("id", new_id)
-            .set("in_stock", true)
-            .set("name", "New Anvil")
-            .set("price_cents", 150i32)
-            .returning(&["id", "name"])
-            .first_or_fail(&connection)
-            .await
-            .unwrap();
-        assert_eq!(result.0, new_id);
-        assert_eq!(result.1, "New Anvil");
-
-        // `returning` can be called on `Upserted` (DO UPDATE)
-        let result: (String, i32) = QueryBuilder::table("products")
-            .insert()
-            .set("id", id)
-            .set("in_stock", false)
-            .set("name", "Upserted Name")
-            .set("price_cents", 200i32)
-            .on_conflict(&["id"])
-            .do_update(&["in_stock", "name", "price_cents"])
-            .returning(&["name", "price_cents"])
-            .first_or_fail(&connection)
-            .await
-            .unwrap();
-        assert_eq!(result.0, "Upserted Name");
-        assert_eq!(result.1, 200);
-
-        // `returning` can be called on `Upserted` (DO NOTHING)
-        let result: Option<(Uuid,)> = QueryBuilder::table("products")
-            .insert()
-            .set("id", id)
-            .set("in_stock", false)
-            .set("name", "Ignored")
-            .set("price_cents", 999i32)
-            .on_conflict(&["id"])
-            .do_nothing()
-            .returning(&["id"])
-            .first(&connection)
-            .await
-            .unwrap();
-        assert!(result.is_none());
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn test_execute(connection: Pool<Postgres>) {
-        // `execute` can be called on `Filtered<Updated>`
-        let id = Uuid::new_v4();
-        QueryBuilder::table("products")
-            .insert()
-            .set("id", id)
-            .set("in_stock", true)
-            .set("name", "Original")
-            .set("price_cents", 100i32)
-            .returning(&["id"])
-            .first_or_fail::<(Uuid,), _>(&connection)
-            .await
-            .unwrap();
-
-        let result = QueryBuilder::table("products")
-            .update()
-            .set("name", "Updated")
-            .r#where("id", "=", id)
-            .execute(&connection)
-            .await;
-        assert!(result.is_ok());
-
-        // `execute` can be called on `Inserted`
-        let result = QueryBuilder::table("products")
-            .insert()
-            .set("id", Uuid::new_v4())
-            .set("in_stock", true)
-            .set("name", "New Anvil")
-            .set("price_cents", 150i32)
-            .execute(&connection)
-            .await;
-        assert!(result.is_ok());
-
-        // `execute` can be called on `Upserted` (DO UPDATE)
-        let result = QueryBuilder::table("products")
-            .insert()
-            .set("id", id)
-            .set("in_stock", false)
-            .set("name", "Upserted")
-            .set("price_cents", 200i32)
-            .on_conflict(&["id"])
-            .do_update(&["in_stock", "name", "price_cents"])
-            .execute(&connection)
-            .await;
-        assert!(result.is_ok());
-
-        // `execute` can be called on `Upserted` (DO NOTHING)
-        let result = QueryBuilder::table("products")
-            .insert()
-            .set("id", id)
-            .set("in_stock", false)
-            .set("name", "Ignored")
-            .set("price_cents", 999i32)
-            .on_conflict(&["id"])
-            .do_nothing()
-            .execute(&connection)
-            .await;
-        assert!(result.is_ok());
     }
 }

@@ -20,8 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install mdBook
-        uses: taiki-e/install-action@mdbook
+      - name: Install mdBook and preprocessors
+        uses: taiki-e/install-action@v2
+        with:
+          tool: mdbook,mdbook-mermaid
 
       - name: Build mdBook
         run: mdbook build docs
