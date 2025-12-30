@@ -4,3 +4,9 @@ reviews:
   profile: assertive
   path_filters:
     - "!**/*.js"
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "docs/README.md"
