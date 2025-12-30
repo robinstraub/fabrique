@@ -32,11 +32,15 @@ product.save(&pool).await?;
 # fn main() {}
 ```
 
-The `save` method performs an UPSERT: it inserts if the record is new, or updates if a record with the same primary key already exists.
+The `save` method performs an UPSERT: it inserts if the record is new, or
+updates if a record with the same primary key already exists.
 
-> **Tip:** For more control over upsert behavior (e.g., specifying conflict columns or choosing which fields to update), see [Advanced Querying](advanced-querying.md#on-conflict-upsert).
+> **Tip:** For more control over upsert behavior (e.g., specifying conflict
+> columns or choosing which fields to update), see
+> [Advanced Querying](advanced-querying.md#on-conflict-upsert).
 
-Alternatively, use `create` to insert a new record. This method fails if a record with the same primary key already exists:
+Alternatively, use `create` to insert a new record. This method fails if a
+record with the same primary key already exists:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -138,7 +142,8 @@ product.delete(&pool).await?;
 # fn main() {}
 ```
 
-If you know the primary key, delete without retrieving the model first using `destroy`:
+If you know the primary key, delete without retrieving the model first using
+`destroy`:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -160,4 +165,5 @@ Product::destroy(&pool, id).await?;
 # fn main() {}
 ```
 
-> **Note:** If you need to keep deleted records for auditing or recovery, see [Using Soft Deletes](using-soft-deletes.md).
+> **Note:** If you need to keep deleted records for auditing or recovery, see
+> [Using Soft Deletes](using-soft-deletes.md).

@@ -1,6 +1,8 @@
 # Getting Started
 
-This tutorial walks you through adding Fabrique to an existing e-commerce application. You'll learn how to convert plain Rust structs into database-backed models and implement service functions that your views can call.
+This tutorial walks you through adding Fabrique to an existing e-commerce
+application. You'll learn how to convert plain Rust structs into database-backed
+models and implement service functions that your views can call.
 
 ## Prerequisites
 
@@ -10,11 +12,14 @@ This tutorial walks you through adding Fabrique to an existing e-commerce applic
 
 ## Scenario
 
-You're working on an e-commerce website. The frontend team has defined the API contract, and you need to implement the persistence layer. Your task is to make all the service functions work with a PostgreSQL database.
+You're working on an e-commerce website. The frontend team has defined the API
+contract, and you need to implement the persistence layer. Your task is to make
+all the service functions work with a PostgreSQL database.
 
 ## The Starting Point
 
-Here's what you're given — a `Product` struct and service function stubs that need implementation:
+Here's what you're given — a `Product` struct and service function stubs that
+need implementation:
 
 ```rust,ignore
 use sqlx::{Pool, Postgres};
@@ -155,7 +160,8 @@ pub async fn find_product_by_id(
 # fn main() {}
 ```
 
-This queries `SELECT * FROM products WHERE id = $1` and returns the matching record. If no product is found, it returns an error.
+This queries `SELECT * FROM products WHERE id = $1` and returns the matching
+record. If no product is found, it returns an error.
 
 ### Listing Available Products
 
@@ -194,7 +200,8 @@ The query builder provides a fluent API. Here we:
 3. Add a WHERE clause with `.r#where()`
 4. Execute and collect results with `.get(pool)`
 
-Column constants like `Product::IN_STOCK` are type-safe — passing the wrong type won't compile.
+Column constants like `Product::IN_STOCK` are type-safe — passing the wrong
+type won't compile.
 
 ### Creating a Product
 
@@ -231,7 +238,8 @@ pub async fn create_product(
 # fn main() {}
 ```
 
-The `create` method inserts the record and returns it. If a record with the same primary key already exists, it returns an error.
+The `create` method inserts the record and returns it. If a record with the same
+primary key already exists, it returns an error.
 
 ### Updating a Product's Price
 
@@ -267,7 +275,8 @@ pub async fn update_product_price(
 # fn main() {}
 ```
 
-The pattern is: fetch, modify, save. The `save` method performs an upsert — it inserts if the record is new, or updates if it exists.
+The pattern is: fetch, modify, save. The `save` method performs an upsert — it
+inserts if the record is new, or updates if it exists.
 
 ### Deleting a Product
 
@@ -462,7 +471,8 @@ async fn test_list_available_products_excludes_out_of_stock(pool: Pool<Postgres>
 # fn main() {}
 ```
 
-Factories let you set only the fields that matter for each test. Other fields use sensible defaults.
+Factories let you set only the fields that matter for each test. Other fields
+use sensible defaults.
 
 ## Summary
 
@@ -477,6 +487,9 @@ You've learned how to integrate Fabrique into an existing application:
 
 ## Next Steps
 
-- Learn about [Relations](../concepts/relations.md) to model users, orders, and products together
-- Explore [Advanced Querying](../guides/advanced-querying.md) for complex queries
-- Read about [Working with Transactions](../guides/working-with-transactions.md) for atomic operations
+- Learn about [Relations](../concepts/relations.md) to model users, orders, and
+  products together
+- Explore [Advanced Querying](../guides/advanced-querying.md) for complex
+  queries
+- Read about [Working with Transactions](../guides/working-with-transactions.md)
+  for atomic operations

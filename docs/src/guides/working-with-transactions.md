@@ -1,6 +1,8 @@
 # Working with Transactions
 
-Fabrique works seamlessly with SQLx transactions. All database operations accept any type implementing `sqlx::Executor`, which includes both connection pools and transactions.
+Fabrique works seamlessly with SQLx transactions. All database operations accept
+any type implementing `sqlx::Executor`, which includes both connection pools and
+transactions.
 
 ## Basic Transaction Usage
 
@@ -36,11 +38,13 @@ tx.commit().await?;
 # fn main() {}
 ```
 
-Note the `&mut *tx` syntax — this dereferences the transaction to satisfy the `Executor` trait bounds.
+Note the `&mut *tx` syntax — this dereferences the transaction to satisfy the
+`Executor` trait bounds.
 
 ## Automatic Rollback
 
-If a transaction is dropped without calling `commit()`, it automatically rolls back:
+If a transaction is dropped without calling `commit()`, it automatically rolls
+back:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -126,7 +130,8 @@ tx.commit().await?;
 
 ## The Executor Pattern
 
-Fabrique methods are generic over any `sqlx::Executor`. This means you can write functions that work with both pools and transactions:
+Fabrique methods are generic over any `sqlx::Executor`. This means you can
+write functions that work with both pools and transactions:
 
 ```rust,no_run
 # extern crate fabrique;

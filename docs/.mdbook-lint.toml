@@ -1,0 +1,7 @@
+# mdbook-lint configuration for Fabrique
+
+# MD019 (no-multiple-space-atx) is disabled due to false positives.
+# mdbook-lint incorrectly detects rustdoc hidden line syntax (`#     `) inside
+# code blocks as ATX headings with multiple spaces.
+# See: https://github.com/joshrotenberg/mdbook-lint/issues/217
+disabled-rules = ["MD019"]

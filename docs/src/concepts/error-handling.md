@@ -1,10 +1,13 @@
 # Error Handling
 
-Fabrique provides a database-agnostic error type that covers the most common failure cases: missing records, type conversion failures, and other database errors.
+Fabrique provides a database-agnostic error type that covers the most common
+failure cases: missing records, type conversion failures, and other database
+errors.
 
 ## The Error Type
 
-All Fabrique operations return `Result<T, fabrique::Error>`. The error type has three variants:
+All Fabrique operations return `Result<T, fabrique::Error>`. The error type has
+three variants:
 
 ```rust,ignore
 pub enum Error {
@@ -65,7 +68,8 @@ Methods that return `Option` instead of `NotFound`:
 
 ## Conversion
 
-Returned when converting between Rust and database types fails. This typically happens with custom types using the [`as` attribute](type-conversions.md):
+Returned when converting between Rust and database types fails. This typically
+happens with custom types using the [`as` attribute](type-conversions.md):
 
 ```rust,no_run
 # extern crate fabrique;
@@ -136,7 +140,8 @@ pub enum ConversionDirection {
 
 ## Other
 
-Wraps all other database errors — connection failures, constraint violations, query syntax errors, etc.:
+Wraps all other database errors — connection failures, constraint violations,
+query syntax errors, etc.:
 
 ```rust,no_run
 # extern crate fabrique;

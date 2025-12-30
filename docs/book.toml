@@ -20,3 +20,6 @@ rust = "# "
 
 [preprocessor.mermaid]
 command = "mdbook-mermaid"
+
+[preprocessor.mdbook-lint]
+command = "mdbook-lint"

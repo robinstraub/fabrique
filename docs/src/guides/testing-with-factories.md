@@ -1,6 +1,7 @@
 # Testing with Factories
 
-Factories make it easy to set up test data without writing verbose setup code. This guide shows common patterns for using factories in tests.
+Factories make it easy to set up test data without writing verbose setup code.
+This guide shows common patterns for using factories in tests.
 
 ## Basic Test Setup
 
@@ -37,7 +38,8 @@ assert!(product.price_cents > 100);
 
 ## Testing with Relations
 
-When testing models with relationships, factories handle the foreign keys automatically:
+When testing models with relationships, factories handle the foreign keys
+automatically:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -158,7 +160,9 @@ for i in 0..5 {
 
 ## Generating Realistic Data
 
-By default, factories generate random values for each field. For more realistic test data, use the `faker` attribute with expressions from the [fake](https://crates.io/crates/fake) crate:
+By default, factories generate random values for each field. For more realistic
+test data, use the `faker` attribute with expressions from the
+[fake](https://crates.io/crates/fake) crate:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -209,4 +213,5 @@ use fabrique::fake::faker::lorem::en::Sentence;
 # fn main() {}
 ```
 
-Each factory call generates fresh random values, so you get unique data across tests without hardcoding strings.
+Each factory call generates fresh random values, so you get unique data across
+tests without hardcoding strings.

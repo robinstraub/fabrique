@@ -1,6 +1,7 @@
 # Advanced Querying
 
-This guide covers advanced query features: bulk updates, upserts with `ON CONFLICT`, and the `RETURNING` clause.
+This guide covers advanced query features: bulk updates, upserts with
+`ON CONFLICT`, and the `RETURNING` clause.
 
 ## Bulk Updates
 
@@ -85,7 +86,8 @@ println!("Updated {} products", updated.len());
 
 ## ON CONFLICT (Upsert)
 
-Handle conflicts on insert with `.on_conflict()`. This is useful for upsert operations.
+Handle conflicts on insert with `.on_conflict()`. This is useful for upsert
+operations.
 
 ### Do Nothing
 
@@ -152,7 +154,8 @@ let saved: Product = Product::query()
 # fn main() {}
 ```
 
-The `.do_update()` method updates all non-primary-key columns with `col = EXCLUDED.col`.
+The `.do_update()` method updates all non-primary-key columns with
+`col = EXCLUDED.col`.
 
 ## Summary
 

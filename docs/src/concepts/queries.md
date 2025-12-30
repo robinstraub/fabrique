@@ -1,10 +1,14 @@
 # Queries
 
-Once you have created a model and its corresponding database table, you are ready to start retrieving data from your database. You can think of each Fabrique model as a powerful query builder allowing you to fluently query the database table associated with the model.
+Once you have created a model and its corresponding database table, you are
+ready to start retrieving data from your database. You can think of each
+Fabrique model as a powerful query builder allowing you to fluently query the
+database table associated with the model.
 
 ## Retrieving All Records
 
-The model's `all` method retrieves all of the records from the model's associated database table:
+The model's `all` method retrieves all of the records from the model's
+associated database table:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -28,7 +32,9 @@ let products: Vec<Product> = Product::all(&pool).await?;
 
 ## Building Queries
 
-The `all` method returns all results in the model's table. Since each Fabrique model serves as a query builder, you may add additional constraints to queries and then invoke the `get` method to retrieve the results:
+The `all` method returns all results in the model's table. Since each Fabrique
+model serves as a query builder, you may add additional constraints to queries
+and then invoke the `get` method to retrieve the results:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -139,7 +145,9 @@ let product: Product = Product::query()
 
 ## Column Constants
 
-When you derive the `Model` macro, Fabrique generates column constants for each field. These constants are used in query methods to provide type-safe column references:
+When you derive the `Model` macro, Fabrique generates column constants for each
+field. These constants are used in query methods to provide type-safe column
+references:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -163,7 +171,9 @@ pub struct Product {
 
 ## Joins
 
-Fabrique supports bidirectional joins between related models. When you define a `belongs_to` relationship, both directions of the join become available automatically via the `Joinable` trait.
+Fabrique supports bidirectional joins between related models. When you define a
+`belongs_to` relationship, both directions of the join become available
+automatically via the `Joinable` trait.
 
 ### Basic Join
 
@@ -202,7 +212,8 @@ let orders = Order::query()
 # fn main() {}
 ```
 
-Both directions work seamlessly — Fabrique generates the appropriate `Joinable` implementations when you define a `belongs_to` relationship.
+Both directions work seamlessly — Fabrique generates the appropriate
+`Joinable` implementations when you define a `belongs_to` relationship.
 
 ### Many-to-Many Joins
 
@@ -237,7 +248,8 @@ let orders = Order::query()
 
 ## Type-Safe Columns
 
-Column constants are not just names — they carry type information. When using `r#where`, the value must match the column's type:
+Column constants are not just names — they carry type information. When using
+`r#where`, the value must match the column's type:
 
 ```rust,no_run
 # extern crate fabrique;

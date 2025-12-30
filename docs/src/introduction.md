@@ -66,7 +66,8 @@ let product = Product::factory()
 
 This documentation follows the [Diátaxis](https://diataxis.fr/) framework:
 
-- **[Tutorials](tutorials/getting-started.md)** — Learn by building a complete example
-- **[Concepts](concepts/models.md)** — Understand how Fabrique works
-- **[Guides](guides/persisting-data.md)** — Solve specific problems
+- **[Tutorials](./tutorials/getting-started.md)** — Learn by building a
+  complete example
+- **[Concepts](./concepts/models.md)** — Understand how Fabrique works
+- **[Guides](./guides/persisting-data.md)** — Solve specific problems
 - **[API Reference](https://docs.rs/fabrique)** — Technical details on docs.rs

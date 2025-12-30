@@ -1,6 +1,8 @@
 # Building an E-commerce App
 
-This tutorial builds on [Getting Started](getting-started.md) by adding relations between models. You'll implement a complete e-commerce backend with users, orders, and order lines.
+This tutorial builds on [Getting Started](getting-started.md) by adding
+relations between models. You'll implement a complete e-commerce backend with
+users, orders, and order lines.
 
 ## Prerequisites
 
@@ -120,7 +122,9 @@ pub struct User {
 # fn main() {}
 ```
 
-The `HasMany<Order>` field tells Fabrique that a user can have multiple orders. This field isn't stored in the database — it generates a method to fetch related orders.
+The `HasMany<Order>` field tells Fabrique that a user can have multiple orders.
+This field isn't stored in the database — it generates a method to fetch
+related orders.
 
 ### The Order Model
 
@@ -165,7 +169,8 @@ pub struct Order {
 Key points:
 
 - `#[fabrique(belongs_to = "User")]` marks the foreign key relationship
-- `#[fabrique(through = "OrderLine")]` defines a many-to-many relationship via the join table
+- `#[fabrique(through = "OrderLine")]` defines a many-to-many relationship via
+  the join table
 
 ### The OrderLine Model (Join Table)
 
@@ -236,7 +241,8 @@ pub async fn get_user_with_orders(
 # fn main() {}
 ```
 
-The `orders()` method returns a query builder pre-filtered to this user's orders. You can add more conditions:
+The `orders()` method returns a query builder pre-filtered to this user's
+orders. You can add more conditions:
 
 ```rust,no_run
 # extern crate fabrique;
@@ -559,7 +565,8 @@ async fn test_user_orders_relation(pool: Pool<Postgres>) {
 }
 ```
 
-The `has_orders` method creates the user first, then creates 3 orders with the correct `user_id`.
+The `has_orders` method creates the user first, then creates 3 orders with the
+correct `user_id`.
 
 ## Summary
 
@@ -574,5 +581,8 @@ You've learned how to model related data with Fabrique:
 ## Next Steps
 
 - Read the [Relations](../concepts/relations.md) concept for more details
-- Learn about [Working with Transactions](../guides/working-with-transactions.md) to make order creation atomic
-- Explore [Error Handling](../concepts/error-handling.md) for robust error management
+- Learn about
+  [Working with Transactions](../guides/working-with-transactions.md)
+  to make order creation atomic
+- Explore [Error Handling](../concepts/error-handling.md) for robust error
+  management

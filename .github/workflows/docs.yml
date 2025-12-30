@@ -23,7 +23,7 @@ jobs:
       - name: Install mdBook and preprocessors
         uses: taiki-e/install-action@v2
         with:
-          tool: mdbook,mdbook-mermaid
+          tool: mdbook,mdbook-mermaid,mdbook-lint
 
       - name: Build mdBook
         run: mdbook build docs
