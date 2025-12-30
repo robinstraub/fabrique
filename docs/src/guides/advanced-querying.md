@@ -159,6 +159,6 @@ The `.do_update()` method updates all non-primary-key columns with `col = EXCLUD
 | Operation | Method |
 |-----------|--------|
 | Bulk update | `Model::update().set().r#where().execute()` |
-| Get updated rows | `.returning(Model::columns()).get()` |
+| Get updated rows | `.returning().get()` |
 | Insert or ignore | `Model::query().insert().set(...).on_conflict().do_nothing()` |
 | Insert or update | `Model::query().insert().set(...).on_conflict().do_update()` |

@@ -76,8 +76,14 @@ mod initial {
     }
 
     #[sqlx::test(migrations = "../migrations")]
-    async fn update_transitions_to_updating(_pool: Pool<Postgres>) {
-        let _query = Product::update().set(Product::NAME, "Updated".to_string());
+    async fn update_transitions_to_updating(pool: Pool<Postgres>) {
+        Product::factory().create(&pool).await.expect("setup");
+
+        let result = Product::update()
+            .set(Product::NAME, "Updated".to_string())
+            .execute(&pool)
+            .await;
+        assert!(result.is_ok());
     }
 }
 
@@ -145,7 +151,7 @@ mod selected {
     async fn order_by_transitions_to_ordered(pool: Pool<Postgres>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select()
-            .order_by("name", "ASC")
+            .order_by(Product::NAME, "ASC")
             .get(&pool)
             .await;
         assert!(result.is_ok());
@@ -255,7 +261,7 @@ mod joined_selected {
         let result: Result<Vec<User>, _> = User::query()
             .select()
             .join::<Order>()
-            .order_by("users.name", "ASC")
+            .order_by(User::NAME, "ASC")
             .get(&pool)
             .await;
         assert!(result.is_ok());
@@ -375,7 +381,7 @@ mod filtered_selected {
         let result: Result<Vec<Product>, _> = Product::query()
             .select()
             .r#where(Product::IN_STOCK, "=", true)
-            .order_by("name", "ASC")
+            .order_by(Product::NAME, "ASC")
             .get(&pool)
             .await;
         assert!(result.is_ok());
@@ -454,7 +460,7 @@ mod ordered {
     async fn limit_transitions_to_limited(pool: Pool<Postgres>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select()
-            .order_by("name", "ASC")
+            .order_by(Product::NAME, "ASC")
             .limit(10)
             .get(&pool)
             .await;
@@ -467,7 +473,7 @@ mod ordered {
 
         let result: Result<Vec<Product>, _> = Product::query()
             .select()
-            .order_by("name", "ASC")
+            .order_by(Product::NAME, "ASC")
             .get(&pool)
             .await;
         assert!(result.is_ok());
@@ -480,7 +486,7 @@ mod ordered {
 
         let result: Result<Option<Product>, _> = Product::query()
             .select()
-            .order_by("name", "ASC")
+            .order_by(Product::NAME, "ASC")
             .first(&pool)
             .await;
         assert!(result.is_ok());
@@ -493,7 +499,7 @@ mod ordered {
 
         let result: Result<Product, _> = Product::query()
             .select()
-            .order_by("name", "ASC")
+            .order_by(Product::NAME, "ASC")
             .first_or_fail(&pool)
             .await;
         assert!(result.is_ok());

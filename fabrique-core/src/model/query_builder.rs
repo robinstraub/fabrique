@@ -226,14 +226,20 @@ macro_rules! impl_order_by {
         {
             /// Adds an `ORDER BY` clause to the query.
             ///
+            /// The column must belong to a model that is joined in this query.
+            ///
             /// Transitions to [`Ordered`] state.
-            pub fn order_by(
+            pub fn order_by<Column, JoinedModel, Index>(
                 self,
-                column: &str,
+                column: Column,
                 direction: impl Into<Direction>,
-            ) -> QueryBuilder<M, Ordered, Joins> {
+            ) -> QueryBuilder<M, Ordered, Joins>
+            where
+                Column: database::Column<JoinedModel>,
+                Joins: Contains<JoinedModel, Index>,
+            {
                 QueryBuilder {
-                    inner: self.inner.order_by(column, direction),
+                    inner: self.inner.order_by(column.qualified_name(), direction),
                     _joins: self._joins,
                 }
             }

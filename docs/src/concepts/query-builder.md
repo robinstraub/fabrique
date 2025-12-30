@@ -66,21 +66,25 @@ stateDiagram-v2
     [*] --> Initial
     Initial --> Selected: select()
     Selected --> Joined: join()
-    Selected --> Filtered: where()
+    Selected --> Filtered‹Selected›: where()
     Selected --> Ordered: order_by()
     Selected --> Limited: limit()
-    Joined --> Filtered: where()
+    Joined --> Filtered‹Joined›: where()
     Joined --> Ordered: order_by()
     Joined --> Limited: limit()
-    Filtered --> Filtered: where()
-    Filtered --> Ordered: order_by()
-    Filtered --> Limited: limit()
+    Filtered‹Selected› --> Filtered‹Selected›: where()
+    Filtered‹Selected› --> Ordered: order_by()
+    Filtered‹Selected› --> Limited: limit()
+    Filtered‹Joined› --> Filtered‹Joined›: where()
+    Filtered‹Joined› --> Ordered: order_by()
+    Filtered‹Joined› --> Limited: limit()
     Ordered --> Limited: limit()
     Limited --> Offsetted: offset()
 
     Selected --> [*]: get() / first()
     Joined --> [*]: get() / first()
-    Filtered --> [*]: get() / first()
+    Filtered‹Selected› --> [*]: get() / first()
+    Filtered‹Joined› --> [*]: get() / first()
     Ordered --> [*]: get() / first()
     Limited --> [*]: get()
     Offsetted --> [*]: get()
@@ -112,12 +116,12 @@ stateDiagram-v2
     Initial --> Updating: update()
     Updating --> Updated: set()
     Updated --> Updated: set()
-    Updated --> FilteredUpdated: where()
+    Updated --> Filtered‹Updated›: where()
     Updated --> Returned: returning()
-    FilteredUpdated --> FilteredUpdated: where()
-    FilteredUpdated --> Returned: returning()
+    Filtered‹Updated› --> Filtered‹Updated›: where()
+    Filtered‹Updated› --> Returned: returning()
 
-    FilteredUpdated --> [*]: execute()
+    Filtered‹Updated› --> [*]: execute()
     Returned --> [*]: get() / first()
 ```
 
@@ -138,22 +142,3 @@ When `.join::<Order>()` is called, the `Joins` type grows to include `Order`. Su
 This validation uses Rust's trait system. The `Contains<Model, Index>` trait is implemented for type-level lists containing the model. The `where()` method requires this trait as a bound, so missing joins cause compilation to fail.
 
 This provides immediate feedback during development: the IDE shows an error as soon as a column from an unjoined model is referenced, rather than waiting for a database error at runtime.
-
-## State Reference
-
-| State | Description |
-|-------|-------------|
-| `Initial` | Starting state, can begin any query type |
-| `Selected` | After `SELECT`, ready for filtering or ordering |
-| `Joined<S>` | After `JOIN`, preserves source state in `S` |
-| `Filtered<S>` | After `WHERE`, preserves source state in `S` |
-| `Ordered` | After `ORDER BY` |
-| `Limited` | After `LIMIT` |
-| `Offsetted` | After `OFFSET` |
-| `Inserting` | After `INSERT INTO`, awaiting column values |
-| `Inserted<DB>` | After setting column values |
-| `Conflicted` | After `ON CONFLICT` |
-| `Upserted` | After `DO UPDATE` or `DO NOTHING` |
-| `Updating` | After `UPDATE`, awaiting `SET` |
-| `Updated` | After `SET` clause(s) |
-| `Returned` | After `RETURNING`, ready for execution |
