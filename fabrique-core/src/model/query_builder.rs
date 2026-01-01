@@ -52,13 +52,38 @@
 use crate::database::{self, Column};
 use crate::model::Model;
 use crate::model::join::{Contains, Joined};
-use crate::relation::{BelongsTo, Joinable};
+use crate::relation::Joinable;
 use crate::sql::operators::{self, Direction};
 use crate::sql::{
-    Conflicted, Filtered, Initial, Inserted, Inserting, Joined as SqlJoined, Limited, Offsetted,
-    Ordered, QueryBuilder as SqlQueryBuilder, Returned, Selected, Updated, Updating, Upserted,
+    Conflicted, Filtered, Initial as SqlInitial, Inserted, Inserting, Joined as SqlJoined, Limited,
+    Offsetted, Ordered, QueryBuilder as SqlQueryBuilder, Returned, Selected, Updated, Updating,
+    Upserted,
 };
+use sqlx::Database;
 use std::marker::PhantomData;
+
+// ############################################################################
+// LAYER 2 STATES
+// ############################################################################
+//
+// Pure Layer 2 states that don't involve SQL generation yet.
+// These accumulate information until we transition to Building.
+
+/// Initial state - no operations performed yet.
+/// This is a pure L2 state, no SQL builder exists yet.
+pub struct Initial;
+
+/// State accumulating joins before SELECT.
+/// Stores pending joins that will be flushed when calling select().
+pub struct Joining {
+    pub joins: Vec<(&'static str, &'static str, &'static str)>,
+}
+
+/// Wrapper state containing the SQL QueryBuilder.
+/// Transitioning to this state triggers actual SQL generation.
+pub struct Building<DB: Database, S> {
+    pub inner: SqlQueryBuilder<DB, S>,
+}
 
 // ############################################################################
 // MACRO DEFINITIONS
@@ -67,91 +92,16 @@ use std::marker::PhantomData;
 // Shared infrastructure for generating methods across multiple states.
 // These macros wrap the SQL layer's methods with model-aware type safety.
 
-/// Implements the `join` and `join_through` methods for base states and their
-/// joined variants.
+/// Implements the `where` method for Building states.
 ///
-/// For each base state, generates:
-/// - `Base` → `Joined<Base>` (initial join)
-/// - `Joined<Base>` → `Joined<Base>` (chained joins)
-///
-/// - `join::<J>()`: Bidirectional join via `Joinable<M>` trait
-/// - `join_through::<Pivot, Target>()`: Many-to-many join via pivot table
-macro_rules! impl_join {
-    // Shared body - takes input state and output base
-    (@body $state:ty, $base:ty) => {
-        impl<M, Joins> QueryBuilder<M, $state, Joins>
-        where
-            M: Model,
-            M::Database: sqlx::Database,
-        {
-            /// Adds an INNER JOIN clause to the query.
-            ///
-            /// The ON clause is automatically inferred from the `Joinable<M>` trait.
-            /// Works bidirectionally - both parent→child and child→parent joins.
-            ///
-            /// Transitions to [`Joined`] state.
-            pub fn join<J>(self) -> QueryBuilder<M, SqlJoined<$base>, Joined<J, Joins>>
-            where
-                J: Model<Database = M::Database> + Joinable<M>,
-            {
-                QueryBuilder {
-                    inner: self.inner.join(
-                        J::table_name(),
-                        <J as Joinable<M>>::left_column().qualified_name(),
-                        <J as Joinable<M>>::right_column().qualified_name(),
-                    ),
-                    _joins: PhantomData,
-                }
-            }
-
-            /// Adds a many-to-many JOIN through a pivot table.
-            ///
-            /// Joins `Pivot` to `M`, then `Target` to `Pivot`.
-            ///
-            /// Transitions to [`Joined`] state.
-            pub fn join_through<Pivot, Target>(self) -> QueryBuilder<M, SqlJoined<$base>, Joined<Target, Joins>>
-            where
-                Pivot: Model<Database = M::Database>,
-                Pivot: BelongsTo<M>,
-                Pivot: BelongsTo<Target>,
-                Target: Model<Database = M::Database>,
-            {
-                QueryBuilder {
-                    inner: self.inner
-                        .join(
-                            Pivot::table_name(),
-                            <Pivot as BelongsTo<M>>::foreign_key_column().qualified_name(),
-                            &format!("{}.{}", M::table_name(), M::primary_key_columns()[0]),
-                        )
-                        .join(
-                            Target::table_name(),
-                            <Pivot as BelongsTo<Target>>::foreign_key_column().qualified_name(),
-                            &format!("{}.{}", Target::table_name(), Target::primary_key_columns()[0]),
-                        ),
-                    _joins: PhantomData,
-                }
-            }
-        }
-    };
-    // Entry: for each base, generate both impls
-    ($($base:ty),+ $(,)?) => {
-        $(
-            impl_join!(@body $base, $base);
-            impl_join!(@body SqlJoined<$base>, $base);
-        )+
-    };
-}
-
-/// Implements the `where` method for states that start a WHERE clause.
-///
-/// Syntax: `impl_where!(InputState => OutputState)` - transitions to
-/// `Filtered<OutputState>`
+/// Syntax: `impl_where!(InputSqlState => OutputSqlState)` - transitions to
+/// `Building<Filtered<OutputSqlState>>`
 macro_rules! impl_where {
     ($input:ty => $output:ty) => {
-        impl<M, Joins> QueryBuilder<M, $input, Joins>
+        impl<M, Joins, Output> QueryBuilder<M, Building<M::Database, $input>, Joins, Output>
         where
             M: Model,
-            M::Database: sqlx::Database,
+            M::Database: Database,
         {
             /// Adds a WHERE clause to the query.
             ///
@@ -162,7 +112,7 @@ macro_rules! impl_where {
                 column: Column,
                 operator: Operator,
                 value: Column::Type,
-            ) -> QueryBuilder<M, $output, Joins>
+            ) -> QueryBuilder<M, Building<M::Database, $output>, Joins, Output>
             where
                 Column: database::Column<JoinedModel>,
                 Joins: Contains<JoinedModel, Index>,
@@ -170,8 +120,13 @@ macro_rules! impl_where {
                 Operator: Into<operators::Operator>,
             {
                 QueryBuilder {
-                    inner: self.inner.r#where(column.qualified_name(), operator, value),
-                    _joins: self._joins,
+                    state: Building {
+                        inner: self
+                            .state
+                            .inner
+                            .r#where(column.qualified_name(), operator, value),
+                    },
+                    _marker: PhantomData,
                 }
             }
 
@@ -181,15 +136,17 @@ macro_rules! impl_where {
             pub fn where_null<Column, JoinedModel, Index>(
                 self,
                 column: Column,
-            ) -> QueryBuilder<M, $output, Joins>
+            ) -> QueryBuilder<M, Building<M::Database, $output>, Joins, Output>
             where
                 Column: database::Column<JoinedModel>,
                 Joins: Contains<JoinedModel, Index>,
                 for<'q> Column::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
             {
                 QueryBuilder {
-                    inner: self.inner.where_null(column.qualified_name()),
-                    _joins: self._joins,
+                    state: Building {
+                        inner: self.state.inner.where_null(column.qualified_name()),
+                    },
+                    _marker: PhantomData,
                 }
             }
 
@@ -199,30 +156,32 @@ macro_rules! impl_where {
             pub fn where_not_null<Column, JoinedModel, Index>(
                 self,
                 column: Column,
-            ) -> QueryBuilder<M, $output, Joins>
+            ) -> QueryBuilder<M, Building<M::Database, $output>, Joins, Output>
             where
                 Column: database::Column<JoinedModel>,
                 Joins: Contains<JoinedModel, Index>,
                 for<'q> Column::Type: sqlx::Encode<'q, M::Database> + sqlx::Type<M::Database>,
             {
                 QueryBuilder {
-                    inner: self.inner.where_not_null(column.qualified_name()),
-                    _joins: self._joins,
+                    state: Building {
+                        inner: self.state.inner.where_not_null(column.qualified_name()),
+                    },
+                    _marker: PhantomData,
                 }
             }
         }
     };
 }
 
-/// Implements the `order_by` method for a given input state.
+/// Implements the `order_by` method for Building states.
 ///
-/// Syntax: `impl_order_by!(State)` - transitions to [`Ordered`]
+/// Syntax: `impl_order_by!(SqlState)` - transitions to [`Building<Ordered>`]
 macro_rules! impl_order_by {
     ($state:ty) => {
-        impl<M, Joins> QueryBuilder<M, $state, Joins>
+        impl<M, Joins, Output> QueryBuilder<M, Building<M::Database, $state>, Joins, Output>
         where
             M: Model,
-            M::Database: sqlx::Database,
+            M::Database: Database,
         {
             /// Adds an `ORDER BY` clause to the query.
             ///
@@ -233,158 +192,176 @@ macro_rules! impl_order_by {
                 self,
                 column: Column,
                 direction: impl Into<Direction>,
-            ) -> QueryBuilder<M, Ordered, Joins>
+            ) -> QueryBuilder<M, Building<M::Database, Ordered>, Joins, Output>
             where
                 Column: database::Column<JoinedModel>,
                 Joins: Contains<JoinedModel, Index>,
             {
                 QueryBuilder {
-                    inner: self.inner.order_by(column.qualified_name(), direction),
-                    _joins: self._joins,
+                    state: Building {
+                        inner: self
+                            .state
+                            .inner
+                            .order_by(column.qualified_name(), direction),
+                    },
+                    _marker: PhantomData,
                 }
             }
         }
     };
 }
 
-/// Implements the `limit` method for a given input state.
+/// Implements the `limit` method for Building states.
 ///
-/// Syntax: `impl_limit!(State)` - transitions to [`Limited`]
+/// Syntax: `impl_limit!(SqlState)` - transitions to [`Building<Limited>`]
 macro_rules! impl_limit {
     ($state:ty) => {
-        impl<M, Joins> QueryBuilder<M, $state, Joins>
+        impl<M, Joins, Output> QueryBuilder<M, Building<M::Database, $state>, Joins, Output>
         where
             M: Model,
-            M::Database: sqlx::Database,
+            M::Database: Database,
         {
             /// Adds a `LIMIT` clause to the query.
             ///
             /// Transitions to [`Limited`] state.
-            pub fn limit<'a>(self, count: i64) -> QueryBuilder<M, Limited, Joins>
+            pub fn limit<'a>(
+                self,
+                count: i64,
+            ) -> QueryBuilder<M, Building<M::Database, Limited>, Joins, Output>
             where
                 i64: sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
             {
                 QueryBuilder {
-                    inner: self.inner.limit(count),
-                    _joins: self._joins,
+                    state: Building {
+                        inner: self.state.inner.limit(count),
+                    },
+                    _marker: PhantomData,
                 }
             }
         }
     };
 }
 
-/// Implements the `returning` method for a given input state.
+/// Implements the `returning` method for Building states.
 ///
-/// Syntax: `impl_returning!(State)` - transitions to [`Returned`]
+/// Syntax: `impl_returning!(SqlState)` - transitions to [`Building<Returned>`]
 macro_rules! impl_returning {
     ($state:ty) => {
-        impl<M, Joins> QueryBuilder<M, $state, Joins>
+        impl<M, Joins, Output> QueryBuilder<M, Building<M::Database, $state>, Joins, Output>
         where
             M: Model,
-            M::Database: sqlx::Database,
+            M::Database: Database,
         {
             /// Specifies the columns to return after the statement.
             ///
             /// Generates `RETURNING col1, col2, ...`.
             /// Transitions to [`Returned`] state.
-            pub fn returning(self) -> QueryBuilder<M, Returned, Joins> {
+            pub fn returning(
+                self,
+            ) -> QueryBuilder<M, Building<M::Database, Returned>, Joins, Output> {
                 QueryBuilder {
-                    inner: self.inner.returning(M::qualified_columns()),
-                    _joins: self._joins,
+                    state: Building {
+                        inner: self.state.inner.returning(M::qualified_columns()),
+                    },
+                    _marker: PhantomData,
                 }
             }
         }
     };
 }
 
-/// Implements the `get` method for a given state.
+/// Implements the `get` method for Building states.
 ///
-/// Syntax: `impl_get!(State)` - adds execution capability (no state transition)
+/// Syntax: `impl_get!(SqlState)` - adds execution capability
 macro_rules! impl_get {
     ($state:ty) => {
-        impl<M, Joins> QueryBuilder<M, $state, Joins>
+        impl<M, Joins, Output> QueryBuilder<M, Building<M::Database, $state>, Joins, Output>
         where
             M: Model,
-            M::Database: sqlx::Database,
+            M::Database: Database,
             M::Error: From<sqlx::Error>,
         {
             /// Executes the query and returns all matching rows.
-            pub async fn get<'e, E>(self, executor: E) -> Result<Vec<M>, M::Error>
+            pub async fn get<'e, E>(self, executor: E) -> Result<Vec<Output>, M::Error>
             where
                 E: sqlx::Executor<'e, Database = M::Database>,
-                M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
+                Output:
+                    for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
                 <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
             {
-                self.inner.get(executor).await.map_err(Into::into)
+                self.state.inner.get(executor).await.map_err(Into::into)
             }
         }
     };
 }
 
-/// Implements the `first` method for a given state.
+/// Implements the `first` method for Building states.
 ///
-/// Syntax: `impl_first!(State)` - adds execution capability (no state
-/// transition)
+/// Syntax: `impl_first!(SqlState)` - adds execution capability
 macro_rules! impl_first {
     ($state:ty) => {
-        impl<M, Joins> QueryBuilder<M, $state, Joins>
+        impl<M, Joins, Output> QueryBuilder<M, Building<M::Database, $state>, Joins, Output>
         where
             M: Model,
-            M::Database: sqlx::Database,
+            M::Database: Database,
             M::Error: From<sqlx::Error>,
         {
             /// Retrieves the first row from the query result.
             ///
             /// Returns `None` if no rows match the query.
-            pub async fn first<'e, E>(self, executor: E) -> Result<Option<M>, M::Error>
+            pub async fn first<'e, E>(self, executor: E) -> Result<Option<Output>, M::Error>
             where
                 E: sqlx::Executor<'e, Database = M::Database>,
-                M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
+                Output:
+                    for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
                 <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
             {
-                self.inner.first(executor).await.map_err(Into::into)
+                self.state.inner.first(executor).await.map_err(Into::into)
             }
         }
     };
 }
 
-/// Implements the `first_or_fail` method for a given state.
+/// Implements the `first_or_fail` method for Building states.
 ///
-/// Syntax: `impl_first_or_fail!(State)` - adds execution capability (no state
-/// transition)
+/// Syntax: `impl_first_or_fail!(SqlState)` - adds execution capability
 macro_rules! impl_first_or_fail {
     ($state:ty) => {
-        impl<M, Joins> QueryBuilder<M, $state, Joins>
+        impl<M, Joins, Output> QueryBuilder<M, Building<M::Database, $state>, Joins, Output>
         where
             M: Model,
-            M::Database: sqlx::Database,
+            M::Database: Database,
             M::Error: From<sqlx::Error>,
         {
             /// Retrieves the first row from the query result, or fails if none exists.
             ///
             /// Returns an error if no rows match the query.
-            pub async fn first_or_fail<'e, E>(self, executor: E) -> Result<M, M::Error>
+            pub async fn first_or_fail<'e, E>(self, executor: E) -> Result<Output, M::Error>
             where
                 E: sqlx::Executor<'e, Database = M::Database>,
-                M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
+                Output:
+                    for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
                 <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
             {
-                self.inner.first_or_fail(executor).await.map_err(Into::into)
+                self.state
+                    .inner
+                    .first_or_fail(executor)
+                    .await
+                    .map_err(Into::into)
             }
         }
     };
 }
 
-/// Implements the `execute` method for a given state.
+/// Implements the `execute` method for Building states.
 ///
-/// Syntax: `impl_execute!(State)` - adds execution capability (no state
-/// transition)
+/// Syntax: `impl_execute!(SqlState)` - adds execution capability
 macro_rules! impl_execute {
     ($state:ty) => {
-        impl<M, Joins> QueryBuilder<M, $state, Joins>
+        impl<M, Joins, Output> QueryBuilder<M, Building<M::Database, $state>, Joins, Output>
         where
             M: Model,
-            M::Database: sqlx::Database,
+            M::Database: Database,
         {
             /// Executes the statement without returning any rows.
             pub async fn execute<'e, E>(self, executor: E) -> Result<(), sqlx::Error>
@@ -392,7 +369,7 @@ macro_rules! impl_execute {
                 E: sqlx::Executor<'e, Database = M::Database>,
                 <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
             {
-                self.inner.execute(executor).await
+                self.state.inner.execute(executor).await
             }
         }
     };
@@ -404,27 +381,30 @@ macro_rules! impl_execute {
 
 /// Type-safe query builder with model awareness and join tracking.
 ///
-/// Wraps the [`crate::sql::QueryBuilder`] to provide:
-/// - Automatic table and column name resolution from the model
-/// - Type-safe column references via `Column<M>` trait
-/// - Compile-time validation of joins via the `Joins` type parameter
+/// # Architecture
+///
+/// Uses a 2-layer design:
+/// - **Layer 2 states** (`Initial`, `Joining`): Pure model-level states that
+///   accumulate information before SQL generation
+/// - **Building states** (`Building<DB, S>`): Wrap the SQL QueryBuilder for
+///   actual SQL construction
 ///
 /// # Type Parameters
 ///
 /// - `M`: The root model being queried
-/// - `S`: Current state in the typestate machine (from [`crate::sql`])
+/// - `S`: Current state - either a pure L2 state or `Building<DB, SqlState>`
 /// - `Joins`: Type-level list tracking joined models, enabling compile-time
 ///   validation that WHERE clauses reference accessible models
-pub struct QueryBuilder<M, S = Initial, Joins = Joined<M, ()>>
+pub struct QueryBuilder<M, S = Initial, Joins = Joined<M, ()>, Output = ()>
 where
     M: Model,
-    M::Database: sqlx::Database,
 {
-    /// Underlying SQL query builder that handles raw SQL generation.
-    inner: SqlQueryBuilder<M::Database, S>,
-    /// Phantom data to track joined models at compile time. Used by the
-    /// `Contains` trait to validate WHERE clause column references.
-    _joins: PhantomData<Joins>,
+    /// Current state data. For L2 states like `Joining`, contains accumulated
+    /// data. For `Building<S>`, contains the SQL QueryBuilder.
+    state: S,
+
+    /// Phantom data to track model and joined models at compile time.
+    _marker: PhantomData<(M, Joins, Output)>,
 }
 
 // ============================================================================
@@ -434,13 +414,11 @@ where
 impl<M> Default for QueryBuilder<M, Initial>
 where
     M: Model,
-    M::Database: sqlx::Database,
 {
     fn default() -> Self {
-        let inner = SqlQueryBuilder::<M::Database, Initial>::table(M::table_name());
         Self {
-            inner,
-            _joins: PhantomData,
+            state: Initial,
+            _marker: PhantomData,
         }
     }
 }
@@ -448,71 +426,198 @@ where
 impl<M, Joins> QueryBuilder<M, Initial, Joins>
 where
     M: Model,
-    M::Database: sqlx::Database,
+    M::Database: Database,
 {
+    /// Internal helper for select operations.
+    fn select_impl<Output: Model>(
+        self,
+    ) -> QueryBuilder<M, Building<M::Database, Selected>, Joins, Output> {
+        let inner = SqlQueryBuilder::<M::Database, SqlInitial>::table(M::table_name())
+            .select(Output::qualified_columns());
+        QueryBuilder {
+            state: Building { inner },
+            _marker: PhantomData,
+        }
+    }
+
     /// Starts a SELECT query for this model.
     ///
-    /// Transitions to [`Selected`] state.
-    pub fn select(self) -> QueryBuilder<M, Selected, Joins> {
+    /// Transitions to [`Building<Selected>`] state.
+    pub fn select(self) -> QueryBuilder<M, Building<M::Database, Selected>, Joins, M> {
+        self.select_impl::<M>()
+    }
+
+    /// Starts a SELECT query returning columns from a specific model.
+    ///
+    /// For queries without joins, this can only select the base model `M`.
+    /// Transitions to [`Building<Selected>`] state.
+    pub fn select_as<Output, Index>(
+        self,
+    ) -> QueryBuilder<M, Building<M::Database, Selected>, Joins, Output>
+    where
+        Output: Model,
+        Joins: Contains<Output, Index>,
+    {
+        self.select_impl::<Output>()
+    }
+
+    /// Adds a JOIN before SELECT.
+    ///
+    /// Transitions to [`Joining`] state to accumulate joins.
+    pub fn join<J>(self) -> QueryBuilder<M, Joining, Joined<J, Joins>>
+    where
+        J: Model<Database = M::Database> + Joinable<M>,
+    {
         QueryBuilder {
-            inner: self.inner.select(M::qualified_columns()),
-            _joins: self._joins,
+            state: Joining {
+                joins: vec![(
+                    J::table_name(),
+                    J::left_column().qualified_name(),
+                    J::right_column().qualified_name(),
+                )],
+            },
+            _marker: PhantomData,
         }
     }
 
     /// Starts an UPDATE query for this model.
     ///
-    /// Transitions to [`Updating`] state.
-    pub fn update(self) -> QueryBuilder<M, Updating, Joins> {
+    /// Transitions to [`Building<Updating>`] state.
+    pub fn update(self) -> QueryBuilder<M, Building<M::Database, Updating>, Joins> {
+        let inner = SqlQueryBuilder::<M::Database, SqlInitial>::table(M::table_name()).update();
         QueryBuilder {
-            inner: self.inner.update(),
-            _joins: self._joins,
+            state: Building { inner },
+            _marker: PhantomData,
         }
     }
 
     /// Starts an INSERT query for this model.
     ///
-    /// Transitions to [`Inserting`] state.
-    pub fn insert(self) -> QueryBuilder<M, Inserting, Joins> {
+    /// Transitions to [`Building<Inserting>`] state.
+    pub fn insert(self) -> QueryBuilder<M, Building<M::Database, Inserting>, Joins> {
+        let inner = SqlQueryBuilder::<M::Database, SqlInitial>::table(M::table_name()).insert();
         QueryBuilder {
-            inner: self.inner.insert(),
-            _joins: self._joins,
+            state: Building { inner },
+            _marker: PhantomData,
         }
     }
 }
 
+// ############################################################################
+// SELECT FLOW
+// ############################################################################
+//
+// Initial → Joining → Selected/Joined<Selected> → Filtered<Selected>
+//        → Ordered → Limited → Offsetted
+
 // ============================================================================
-// Limited
+// Joining
 // ============================================================================
 
-impl<M, Joins> QueryBuilder<M, Limited, Joins>
+impl<M, Joins, Output> QueryBuilder<M, Joining, Joins, Output>
 where
     M: Model,
-    M::Database: sqlx::Database,
+    M::Database: Database,
 {
-    /// Adds an `OFFSET` clause to the query.
+    /// Adds another JOIN before SELECT.
     ///
-    /// Transitions to [`Offsetted`] state.
-    pub fn offset<'a>(self, count: i64) -> QueryBuilder<M, Offsetted, Joins>
+    /// Chains multiple joins in [`Joining`] state.
+    pub fn join<J>(mut self) -> QueryBuilder<M, Joining, Joined<J, Joins>>
     where
-        i64: sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
+        J: Model<Database = M::Database> + Joinable<M>,
     {
+        self.state.joins.push((
+            J::table_name(),
+            J::left_column().qualified_name(),
+            J::right_column().qualified_name(),
+        ));
+
         QueryBuilder {
-            inner: self.inner.offset(count),
-            _joins: self._joins,
+            state: self.state,
+            _marker: PhantomData,
         }
+    }
+
+    /// Joins a model through an already-joined pivot table (many-to-many).
+    ///
+    /// Use this instead of [`join`] when `JoinModel` is related to
+    /// `PivotModel`, not to `M`.
+    ///
+    /// Chains multiple joins in [`Joining`] state.
+    pub fn join_through<JoinModel, PivotModel, Index>(
+        mut self,
+    ) -> QueryBuilder<M, Joining, Joined<JoinModel, Joins>>
+    where
+        PivotModel: Model<Database = M::Database>,
+        JoinModel: Model<Database = M::Database> + Joinable<PivotModel>,
+        Joins: Contains<PivotModel, Index>,
+    {
+        self.state.joins.push((
+            JoinModel::table_name(),
+            JoinModel::left_column().qualified_name(),
+            JoinModel::right_column().qualified_name(),
+        ));
+
+        QueryBuilder {
+            state: self.state,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Internal helper for select operations with join flushing.
+    fn select_impl<SelectModel: Model>(
+        self,
+    ) -> QueryBuilder<M, Building<M::Database, SqlJoined<Selected>>, Joins, SelectModel> {
+        // Create SELECT ... FROM
+        let qb = SqlQueryBuilder::<M::Database, SqlInitial>::table(M::table_name())
+            .select(SelectModel::qualified_columns());
+
+        // Flush accumulated joins
+        let mut joins_iter = self.state.joins.into_iter();
+        let (table, left, right) = joins_iter
+            .next()
+            .expect("Joining state guarantees at least one join");
+        let mut qb = qb.join(table, left, right);
+
+        for (table, left, right) in joins_iter {
+            qb = qb.join(table, left, right);
+        }
+
+        QueryBuilder {
+            state: Building { inner: qb },
+            _marker: PhantomData,
+        }
+    }
+
+    /// Starts a SELECT query, flushing all accumulated joins.
+    ///
+    /// Transitions to [`Building<SqlJoined<Selected>>`] state.
+    pub fn select(self) -> QueryBuilder<M, Building<M::Database, SqlJoined<Selected>>, Joins, M> {
+        self.select_impl::<M>()
+    }
+
+    /// Starts a SELECT query returning columns from a joined model.
+    ///
+    /// The compiler verifies that `JoinedModel` is in the join list.
+    /// Transitions to [`Building<SqlJoined<Selected>>`] state.
+    pub fn select_as<JoinedModel, Index>(
+        self,
+    ) -> QueryBuilder<M, Building<M::Database, SqlJoined<Selected>>, Joins, JoinedModel>
+    where
+        JoinedModel: Model,
+        Joins: Contains<JoinedModel, Index>,
+    {
+        self.select_impl::<JoinedModel>()
     }
 }
 
-// Execution from Limited
-impl_get!(Limited);
-
 // ============================================================================
-// Selected
+// Selected (via Building)
 // ============================================================================
 
 // Transitions from Selected
-impl_join!(Selected);
+// NOTE: impl_join!(Selected) removed - joins now happen before select via
+// Joining state
 impl_where!(Selected => Filtered<Selected>);
 impl_order_by!(Selected);
 impl_limit!(Selected);
@@ -537,12 +642,11 @@ impl_first!(SqlJoined<Selected>);
 impl_first_or_fail!(SqlJoined<Selected>);
 
 // ============================================================================
-// Filtered
+// Filtered<Selected>
 // ============================================================================
 
 // Transitions from Filtered<Selected>
 impl_where!(Filtered<Selected> => Filtered<Selected>);
-impl_where!(Filtered<Updated> => Filtered<Updated>);
 impl_order_by!(Filtered<Selected>);
 impl_limit!(Filtered<Selected>);
 
@@ -550,12 +654,6 @@ impl_limit!(Filtered<Selected>);
 impl_get!(Filtered<Selected>);
 impl_first!(Filtered<Selected>);
 impl_first_or_fail!(Filtered<Selected>);
-
-// Transitions from Filtered<Updated>
-impl_returning!(Filtered<Updated>);
-
-// Execution from Filtered<Updated>
-impl_execute!(Filtered<Updated>);
 
 // ============================================================================
 // Ordered
@@ -570,15 +668,108 @@ impl_first!(Ordered);
 impl_first_or_fail!(Ordered);
 
 // ============================================================================
+// Limited
+// ============================================================================
+
+impl<M, Joins, Output> QueryBuilder<M, Building<M::Database, Limited>, Joins, Output>
+where
+    M: Model,
+    M::Database: Database,
+{
+    /// Adds an `OFFSET` clause to the query.
+    ///
+    /// Transitions to [`Offsetted`] state.
+    pub fn offset<'a>(
+        self,
+        count: i64,
+    ) -> QueryBuilder<M, Building<M::Database, Offsetted>, Joins, Output>
+    where
+        i64: sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
+    {
+        QueryBuilder {
+            state: Building {
+                inner: self.state.inner.offset(count),
+            },
+            _marker: PhantomData,
+        }
+    }
+}
+
+// Execution from Limited
+impl_get!(Limited);
+
+// ============================================================================
 // Offsetted
 // ============================================================================
 
 // Execution from Offsetted
 impl_get!(Offsetted);
 
+// ############################################################################
+// UPDATE FLOW
+// ############################################################################
+//
+// Initial → Updating → Updated → Filtered<Updated>
+
+// ============================================================================
+// Updating
+// ============================================================================
+
+impl<M, Joins> QueryBuilder<M, Building<M::Database, Updating>, Joins>
+where
+    M: Model,
+    M::Database: Database,
+{
+    /// Sets a column value for the UPDATE statement.
+    ///
+    /// Transitions to [`Updated`] state.
+    pub fn set<'a, C>(
+        self,
+        column: C,
+        value: C::Type,
+    ) -> QueryBuilder<M, Building<M::Database, Updated>, Joins>
+    where
+        C: Column<M>,
+        C::Type: 'a + sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
+    {
+        QueryBuilder {
+            state: Building {
+                inner: self.state.inner.set(column.name(), value),
+            },
+            _marker: PhantomData,
+        }
+    }
+}
+
 // ============================================================================
 // Updated
 // ============================================================================
+
+impl<M, Joins> QueryBuilder<M, Building<M::Database, Updated>, Joins>
+where
+    M: Model,
+    M::Database: Database,
+{
+    /// Sets an additional column value for the UPDATE statement.
+    ///
+    /// Remains in [`Updated`] state.
+    pub fn set<'a, C>(
+        self,
+        column: C,
+        value: C::Type,
+    ) -> QueryBuilder<M, Building<M::Database, Updated>, Joins>
+    where
+        C: Column<M>,
+        C::Type: 'a + sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
+    {
+        QueryBuilder {
+            state: Building {
+                inner: self.state.inner.set(column.name(), value),
+            },
+            _marker: PhantomData,
+        }
+    }
+}
 
 // Transitions from Updated
 impl_where!(Updated => Filtered<Updated>);
@@ -588,80 +779,49 @@ impl_returning!(Updated);
 impl_execute!(Updated);
 
 // ============================================================================
-// Joined<Updated>
+// Filtered<Updated>
 // ============================================================================
 
-// Transitions from Joined<Updated>
-impl_where!(SqlJoined<Updated> => Filtered<Updated>);
+// Transitions from Filtered<Updated>
+impl_where!(Filtered<Updated> => Filtered<Updated>);
+impl_returning!(Filtered<Updated>);
 
-// ============================================================================
-// Updating
-// ============================================================================
+// Execution from Filtered<Updated>
+impl_execute!(Filtered<Updated>);
 
-impl<M, Joins> QueryBuilder<M, Updating, Joins>
-where
-    M: Model,
-    M::Database: sqlx::Database,
-{
-    /// Sets a column value for the UPDATE statement.
-    ///
-    /// Transitions to [`Updated`] state.
-    pub fn set<'a, C>(self, column: C, value: C::Type) -> QueryBuilder<M, Updated, Joins>
-    where
-        C: Column<M>,
-        C::Type: 'a + sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
-    {
-        QueryBuilder {
-            inner: self.inner.set(column.name(), value),
-            _joins: self._joins,
-        }
-    }
-}
-
-impl<M, Joins> QueryBuilder<M, Updated, Joins>
-where
-    M: Model,
-    M::Database: sqlx::Database,
-{
-    /// Sets an additional column value for the UPDATE statement.
-    ///
-    /// Remains in [`Updated`] state.
-    pub fn set<'a, C>(self, column: C, value: C::Type) -> QueryBuilder<M, Updated, Joins>
-    where
-        C: Column<M>,
-        C::Type: 'a + sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database>,
-    {
-        QueryBuilder {
-            inner: self.inner.set(column.name(), value),
-            _joins: self._joins,
-        }
-    }
-}
+// ############################################################################
+// INSERT FLOW
+// ############################################################################
+//
+// Initial → Inserting → Inserted → Conflicted → Upserted
 
 // ============================================================================
 // Inserting
 // ============================================================================
 
-impl<M, Joins> QueryBuilder<M, Inserting, Joins>
+impl<M, Joins> QueryBuilder<M, Building<M::Database, Inserting>, Joins>
 where
     M: Model,
-    M::Database: sqlx::Database,
+    M::Database: Database,
 {
     /// Sets a column value for the INSERT statement.
     ///
     /// Transitions to [`Inserted`] state.
+    #[allow(clippy::type_complexity)]
     pub fn set<'a, C>(
         self,
         column: C,
         value: C::Type,
-    ) -> QueryBuilder<M, Inserted<M::Database>, Joins>
+    ) -> QueryBuilder<M, Building<M::Database, Inserted<M::Database>>, Joins>
     where
         C: Column<M>,
         C::Type: 'a + sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database> + Send + 'static,
     {
         QueryBuilder {
-            inner: self.inner.set(column.name(), value),
-            _joins: self._joins,
+            state: Building {
+                inner: self.state.inner.set(column.name(), value),
+            },
+            _marker: PhantomData,
         }
     }
 }
@@ -670,26 +830,29 @@ where
 // Inserted
 // ============================================================================
 
-impl<M, Joins> QueryBuilder<M, Inserted<M::Database>, Joins>
+impl<M, Joins> QueryBuilder<M, Building<M::Database, Inserted<M::Database>>, Joins>
 where
     M: Model,
-    M::Database: sqlx::Database,
+    M::Database: Database,
 {
     /// Sets an additional column value for the INSERT statement.
     ///
     /// Remains in [`Inserted`] state.
+    #[allow(clippy::type_complexity)]
     pub fn set<'a, C>(
         self,
         column: C,
         value: C::Type,
-    ) -> QueryBuilder<M, Inserted<M::Database>, Joins>
+    ) -> QueryBuilder<M, Building<M::Database, Inserted<M::Database>>, Joins>
     where
         C: Column<M>,
         C::Type: 'a + sqlx::Encode<'a, M::Database> + sqlx::Type<M::Database> + Send + 'static,
     {
         QueryBuilder {
-            inner: self.inner.set(column.name(), value),
-            _joins: self._joins,
+            state: Building {
+                inner: self.state.inner.set(column.name(), value),
+            },
+            _marker: PhantomData,
         }
     }
 
@@ -697,15 +860,17 @@ where
     ///
     /// Uses the model's primary key columns as the conflict target.
     /// Transitions to [`Conflicted`] state.
-    pub fn on_conflict(self) -> QueryBuilder<M, Conflicted, Joins> {
+    pub fn on_conflict(self) -> QueryBuilder<M, Building<M::Database, Conflicted>, Joins> {
         QueryBuilder {
-            inner: self.inner.on_conflict(M::primary_key_columns()),
-            _joins: self._joins,
+            state: Building {
+                inner: self.state.inner.on_conflict(M::primary_key_columns()),
+            },
+            _marker: PhantomData,
         }
     }
 }
 
-// Transitions from Filtered<Inserted>
+// Transitions from Inserted
 impl_returning!(Inserted<M::Database>);
 
 // Execution from Inserted
@@ -715,16 +880,16 @@ impl_execute!(Inserted<M::Database>);
 // Conflicted
 // ============================================================================
 
-impl<M, Joins> QueryBuilder<M, Conflicted, Joins>
+impl<M, Joins> QueryBuilder<M, Building<M::Database, Conflicted>, Joins>
 where
     M: Model,
-    M::Database: sqlx::Database,
+    M::Database: Database,
 {
     /// Specifies that conflicting rows should be updated.
     ///
     /// Updates all non-primary-key columns with `col = EXCLUDED.col`.
     /// Transitions to [`Upserted`] state.
-    pub fn do_update(self) -> QueryBuilder<M, Upserted, Joins> {
+    pub fn do_update(self) -> QueryBuilder<M, Building<M::Database, Upserted>, Joins> {
         let pk_columns = M::primary_key_columns();
         let update_columns: Vec<&str> = M::columns()
             .iter()
@@ -733,18 +898,22 @@ where
             .collect();
 
         QueryBuilder {
-            inner: self.inner.do_update(&update_columns),
-            _joins: self._joins,
+            state: Building {
+                inner: self.state.inner.do_update(&update_columns),
+            },
+            _marker: PhantomData,
         }
     }
 
     /// Specifies that conflicting rows should be ignored.
     ///
     /// Generates `DO NOTHING`. Transitions to [`Upserted`] state.
-    pub fn do_nothing(self) -> QueryBuilder<M, Upserted, Joins> {
+    pub fn do_nothing(self) -> QueryBuilder<M, Building<M::Database, Upserted>, Joins> {
         QueryBuilder {
-            inner: self.inner.do_nothing(),
-            _joins: self._joins,
+            state: Building {
+                inner: self.state.inner.do_nothing(),
+            },
+            _marker: PhantomData,
         }
     }
 }
@@ -753,18 +922,20 @@ where
 // Upserted
 // ============================================================================
 
-impl<M, Joins> QueryBuilder<M, Upserted, Joins>
+impl<M, Joins> QueryBuilder<M, Building<M::Database, Upserted>, Joins>
 where
     M: Model,
-    M::Database: sqlx::Database,
+    M::Database: Database,
 {
     /// Specifies the columns to return after the UPSERT.
     ///
     /// Uses all model columns. Transitions to [`Returned`] state.
-    pub fn returning(self) -> QueryBuilder<M, Returned, Joins> {
+    pub fn returning(self) -> QueryBuilder<M, Building<M::Database, Returned>, Joins> {
         QueryBuilder {
-            inner: self.inner.returning(M::columns()),
-            _joins: self._joins,
+            state: Building {
+                inner: self.state.inner.returning(M::columns()),
+            },
+            _marker: PhantomData,
         }
     }
 }
@@ -772,11 +943,17 @@ where
 // Execution from Upserted
 impl_execute!(Upserted);
 
+// ############################################################################
+// TERMINAL STATE
+// ############################################################################
+//
+// Returned is reached from INSERT/UPDATE flows via returning()
+
 // ============================================================================
 // Returned
 // ============================================================================
 
-impl<M, Joins> QueryBuilder<M, Returned, Joins>
+impl<M, Joins> QueryBuilder<M, Building<M::Database, Returned>, Joins>
 where
     M: Model,
     M::Database: sqlx::Database,
@@ -789,7 +966,7 @@ where
         M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
         <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
     {
-        self.inner.get(executor).await.map_err(Into::into)
+        self.state.inner.get(executor).await.map_err(Into::into)
     }
 
     /// Executes the query and returns the first resulting row.
@@ -799,7 +976,7 @@ where
         M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
         <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
     {
-        self.inner.first(executor).await.map_err(Into::into)
+        self.state.inner.first(executor).await.map_err(Into::into)
     }
 
     /// Executes the query and returns the first resulting row, or fails.
@@ -809,6 +986,10 @@ where
         M: for<'r> sqlx::FromRow<'r, <M::Database as sqlx::Database>::Row> + Send + Unpin,
         <M::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<M::Database>,
     {
-        self.inner.first_or_fail(executor).await.map_err(Into::into)
+        self.state
+            .inner
+            .first_or_fail(executor)
+            .await
+            .map_err(Into::into)
     }
 }

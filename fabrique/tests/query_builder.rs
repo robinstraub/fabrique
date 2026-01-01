@@ -48,6 +48,13 @@ pub struct OrderLine {
     pub unit_price_cents: i32,
 }
 
+// ############################################################################
+// SELECT FLOW
+// ############################################################################
+//
+// Initial → Joining → Selected/Joined<Selected> → Filtered<Selected>
+//        → Ordered → Limited → Offsetted
+
 // ============================================================================
 // Initial
 // ============================================================================
@@ -85,6 +92,58 @@ mod initial {
             .await;
         assert!(result.is_ok());
     }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn join_transitions_to_joining(pool: Pool<Postgres>) {
+        let result: Result<Vec<User>, _> = User::query().join::<Order>().select().get(&pool).await;
+        assert!(result.is_ok());
+    }
+}
+
+// ============================================================================
+// Joining
+// ============================================================================
+
+mod joining {
+    use super::*;
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn join_chains(pool: Pool<Postgres>) {
+        let result: Result<Vec<Order>, _> = Order::query()
+            .join::<User>()
+            .join::<OrderLine>()
+            .select()
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn join_through_chains(pool: Pool<Postgres>) {
+        let result: Result<Vec<Order>, _> = Order::query()
+            .join::<OrderLine>()
+            .join_through::<Product, OrderLine, _>()
+            .select()
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn select_transitions_to_selected(pool: Pool<Postgres>) {
+        let result: Result<Vec<User>, _> = User::query().join::<Order>().select().get(&pool).await;
+        assert!(result.is_ok());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
+    async fn select_as_transitions_to_selected(pool: Pool<Postgres>) {
+        let result: Result<Vec<Order>, _> = User::query()
+            .join::<Order>()
+            .select_as::<Order, _>()
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
 }
 
 // ============================================================================
@@ -93,22 +152,6 @@ mod initial {
 
 mod selected {
     use super::*;
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn join_transitions_to_joined(pool: Pool<Postgres>) {
-        let result: Result<Vec<User>, _> = User::query().select().join::<Order>().get(&pool).await;
-        assert!(result.is_ok());
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn join_through_transitions_to_joined(pool: Pool<Postgres>) {
-        let result: Result<Vec<Order>, _> = Order::query()
-            .select()
-            .join_through::<OrderLine, Product>()
-            .get(&pool)
-            .await;
-        assert!(result.is_ok());
-    }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn where_transitions_to_filtered(pool: Pool<Postgres>) {
@@ -212,8 +255,8 @@ mod joined_selected {
             .expect("setup");
 
         let result: Result<Vec<User>, _> = User::query()
-            .select()
             .join::<Order>()
+            .select()
             .r#where(User::EMAIL, "=", user.email)
             .get(&pool)
             .await;
@@ -230,24 +273,13 @@ mod joined_selected {
             .expect("setup");
 
         let result: Result<Vec<User>, _> = User::query()
-            .select()
             .join::<Order>()
+            .select()
             .r#where(Order::STATUS, "=", "pending".to_string())
             .get(&pool)
             .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 1);
-    }
-
-    #[sqlx::test(migrations = "../migrations")]
-    async fn join_through_transitions_to_joined(pool: Pool<Postgres>) {
-        let result: Result<Vec<Order>, _> = Order::query()
-            .select()
-            .join::<User>()
-            .join_through::<OrderLine, Product>()
-            .get(&pool)
-            .await;
-        assert!(result.is_ok());
     }
 
     #[sqlx::test(migrations = "../migrations")]
@@ -259,8 +291,8 @@ mod joined_selected {
             .expect("setup");
 
         let result: Result<Vec<User>, _> = User::query()
-            .select()
             .join::<Order>()
+            .select()
             .order_by(User::NAME, "ASC")
             .get(&pool)
             .await;
@@ -276,8 +308,8 @@ mod joined_selected {
             .expect("setup");
 
         let result: Result<Vec<User>, _> = User::query()
-            .select()
             .join::<Order>()
+            .select()
             .limit(10)
             .get(&pool)
             .await;
@@ -292,7 +324,7 @@ mod joined_selected {
             .await
             .expect("setup");
 
-        let result: Result<Vec<User>, _> = User::query().select().join::<Order>().get(&pool).await;
+        let result: Result<Vec<User>, _> = User::query().join::<Order>().select().get(&pool).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 1);
     }
@@ -306,7 +338,7 @@ mod joined_selected {
             .expect("setup");
 
         let result: Result<Option<User>, _> =
-            User::query().select().join::<Order>().first(&pool).await;
+            User::query().join::<Order>().select().first(&pool).await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_some());
     }
@@ -320,8 +352,8 @@ mod joined_selected {
             .expect("setup");
 
         let result: Result<User, _> = User::query()
-            .select()
             .join::<Order>()
+            .select()
             .first_or_fail(&pool)
             .await;
         assert!(result.is_ok());
@@ -558,6 +590,12 @@ mod offsetted {
     }
 }
 
+// ############################################################################
+// UPDATE FLOW
+// ############################################################################
+//
+// Initial → Updating → Updated → Filtered<Updated>
+
 // ============================================================================
 // Updating
 // ============================================================================
@@ -676,6 +714,12 @@ mod filtered_updated {
         assert!(result.is_ok());
     }
 }
+
+// ############################################################################
+// INSERT FLOW
+// ############################################################################
+//
+// Initial → Inserting → Inserted → Conflicted → Upserted
 
 // ============================================================================
 // Inserting
@@ -922,6 +966,12 @@ mod upserted {
         assert!(result.is_ok());
     }
 }
+
+// ############################################################################
+// TERMINAL STATE
+// ############################################################################
+//
+// Returned is reached from INSERT/UPDATE flows via returning()
 
 // ============================================================================
 // Returned

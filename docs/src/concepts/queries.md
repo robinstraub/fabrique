@@ -235,6 +235,38 @@ let orders = Order::query()
 # fn main() {}
 ```
 
+### Selecting from Joined Models
+
+By default, `select()` returns the root model's columns. To select columns from a joined model instead, use `select_as`:
+
+```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use sqlx::{Pool, Postgres};
+# use uuid::Uuid;
+#
+# #[derive(Factory, Model)]
+# pub struct User { id: Uuid, email: String, orders: HasMany<Order> }
+# #[derive(Factory, Model)]
+# pub struct Order { id: Uuid, status: String, #[fabrique(belongs_to = "User")] user_id: Uuid }
+#
+# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+// Returns Vec<Order> instead of Vec<User>
+let orders: Vec<Order> = User::query()
+    .join::<Order>()
+    .select_as::<Order, _>()
+    .r#where(User::EMAIL, "=", "john@example.com".to_string())
+    .get(&pool)
+    .await?;
+# Ok(())
+# }
+# fn main() {}
+```
+
+The compiler verifies that the selected model is in the join list. Attempting to select from a model that hasn't been joined causes a compile-time error.
+
 ## Type-Safe Columns
 
 Column constants are not just names — they carry type information. When using `r#where`, the value must match the column's type:
