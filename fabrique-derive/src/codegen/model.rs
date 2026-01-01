@@ -211,7 +211,15 @@ impl<'a> ModelCodegen<'a> {
             };
 
             quote! {
-                pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Filtered<::fabrique::sql::Selected>, ::fabrique::model::join::Joined<#target_type, ()>> {
+                pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<
+                    #target_type,
+                    ::fabrique::model::Building<
+                        <#target_type as ::fabrique::database::DatabaseAware>::Database,
+                        ::fabrique::sql::Filtered<::fabrique::sql::Selected>
+                    >,
+                    ::fabrique::model::join::Joined<#target_type, ()>,
+                    #target_type
+                > {
                     let pk = <Self as ::fabrique::Model>::primary_key(self);
                     let fk = #fk_expr;
                     <#target_type as ::fabrique::Query>::query()
@@ -222,16 +230,44 @@ impl<'a> ModelCodegen<'a> {
         });
 
         // Many-to-many lazy loading (with through).
+        let pk_fields: Vec<_> = self
+            .analysis
+            .column_fields
+            .iter()
+            .filter(|f| f.primary_key)
+            .collect();
+
+        let where_clauses: Vec<_> = pk_fields
+            .iter()
+            .map(|pk_field| {
+                let const_name = &pk_field.const_column_name;
+                let field_ident = &pk_field.ident;
+                quote! {
+                    .r#where(Self::#const_name, "=", self.#field_ident)
+                }
+            })
+            .collect();
+
         let many_to_many_methods = self.analysis.many_to_many_fields().map(|field| {
             let method_name = &field.ident;
             let target_type = &field.target_type;
             let join_type = field.through.as_ref().unwrap();
 
             quote! {
-                pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<#target_type, ::fabrique::sql::Joined<::fabrique::sql::Selected>, ::fabrique::model::join::Joined<#base_struct_ident, ::fabrique::model::join::Joined<#target_type, ()>>> {
+                pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<
+                    #target_type,
+                    ::fabrique::model::Building<
+                        <#target_type as ::fabrique::database::DatabaseAware>::Database,
+                        ::fabrique::sql::Filtered<::fabrique::sql::Selected>
+                    >,
+                    ::fabrique::model::join::Joined<#base_struct_ident, ::fabrique::model::join::Joined<#join_type, ::fabrique::model::join::Joined<#target_type, ()>>>,
+                    #target_type
+                > {
                     <#target_type as ::fabrique::Query>::query()
+                        .join::<#join_type>()
+                        .join_through::<#base_struct_ident, #join_type, _>()
                         .select()
-                        .join_through::<#join_type, Self>()
+                        #(#where_clauses)*
                 }
             }
         });
@@ -396,7 +432,15 @@ mod tests {
                 }
 
                 impl Customer {
-                    pub fn orders(&self) -> ::fabrique::model::QueryBuilder<Order, ::fabrique::sql::Filtered<::fabrique::sql::Selected>, ::fabrique::model::join::Joined<Order, ()>> {
+                    pub fn orders(&self) -> ::fabrique::model::QueryBuilder<
+                        Order,
+                        ::fabrique::model::Building<
+                            <Order as ::fabrique::database::DatabaseAware>::Database,
+                            ::fabrique::sql::Filtered<::fabrique::sql::Selected>
+                        >,
+                        ::fabrique::model::join::Joined<Order, ()>,
+                        Order
+                    > {
                         let pk = <Self as ::fabrique::Model>::primary_key(self);
                         let fk = <Order as ::fabrique::BelongsTo<Self>>::foreign_key_column();
                         <Order as ::fabrique::Query>::query()
@@ -482,10 +526,20 @@ mod tests {
                 }
 
                 impl Order {
-                    pub fn products(&self) -> ::fabrique::model::QueryBuilder<Product, ::fabrique::sql::Joined<::fabrique::sql::Selected>, ::fabrique::model::join::Joined<Order, ::fabrique::model::join::Joined<Product, ()>>> {
+                    pub fn products(&self) -> ::fabrique::model::QueryBuilder<
+                        Product,
+                        ::fabrique::model::Building<
+                            <Product as ::fabrique::database::DatabaseAware>::Database,
+                            ::fabrique::sql::Filtered<::fabrique::sql::Selected>
+                        >,
+                        ::fabrique::model::join::Joined<Order, ::fabrique::model::join::Joined<OrderLine, ::fabrique::model::join::Joined<Product, ()>>>,
+                        Product
+                    > {
                         <Product as ::fabrique::Query>::query()
+                            .join::<OrderLine>()
+                            .join_through::<Order, OrderLine, _>()
                             .select()
-                            .join_through::<OrderLine, Self>()
+                            .r#where(Self::ID, "=", self.id)
                     }
                 }
             }

@@ -185,16 +185,16 @@ Use the `join::<T>()` method to add an INNER JOIN to your query:
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
 // Parent → Child: User joining Orders
 let users = User::query()
-    .select()
     .join::<Order>()
+    .select()
     .r#where(User::EMAIL, "=", "john@example.com".to_string())
     .get(&pool)
     .await?;
 
 // Child → Parent: Order joining User
 let orders = Order::query()
-    .select()
     .join::<User>()
+    .select()
     .get(&pool)
     .await?;
 # Ok(())
@@ -226,14 +226,47 @@ For many-to-many relationships with a join table, use `join_through`:
 #
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
 let orders = Order::query()
+    .join::<OrderLine>()
+    .join_through::<Product, OrderLine, _>()
     .select()
-    .join_through::<OrderLine, Product>()
     .get(&pool)
     .await?;
 # Ok(())
 # }
 # fn main() {}
 ```
+
+### Selecting from Joined Models
+
+By default, `select()` returns the root model's columns. To select columns from a joined model instead, use `select_as`:
+
+```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use sqlx::{Pool, Postgres};
+# use uuid::Uuid;
+#
+# #[derive(Factory, Model)]
+# pub struct User { id: Uuid, email: String, orders: HasMany<Order> }
+# #[derive(Factory, Model)]
+# pub struct Order { id: Uuid, status: String, #[fabrique(belongs_to = "User")] user_id: Uuid }
+#
+# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+// Returns Vec<Order> instead of Vec<User>
+let orders: Vec<Order> = User::query()
+    .join::<Order>()
+    .select_as::<Order, _>()
+    .r#where(User::EMAIL, "=", "john@example.com".to_string())
+    .get(&pool)
+    .await?;
+# Ok(())
+# }
+# fn main() {}
+```
+
+The compiler verifies that the selected model is in the join list. Attempting to select from a model that hasn't been joined causes a compile-time error.
 
 ## Type-Safe Columns
 

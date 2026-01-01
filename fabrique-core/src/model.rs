@@ -5,7 +5,7 @@ use crate::{
     database::{Column, DatabaseAware},
     sql::Updating,
 };
-pub use query_builder::QueryBuilder;
+pub use query_builder::{Building, QueryBuilder};
 
 /// Model metadata and identity
 pub trait Model: DatabaseAware {
@@ -55,7 +55,7 @@ where
     /// Creates a new UPDATE query builder for this model.
     ///
     /// Returns a builder in the `Updating` state, ready for `.set()` calls.
-    fn update() -> QueryBuilder<Self, Updating> {
+    fn update() -> QueryBuilder<Self, Building<Self::Database, Updating>> {
         QueryBuilder::default().update()
     }
 
