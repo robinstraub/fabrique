@@ -185,16 +185,16 @@ Use the `join::<T>()` method to add an INNER JOIN to your query:
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
 // Parent → Child: User joining Orders
 let users = User::query()
-    .select()
     .join::<Order>()
+    .select()
     .r#where(User::EMAIL, "=", "john@example.com".to_string())
     .get(&pool)
     .await?;
 
 // Child → Parent: Order joining User
 let orders = Order::query()
-    .select()
     .join::<User>()
+    .select()
     .get(&pool)
     .await?;
 # Ok(())
@@ -226,8 +226,9 @@ For many-to-many relationships with a join table, use `join_through`:
 #
 # async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
 let orders = Order::query()
+    .join::<OrderLine>()
+    .join_through::<Product, OrderLine, _>()
     .select()
-    .join_through::<OrderLine, Product>()
     .get(&pool)
     .await?;
 # Ok(())

@@ -69,6 +69,14 @@ mod initial {
     }
 
     #[sqlx::test(migrations = "../migrations")]
+    async fn select_as_transitions_to_selected(pool: Pool<Postgres>) {
+        // select_as on Initial can only select the base model (no joins available)
+        let result: Result<Vec<Product>, _> =
+            Product::query().select_as::<Product, _>().get(&pool).await;
+        assert!(result.is_ok());
+    }
+
+    #[sqlx::test(migrations = "../migrations")]
     async fn insert_transitions_to_inserting(pool: Pool<Postgres>) {
         let result: Result<Option<Product>, _> = Product::query()
             .insert()
