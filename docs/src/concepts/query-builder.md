@@ -14,11 +14,11 @@ When `select()` is called on an `Initial` builder, a `Selected` builder is retur
 
 ### How It Works
 
-The builder's type includes a state parameter: `QueryBuilder<M, S, Joins>`. The `S` parameter changes as the query is built:
+The builder's type includes a state parameter: `QueryBuilder<S, Joins>`. The `S` parameter changes as the query is built, and the root model is derived from the `Joins` HList:
 
-- `QueryBuilder<Product, Initial, _>` — just created
-- `QueryBuilder<Product, Selected, _>` — after `select()`
-- `QueryBuilder<Product, Filtered<Selected>, _>` — after `where()`
+- `QueryBuilder<Initial, Joined<Product, ()>>` — just created
+- `QueryBuilder<Building<PG, Selected>, Joined<Product, ()>>` — after `select()`
+- `QueryBuilder<Building<PG, Filtered<Selected>>, Joined<Product, ()>>` — after `where()`
 
 Each state type determines which methods exist. `offset()` is only defined for `Limited`, so calling it on `Selected` fails at compile time.
 
