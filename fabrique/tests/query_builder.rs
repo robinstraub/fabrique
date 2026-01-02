@@ -61,6 +61,13 @@ pub struct OrderLine {
 
 mod initial {
     use super::*;
+    use fabrique::model::QueryBuilder;
+
+    #[test]
+    fn default_creates_query_builder() {
+        let _qb: QueryBuilder<_, _> =
+            QueryBuilder::<_, fabrique::model::Joined<Product, ()>>::default();
+    }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn select_transitions_to_selected(pool: Pool<Postgres>) {
