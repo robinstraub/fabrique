@@ -63,10 +63,10 @@ mod initial {
     use super::*;
     use fabrique::model::QueryBuilder;
 
+    /// Validates that QueryBuilder implements Default with the new signature.
     #[test]
     fn default_creates_query_builder() {
-        let _qb: QueryBuilder<_, _> =
-            QueryBuilder::<_, fabrique::model::Joined<Product, ()>>::default();
+        let _qb = QueryBuilder::<_, fabrique::model::Joined<Product, ()>>::default();
     }
 
     #[sqlx::test(migrations = "../migrations")]
