@@ -61,6 +61,13 @@ pub struct OrderLine {
 
 mod initial {
     use super::*;
+    use fabrique::model::QueryBuilder;
+
+    /// Validates that QueryBuilder implements Default with the new signature.
+    #[test]
+    fn default_creates_query_builder() {
+        let _qb = QueryBuilder::<_, fabrique::model::Joined<Product, ()>>::default();
+    }
 
     #[sqlx::test(migrations = "../migrations")]
     async fn select_transitions_to_selected(pool: Pool<Postgres>) {
