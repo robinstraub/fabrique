@@ -136,7 +136,7 @@ impl<'a> PersistCodegen<'a> {
                 E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
             {
                 async move {
-                    ::fabrique::model::QueryBuilder::<Self>::default()
+                    <Self as ::fabrique::Query>::query()
                         .insert()
                         #(#set_calls)*
                         .on_conflict()
@@ -189,7 +189,7 @@ mod tests {
                         E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
                     {
                         async move {
-                            ::fabrique::model::QueryBuilder::<Self>::default()
+                            <Self as ::fabrique::Query>::query()
                                 .insert()
                                 .set(Self::ID, self.id)
                                 .on_conflict()

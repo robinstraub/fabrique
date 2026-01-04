@@ -1,3 +1,5 @@
+use crate::database::DatabaseAware;
+use crate::model::Model;
 use std::marker::PhantomData;
 
 /// Type-level HList for tracking joined models.
@@ -7,7 +9,7 @@ use std::marker::PhantomData;
 ///
 /// This is a zero-sized type with no runtime cost.
 ///
-/// See [`Here`], [`There`], [`Contains`].
+/// See [`Here`], [`There`], [`Contains`], [`RootModel`].
 pub struct Joined<Head, Tail>(PhantomData<(Head, Tail)>);
 
 /// Type-level index indicating the element is found at the current position.
@@ -45,3 +47,44 @@ impl<M, Tail> Contains<M, Here> for Joined<M, Tail> {}
 // Recursive case: `M` is somewhere in `Tail` at index `I`, so the full index is
 // [`There<I>`].
 impl<M, I, Head, Tail> Contains<M, There<I>> for Joined<Head, Tail> where Tail: Contains<M, I> {}
+
+/// Extracts the root model (innermost) from a [`Joined`] HList.
+///
+/// The root is the original model that started the query, found at the
+/// deepest position after joins are prepended.
+#[diagnostic::on_unimplemented(
+    message = "cannot determine root model from `{Self}`",
+    label = "expected a non-empty Joined<M, ...> list",
+    note = "the Joins type must be a Joined<M, Tail> where M: Model"
+)]
+pub trait RootModel {
+    /// The root model type at the innermost position of the HList.
+    type Root: Model;
+
+    /// The database type of the root model.
+    type Database: sqlx::Database;
+
+    /// The error type of the root model.
+    type Error: From<sqlx::Error>;
+}
+
+// Base case: single element list - M is the root.
+impl<M: Model> RootModel for Joined<M, ()>
+where
+    <M as DatabaseAware>::Database: sqlx::Database,
+    <M as DatabaseAware>::Error: From<sqlx::Error>,
+{
+    type Root = M;
+    type Database = <M as DatabaseAware>::Database;
+    type Error = <M as DatabaseAware>::Error;
+}
+
+// Recursive case: dig into tail to find the root.
+impl<Head, Tail> RootModel for Joined<Head, Tail>
+where
+    Tail: RootModel,
+{
+    type Root = Tail::Root;
+    type Database = Tail::Database;
+    type Error = Tail::Error;
+}

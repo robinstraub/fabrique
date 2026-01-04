@@ -5,7 +5,8 @@ use crate::{
     database::{Column, DatabaseAware},
     sql::Updating,
 };
-pub use query_builder::{Building, QueryBuilder};
+pub use join::{Joined, RootModel};
+pub use query_builder::{Building, Initial, QueryBuilder};
 
 /// Model metadata and identity
 pub trait Model: DatabaseAware {
@@ -48,15 +49,15 @@ where
     for<'r> Self: sqlx::FromRow<'r, <Self::Database as sqlx::Database>::Row>,
 {
     /// Creates a new SELECT query builder for this model.
-    fn query() -> QueryBuilder<Self> {
-        QueryBuilder::default()
+    fn query() -> QueryBuilder<Initial, Joined<Self, ()>> {
+        QueryBuilder::new()
     }
 
     /// Creates a new UPDATE query builder for this model.
     ///
     /// Returns a builder in the `Updating` state, ready for `.set()` calls.
-    fn update() -> QueryBuilder<Self, Building<Self::Database, Updating>> {
-        QueryBuilder::default().update()
+    fn update() -> QueryBuilder<Building<Self::Database, Updating>, Joined<Self, ()>> {
+        Self::query().update()
     }
 
     /// Finds a model instance by its primary key.
@@ -79,13 +80,13 @@ where
         async move {
             match Self::soft_delete_column() {
                 Some(column) => {
-                    QueryBuilder::<Self>::default()
+                    Self::query()
                         .select()
                         .where_null(column)
                         .get(executor)
                         .await
                 }
-                None => QueryBuilder::<Self>::default().select().get(executor).await,
+                None => Self::query().select().get(executor).await,
             }
         }
     }

@@ -212,7 +212,6 @@ impl<'a> ModelCodegen<'a> {
 
             quote! {
                 pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<
-                    #target_type,
                     ::fabrique::model::Building<
                         <#target_type as ::fabrique::database::DatabaseAware>::Database,
                         ::fabrique::sql::Filtered<::fabrique::sql::Selected>
@@ -255,7 +254,6 @@ impl<'a> ModelCodegen<'a> {
 
             quote! {
                 pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<
-                    #target_type,
                     ::fabrique::model::Building<
                         <#target_type as ::fabrique::database::DatabaseAware>::Database,
                         ::fabrique::sql::Filtered<::fabrique::sql::Selected>
@@ -433,7 +431,6 @@ mod tests {
 
                 impl Customer {
                     pub fn orders(&self) -> ::fabrique::model::QueryBuilder<
-                        Order,
                         ::fabrique::model::Building<
                             <Order as ::fabrique::database::DatabaseAware>::Database,
                             ::fabrique::sql::Filtered<::fabrique::sql::Selected>
@@ -527,7 +524,6 @@ mod tests {
 
                 impl Order {
                     pub fn products(&self) -> ::fabrique::model::QueryBuilder<
-                        Product,
                         ::fabrique::model::Building<
                             <Product as ::fabrique::database::DatabaseAware>::Database,
                             ::fabrique::sql::Filtered<::fabrique::sql::Selected>
