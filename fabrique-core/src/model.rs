@@ -95,23 +95,23 @@ where
 /// Create and update operations
 pub trait Persist: Model {
     /// Creates and persists this model instance
-    fn create<'e, E>(
+    fn create<'e, A>(
         self,
-        executor: E,
+        executor: A,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send + 'e
     where
-        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
 
     /// Saves this model instance to the database.
     ///
     /// Performs an UPSERT: inserts the record if it doesn't exist,
     /// or updates it if there's a conflict on the primary key.
-    fn save<'e, E>(
+    fn save<'e, A>(
         self,
-        executor: E,
+        executor: A,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send + 'e
     where
-        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
 }
 
 /// Delete operations

@@ -1,5 +1,5 @@
 use fabrique::prelude::*;
-use sqlx::{Pool, Postgres};
+use fabrique::sql::QueryBuilder;
 use uuid::Uuid;
 
 #[derive(Debug, Default, Factory, PartialEq, Model)]
@@ -52,8 +52,8 @@ pub struct OrderLine {
     pub unit_price_cents: i32,
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_factory_for_relations_accept_models(connection: Pool<Postgres>) {
+#[fabrique_derive::test]
+async fn test_factory_for_relations_accept_models(connection: Pool<Backend>) {
     let user = User::factory().create(&connection).await.unwrap();
     let product = Product::factory().create(&connection).await.unwrap();
     let order = Order::factory()
@@ -70,8 +70,8 @@ async fn test_factory_for_relations_accept_models(connection: Pool<Postgres>) {
         .unwrap();
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_factory_for_relations_accept_factories(connection: Pool<Postgres>) {
+#[fabrique_derive::test]
+async fn test_factory_for_relations_accept_factories(connection: Pool<Backend>) {
     OrderLine::factory()
         .for_order(Order::factory().for_user(User::factory()))
         .for_product(Product::factory())
@@ -80,8 +80,8 @@ async fn test_factory_for_relations_accept_factories(connection: Pool<Postgres>)
         .unwrap();
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_has_many_creates_children(connection: Pool<Postgres>) {
+#[fabrique_derive::test]
+async fn test_has_many_creates_children(connection: Pool<Backend>) {
     // Create a User with 1 Address
     let user = User::factory()
         .name("Wile E. Coyote".to_string())
@@ -91,17 +91,18 @@ async fn test_has_many_creates_children(connection: Pool<Postgres>) {
         .unwrap();
 
     // Verify the address was created for this user
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM addresses WHERE user_id = $1")
-        .bind(user.id)
-        .fetch_one(&connection)
+    let count: (i64,) = QueryBuilder::table("addresses")
+        .select(&["COUNT(*)"])
+        .r#where("user_id", "=", user.id)
+        .first_or_fail(&connection)
         .await
         .unwrap();
 
     assert_eq!(count.0, 1);
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_many_to_many_through_creates_join_records(connection: Pool<Postgres>) {
+#[fabrique_derive::test]
+async fn test_many_to_many_through_creates_join_records(connection: Pool<Backend>) {
     // Create an Order with 1 Product through OrderLine (many-to-many)
     let order = Order::factory()
         .for_user(User::factory())
@@ -111,17 +112,19 @@ async fn test_many_to_many_through_creates_join_records(connection: Pool<Postgre
         .unwrap();
 
     // Verify the order line was created linking order to product
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM order_lines WHERE order_id = $1")
-        .bind(order.id)
-        .fetch_one(&connection)
+    let count: (i64,) = QueryBuilder::table("order_lines")
+        .select(&["COUNT(*)"])
+        .r#where("order_id", "=", order.id)
+        .first_or_fail(&connection)
         .await
         .unwrap();
 
     assert_eq!(count.0, 1);
 
     // Verify product was also created
-    let product_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM products")
-        .fetch_one(&connection)
+    let product_count: (i64,) = QueryBuilder::table("products")
+        .select(&["COUNT(*)"])
+        .first_or_fail(&connection)
         .await
         .unwrap();
 

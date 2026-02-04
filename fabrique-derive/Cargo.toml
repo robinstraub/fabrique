@@ -8,6 +8,11 @@ repository = "https://github.com/robinstraub/fabrique"
 homepage = "https://github.com/robinstraub/fabrique"
 documentation = "https://docs.rs/fabrique-derive"
 
+[features]
+postgres = ["fabrique-core/postgres", "sqlx/postgres"]
+mysql = ["fabrique-core/mysql", "sqlx/mysql"]
+sqlite = ["fabrique-core/sqlite", "sqlx/sqlite"]
+
 [lib]
 proc-macro = true
 
@@ -18,12 +23,13 @@ heck = "0.5"
 pluralizer = "0.4"
 proc-macro2 = "1.0"
 quote = "1.0"
-sqlx = { workspace = true, features = ["postgres", "runtime-tokio", "uuid"] }
+sqlx = { workspace = true, features = ["runtime-tokio", "uuid"] }
 syn = { version = "2.0", features = ["extra-traits"] }
 thiserror = "2.0"
 
 [dev-dependencies]
 fabrique = { path = "../fabrique" }
 fabrique-derive = { path = "." }
+tokio = { version = "1", features = ["rt"] }
 trybuild = "1.0"
 uuid = "1"

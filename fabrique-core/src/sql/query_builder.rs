@@ -35,8 +35,9 @@
 //!
 //! ```rust,no_run
 //! # use fabrique_core::sql::QueryBuilder;
-//! # use sqlx::PgPool;
-//! # async fn example(pool: &PgPool) -> Result<(), sqlx::Error> {
+//! # use sqlx::Pool;
+//! # use fabrique_core::database::Backend;
+//! # async fn example(pool: &Pool<Backend>) -> Result<(), sqlx::Error> {
 //! let products: Vec<(i32, String)> = QueryBuilder::table("products")  // Initial
 //!     .select(&["id", "name"])     // → Selected
 //!     .r#where("price", ">", 100)  // → Filtered<Selected>
@@ -72,7 +73,9 @@
 
 use std::marker::PhantomData;
 
+use crate::database::Backend;
 use crate::sql::operators::{Direction, Operator};
+use crate::sql::returning::SupportsReturning;
 use sqlx::{Database, Executor, FromRow, IntoArguments};
 
 // ############################################################################
@@ -203,11 +206,14 @@ macro_rules! impl_where {
 /// Syntax: `impl_returning!(State)` - transitions to [`Returned`]
 macro_rules! impl_returning {
     ($state:ty) => {
-        impl<DB: Database> QueryBuilder<DB, $state> {
+        impl<DB: Database + SupportsReturning> QueryBuilder<DB, $state> {
             /// Specifies the columns to return after the statement.
             ///
             /// Generates `RETURNING col1, col2, ...`. Transitions to [`Returned`]
             /// state.
+            ///
+            /// Only available on backends that support `RETURNING` (PostgreSQL,
+            /// SQLite).
             pub fn returning(mut self, columns: &[&str]) -> QueryBuilder<DB, Returned> {
                 self.inner.push(" RETURNING ");
                 self.inner.push(columns.join(", "));
@@ -853,67 +859,6 @@ impl<DB: Database> QueryBuilder<DB, Inserted<DB>> {
         self
     }
 
-    /// Specifies the conflict target columns for an UPSERT operation.
-    ///
-    /// Flushes the accumulated INSERT data and transitions to [`Conflicted`]
-    /// state.
-    pub fn on_conflict(mut self, columns: &[&str]) -> QueryBuilder<DB, Conflicted> {
-        self.inner.push("INSERT INTO ");
-        self.inner.push(&self.table);
-        self.inner.push(" (");
-        self.inner.push(self.state.columns.join(", "));
-        self.inner.push(") VALUES (");
-
-        let mut first = true;
-        for bind_fn in self.state.bind_fns {
-            if !first {
-                self.inner.push(", ");
-            }
-            first = false;
-            bind_fn(&mut self.inner);
-        }
-
-        self.inner.push(") ON CONFLICT (");
-        self.inner.push(columns.join(", "));
-        self.inner.push(")");
-
-        QueryBuilder {
-            inner: self.inner,
-            table: self.table,
-            state: Conflicted,
-        }
-    }
-
-    /// Specifies the columns to return after the INSERT.
-    ///
-    /// Flushes the accumulated INSERT data and generates `RETURNING col1, col2,
-    /// ...`.
-    pub fn returning(mut self, columns: &[&str]) -> QueryBuilder<DB, Returned> {
-        self.inner.push("INSERT INTO ");
-        self.inner.push(&self.table);
-        self.inner.push(" (");
-        self.inner.push(self.state.columns.join(", "));
-        self.inner.push(") VALUES (");
-
-        let mut first = true;
-        for bind_fn in self.state.bind_fns {
-            if !first {
-                self.inner.push(", ");
-            }
-            first = false;
-            bind_fn(&mut self.inner);
-        }
-
-        self.inner.push(") RETURNING ");
-        self.inner.push(columns.join(", "));
-
-        QueryBuilder {
-            inner: self.inner,
-            table: self.table,
-            state: Returned,
-        }
-    }
-
     /// Executes the INSERT statement without returning any rows.
     ///
     /// Flushes the accumulated INSERT data and executes.
@@ -943,13 +888,119 @@ impl<DB: Database> QueryBuilder<DB, Inserted<DB>> {
     }
 }
 
-impl<DB: Database> QueryBuilder<DB, Conflicted> {
+// Inserted — RETURNING (gated by SupportsReturning)
+
+impl<DB: Database + SupportsReturning> QueryBuilder<DB, Inserted<DB>> {
+    /// Specifies the columns to return after the INSERT.
+    ///
+    /// Flushes the accumulated INSERT data and generates `RETURNING col1, col2,
+    /// ...`.
+    ///
+    /// Only available on backends that support `RETURNING` (PostgreSQL,
+    /// SQLite).
+    pub fn returning(mut self, columns: &[&str]) -> QueryBuilder<DB, Returned> {
+        self.inner.push("INSERT INTO ");
+        self.inner.push(&self.table);
+        self.inner.push(" (");
+        self.inner.push(self.state.columns.join(", "));
+        self.inner.push(") VALUES (");
+
+        let mut first = true;
+        for bind_fn in self.state.bind_fns {
+            if !first {
+                self.inner.push(", ");
+            }
+            first = false;
+            bind_fn(&mut self.inner);
+        }
+
+        self.inner.push(") RETURNING ");
+        self.inner.push(columns.join(", "));
+
+        QueryBuilder {
+            inner: self.inner,
+            table: self.table,
+            state: Returned,
+        }
+    }
+}
+
+// Inserted — ON CONFLICT (specialized per backend)
+#[cfg(any(feature = "postgres", feature = "sqlite"))]
+impl QueryBuilder<Backend, Inserted<Backend>> {
+    /// Specifies the conflict target columns for an UPSERT operation.
+    ///
+    /// Flushes the accumulated INSERT data and transitions to [`Conflicted`]
+    /// state.
+    pub fn on_conflict(mut self, columns: &[&str]) -> QueryBuilder<Backend, Conflicted> {
+        self.inner.push("INSERT INTO ");
+        self.inner.push(&self.table);
+        self.inner.push(" (");
+        self.inner.push(self.state.columns.join(", "));
+        self.inner.push(") VALUES (");
+
+        let mut first = true;
+        for bind_fn in self.state.bind_fns {
+            if !first {
+                self.inner.push(", ");
+            }
+            first = false;
+            bind_fn(&mut self.inner);
+        }
+
+        self.inner.push(") ON CONFLICT (");
+        self.inner.push(columns.join(", "));
+        self.inner.push(")");
+
+        QueryBuilder {
+            inner: self.inner,
+            table: self.table,
+            state: Conflicted,
+        }
+    }
+}
+
+#[cfg(feature = "mysql")]
+impl QueryBuilder<Backend, Inserted<Backend>> {
+    /// Specifies the conflict target for an UPSERT operation (MySQL).
+    ///
+    /// MySQL uses `ON DUPLICATE KEY` which detects conflicts from the
+    /// PRIMARY KEY or UNIQUE indexes automatically. The `columns` parameter
+    /// is accepted for API compatibility but ignored.
+    pub fn on_conflict(mut self, _columns: &[&str]) -> QueryBuilder<Backend, Conflicted> {
+        self.inner.push("INSERT INTO ");
+        self.inner.push(&self.table);
+        self.inner.push(" (");
+        self.inner.push(self.state.columns.join(", "));
+        self.inner.push(") VALUES (");
+
+        let mut first = true;
+        for bind_fn in self.state.bind_fns {
+            if !first {
+                self.inner.push(", ");
+            }
+            first = false;
+            bind_fn(&mut self.inner);
+        }
+
+        self.inner.push(")");
+
+        QueryBuilder {
+            inner: self.inner,
+            table: self.table,
+            state: Conflicted,
+        }
+    }
+}
+
+// Conflicted — DO UPDATE / DO NOTHING (specialized per backend)
+#[cfg(any(feature = "postgres", feature = "sqlite"))]
+impl QueryBuilder<Backend, Conflicted> {
     /// Specifies that conflicting rows should be updated.
     ///
-    /// Generates `DO UPDATE SET col = EXCLUDED.col` for each specified column.
-    /// Transitions to [`Upserted`] state, requiring `returning()` before
-    /// execution.
-    pub fn do_update(mut self, columns: &[&str]) -> QueryBuilder<DB, Upserted> {
+    /// Generates `DO UPDATE SET col = EXCLUDED.col` for each specified
+    /// column. Transitions to [`Upserted`] state.
+    pub fn do_update(mut self, columns: &[&str]) -> QueryBuilder<Backend, Upserted> {
         let set_clause = columns
             .iter()
             .map(|col| format!("{} = EXCLUDED.{}", col, col))
@@ -969,8 +1020,46 @@ impl<DB: Database> QueryBuilder<DB, Conflicted> {
     /// Specifies that conflicting rows should be ignored.
     ///
     /// Generates `DO NOTHING`. Transitions to [`Upserted`] state.
-    pub fn do_nothing(mut self) -> QueryBuilder<DB, Upserted> {
+    pub fn do_nothing(mut self) -> QueryBuilder<Backend, Upserted> {
         self.inner.push(" DO NOTHING");
+
+        QueryBuilder {
+            inner: self.inner,
+            table: self.table,
+            state: Upserted,
+        }
+    }
+}
+
+#[cfg(feature = "mysql")]
+impl QueryBuilder<Backend, Conflicted> {
+    /// Specifies that conflicting rows should be updated (MySQL).
+    ///
+    /// Generates `ON DUPLICATE KEY UPDATE col = VALUES(col)` for each
+    /// specified column. Transitions to [`Upserted`] state.
+    pub fn do_update(mut self, columns: &[&str]) -> QueryBuilder<Backend, Upserted> {
+        let set_clause = columns
+            .iter()
+            .map(|col| format!("{} = VALUES({})", col, col))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        self.inner.push(" ON DUPLICATE KEY UPDATE ");
+        self.inner.push(set_clause);
+
+        QueryBuilder {
+            inner: self.inner,
+            table: self.table,
+            state: Upserted,
+        }
+    }
+
+    /// Specifies that conflicting rows should be ignored (MySQL).
+    ///
+    /// MySQL doesn't have `DO NOTHING`, so we use the idiom
+    /// `ON DUPLICATE KEY UPDATE id = id` (a no-op).
+    pub fn do_nothing(mut self) -> QueryBuilder<Backend, Upserted> {
+        self.inner.push(" ON DUPLICATE KEY UPDATE id = id");
 
         QueryBuilder {
             inner: self.inner,

@@ -35,7 +35,6 @@ assert_eq!(product.id, Uuid::default());
 # extern crate uuid;
 # use fabrique::prelude::*;
 # use uuid::Uuid;
-# use sqlx::{Pool, Postgres};
 #
 # #[derive(Model, Factory)]
 # pub struct Product {
@@ -45,7 +44,7 @@ assert_eq!(product.id, Uuid::default());
 #     pub price_cents: i32,
 # }
 #
-# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+# async fn example(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 // Query
 let products = Product::query()
     .select()

@@ -38,7 +38,7 @@
 //! # #[derive(Model)]
 //! # #[fabrique(table = "products")]
 //! # struct Product { id: i32, name: String }
-//! # async fn example(pool: &sqlx::PgPool) -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn example(pool: &sqlx::Pool<fabrique_core::database::Backend>) -> Result<(), Box<dyn std::error::Error>> {
 //! let products = Product::query()
 //!     .select()
 //!     .r#where(Product::ID, "=", 42)
@@ -53,15 +53,15 @@
 //! followed by impl blocks organized by state. Macro invocations at the end
 //! connect states to their available methods.
 
-use crate::database::{self, Column};
+use crate::database::{self, Backend, Column};
 use crate::model::Model;
 use crate::model::join::{Contains, Joined, RootModel};
 use crate::relation::Joinable;
 use crate::sql::operators::{self, Direction};
 use crate::sql::{
     Conflicted, Filtered, Initial as SqlInitial, Inserted, Inserting, Joined as SqlJoined, Limited,
-    Offsetted, Ordered, QueryBuilder as SqlQueryBuilder, Returned, Selected, Updated, Updating,
-    Upserted,
+    Offsetted, Ordered, QueryBuilder as SqlQueryBuilder, Returned, Selected, SupportsReturning,
+    Updated, Updating, Upserted,
 };
 use sqlx::Database;
 use std::marker::PhantomData;
@@ -257,12 +257,15 @@ macro_rules! impl_returning {
         impl<Joins, Output> QueryBuilder<Building<Joins::Database, $state>, Joins, Output>
         where
             Joins: RootModel,
-            Joins::Database: Database,
+            Joins::Database: Database + SupportsReturning,
         {
             /// Specifies the columns to return after the statement.
             ///
             /// Generates `RETURNING col1, col2, ...`.
             /// Transitions to [`Returned`] state.
+            ///
+            /// Only available on backends that support `RETURNING` (PostgreSQL,
+            /// SQLite).
             pub fn returning(
                 self,
             ) -> QueryBuilder<Building<Joins::Database, Returned>, Joins, Output> {
@@ -880,12 +883,27 @@ where
             _marker: PhantomData,
         }
     }
+}
 
+// Transitions from Inserted
+impl_returning!(Inserted<Joins::Database>);
+
+// Execution from Inserted
+impl_execute!(Inserted<Joins::Database>);
+
+// ============================================================================
+// Inserted — ON CONFLICT
+// ============================================================================
+
+impl<Joins> QueryBuilder<Building<Backend, Inserted<Backend>>, Joins>
+where
+    Joins: RootModel<Database = Backend>,
+{
     /// Specifies the conflict target for an UPSERT operation.
     ///
     /// Uses the model's primary key columns as the conflict target.
     /// Transitions to [`Conflicted`] state.
-    pub fn on_conflict(self) -> QueryBuilder<Building<Joins::Database, Conflicted>, Joins> {
+    pub fn on_conflict(self) -> QueryBuilder<Building<Backend, Conflicted>, Joins> {
         QueryBuilder {
             state: Building {
                 inner: self
@@ -898,26 +916,19 @@ where
     }
 }
 
-// Transitions from Inserted
-impl_returning!(Inserted<Joins::Database>);
-
-// Execution from Inserted
-impl_execute!(Inserted<Joins::Database>);
-
 // ============================================================================
-// Conflicted
+// Conflicted — DO UPDATE / DO NOTHING
 // ============================================================================
 
-impl<Joins> QueryBuilder<Building<Joins::Database, Conflicted>, Joins>
+impl<Joins> QueryBuilder<Building<Backend, Conflicted>, Joins>
 where
-    Joins: RootModel,
-    Joins::Database: Database,
+    Joins: RootModel<Database = Backend>,
 {
     /// Specifies that conflicting rows should be updated.
     ///
     /// Updates all non-primary-key columns with `col = EXCLUDED.col`.
     /// Transitions to [`Upserted`] state.
-    pub fn do_update(self) -> QueryBuilder<Building<Joins::Database, Upserted>, Joins> {
+    pub fn do_update(self) -> QueryBuilder<Building<Backend, Upserted>, Joins> {
         let pk_columns = Joins::Root::primary_key_columns();
         let update_columns: Vec<&str> = Joins::Root::columns()
             .iter()
@@ -936,7 +947,7 @@ where
     /// Specifies that conflicting rows should be ignored.
     ///
     /// Generates `DO NOTHING`. Transitions to [`Upserted`] state.
-    pub fn do_nothing(self) -> QueryBuilder<Building<Joins::Database, Upserted>, Joins> {
+    pub fn do_nothing(self) -> QueryBuilder<Building<Backend, Upserted>, Joins> {
         QueryBuilder {
             state: Building {
                 inner: self.state.inner.do_nothing(),
@@ -953,11 +964,14 @@ where
 impl<Joins> QueryBuilder<Building<Joins::Database, Upserted>, Joins>
 where
     Joins: RootModel,
-    Joins::Database: Database,
+    Joins::Database: Database + SupportsReturning,
 {
     /// Specifies the columns to return after the UPSERT.
     ///
     /// Uses all model columns. Transitions to [`Returned`] state.
+    ///
+    /// Only available on backends that support `RETURNING` (PostgreSQL,
+    /// SQLite).
     pub fn returning(self) -> QueryBuilder<Building<Joins::Database, Returned>, Joins> {
         QueryBuilder {
             state: Building {

@@ -11,7 +11,7 @@
 //!
 //!```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::{Pool, Postgres};
+//! # use sqlx::Pool;
 //! # use uuid::Uuid;
 //! #
 //! #[derive(Factory, Model)]
@@ -21,7 +21,7 @@
 //!     price_cents: i32,
 //! }
 //!
-//! # async fn example(connection: Pool<Postgres>) -> Result<(), fabrique::Error> {
+//! # async fn example(connection: Pool<Backend>) -> Result<(), fabrique::Error> {
 //! // Create with defaults
 //! let product = Product::factory().create(&connection).await?;
 //!
@@ -43,7 +43,7 @@
 //!
 //!```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::{Pool, Postgres};
+//! # use sqlx::Pool;
 //! # use uuid::Uuid;
 //!
 //! # #[derive(Factory, Model)]
@@ -58,7 +58,7 @@
 //!     user_id: Uuid,
 //! }
 //!
-//! # async fn example(connection: Pool<Postgres>) -> Result<(), fabrique::Error> {
+//! # async fn example(connection: Pool<Backend>) -> Result<(), fabrique::Error> {
 //! // Creates a new User, then creates an Order linked to it
 //! Order::factory()
 //!     .for_user(User::factory())
@@ -82,7 +82,7 @@
 //!
 //!```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::{Pool, Postgres};
+//! # use sqlx::Pool;
 //! # use uuid::Uuid;
 //!
 //! #[derive(Factory, Model)]
@@ -98,7 +98,7 @@
 //!     customer_id: Uuid,
 //! }
 //!
-//! # async fn example(connection: Pool<Postgres>) -> Result<(), fabrique::Error> {
+//! # async fn example(connection: Pool<Backend>) -> Result<(), fabrique::Error> {
 //! // Creates a Customer, then creates 3 Orders linked to it
 //! Customer::factory()
 //!     .has_orders(Order::factory(), 3)
@@ -115,7 +115,7 @@
 //!
 //!```rust,no_run
 //! # use fabrique::prelude::*;
-//! # use sqlx::{Pool, Postgres};
+//! # use sqlx::Pool;
 //! # use uuid::Uuid;
 //!
 //! #[derive(Factory, Model)]
@@ -139,7 +139,7 @@
 //!     product_id: Uuid,
 //! }
 //!
-//! # async fn example(connection: Pool<Postgres>) -> Result<(), fabrique::Error> {
+//! # async fn example(connection: Pool<Backend>) -> Result<(), fabrique::Error> {
 //! // Creates an Order, 2 Products, and 2 OrderLines linking them
 //! Order::factory()
 //!     .has_products(Product::factory(), 2)

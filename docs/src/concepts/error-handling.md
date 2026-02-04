@@ -30,28 +30,31 @@ pub enum Error {
 
 Returned when a query expects a record but none exists:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
-# #[derive(Clone, Debug, Model)]
+# #[derive(Clone, Debug, Factory, Model)]
 # pub struct Product { pub id: Uuid, pub name: String }
 #
-# async fn example(pool: &Pool<Postgres>) -> Result<(), fabrique::Error> {
-let result = Product::find(pool, Uuid::nil()).await;
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+let result = Product::find(&pool, Uuid::nil()).await;
 
-match result {
+match &result {
     Ok(product) => println!("Found: {}", product.name),
     Err(fabrique::Error::NotFound) => println!("Product not found"),
     Err(e) => println!("Other error: {}", e),
 }
+
+// A nil UUID doesn't exist in the database
+assert!(matches!(result, Err(fabrique::Error::NotFound)));
 # Ok(())
 # }
-# fn main() {}
 ```
 
 Methods that return `NotFound`:
@@ -72,7 +75,6 @@ Returned when converting between Rust and database types fails. This typically h
 # extern crate sqlx;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug)]
@@ -94,7 +96,7 @@ Returned when converting between Rust and database types fails. This typically h
 # #[derive(Clone, Debug, Model)]
 # pub struct Account { pub id: Uuid, #[fabrique(as = "String")] pub status: Status }
 #
-# async fn example(pool: &Pool<Postgres>) -> Result<(), fabrique::Error> {
+# async fn example(pool: &Pool<Backend>) -> Result<(), fabrique::Error> {
 let result = Account::find(pool, Uuid::nil()).await;
 
 match result {
@@ -138,23 +140,30 @@ pub enum ConversionDirection {
 
 Wraps all other database errors — connection failures, constraint violations, query syntax errors, etc.:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
-# #[derive(Clone, Debug, Model)]
-# pub struct User { pub id: Uuid, pub email: String }
+# #[derive(Clone, Debug, Factory, Model)]
+# pub struct User { pub id: Uuid, pub name: String, pub email: String }
 #
-# async fn example(pool: &Pool<Postgres>) -> Result<(), fabrique::Error> {
-// Unique constraint violation
-let user = User { id: Uuid::nil(), email: "test@example.com".to_string() };
-let result = user.create(pool).await;
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# // Create a user first to cause a duplicate key violation
+# let existing = User::factory().create(&pool).await?;
+// Insert a duplicate primary key to trigger a constraint violation
+let duplicate = User {
+    id: existing.id,
+    name: "Other".to_string(),
+    email: "other@example.com".to_string(),
+};
+let result = duplicate.create(&pool).await;
 
-match result {
+match &result {
     Ok(_) => println!("Created user"),
     Err(fabrique::Error::Other(e)) => {
         // Access the underlying sqlx error if needed
@@ -162,9 +171,11 @@ match result {
     }
     Err(e) => println!("Error: {}", e),
 }
+
+// Duplicate primary key causes an Other error
+assert!(matches!(result, Err(fabrique::Error::Other(_))));
 # Ok(())
 # }
-# fn main() {}
 ```
 
 ## Summary

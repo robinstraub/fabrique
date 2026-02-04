@@ -405,6 +405,7 @@ dependencies = [
  "fabrique-derive",
  "sqlx",
  "thiserror",
+ "tokio",
  "uuid",
 ]
 
@@ -423,6 +424,7 @@ dependencies = [
  "sqlx",
  "syn",
  "thiserror",
+ "tokio",
  "trybuild",
  "uuid",
 ]
@@ -881,6 +883,7 @@ version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e99fb7a497b1e3339bc746195567ed8d3e24945ecd636e3619d20b9de9e9149"
 dependencies = [
+ "cc",
  "pkg-config",
  "vcpkg",
 ]
@@ -1900,6 +1903,18 @@ name = "typenum"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "562d481066bde0658276a35467c4af00bdc6ee726305698a55b86e61d7ad82bb"
+
+[[package]]
+name = "ui-tests"
+version = "0.0.0"
+dependencies = [
+ "fabrique",
+ "fabrique-derive",
+ "sqlx",
+ "tokio",
+ "trybuild",
+ "uuid",
+]
 
 [[package]]
 name = "unicode-bidi"

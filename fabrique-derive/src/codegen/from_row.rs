@@ -67,8 +67,8 @@ impl<'a> FromRowCodegen<'a> {
         let field_assignments = column_assignments.chain(has_many_assignments);
 
         quote! {
-            impl<'r> ::sqlx::FromRow<'r, ::sqlx::postgres::PgRow> for #base_struct_ident {
-                fn from_row(row: &'r ::sqlx::postgres::PgRow) -> ::sqlx::Result<Self> {
+            impl<'r> ::sqlx::FromRow<'r, <::fabrique::Backend as ::sqlx::Database>::Row> for #base_struct_ident {
+                fn from_row(row: &'r <::fabrique::Backend as ::sqlx::Database>::Row) -> ::sqlx::Result<Self> {
                     use ::sqlx::Row;
                     Ok(Self {
                         #(#field_assignments),*
@@ -98,8 +98,8 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                impl<'r> ::sqlx::FromRow<'r, ::sqlx::postgres::PgRow> for Anvil {
-                    fn from_row(row: &'r ::sqlx::postgres::PgRow) -> ::sqlx::Result<Self> {
+                impl<'r> ::sqlx::FromRow<'r, <::fabrique::Backend as ::sqlx::Database>::Row> for Anvil {
+                    fn from_row(row: &'r <::fabrique::Backend as ::sqlx::Database>::Row) -> ::sqlx::Result<Self> {
                         use ::sqlx::Row;
                         Ok(Self {
                             id: row.try_get("id")?
@@ -131,6 +131,34 @@ mod tests {
             result
                 .to_string()
                 .contains("orders : :: fabrique :: HasMany :: default ()")
+        );
+    }
+
+    #[test]
+    fn test_generate_from_row_with_type_conversion() {
+        // Arrange - field with #[fabrique(as = "String")]
+        let input = parse_quote! {
+            struct Account {
+                id: String,
+                #[fabrique(as = "String")]
+                status: Status,
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = FromRowCodegen::new(&analysis);
+
+        // Act
+        let result = codegen.generate();
+
+        // Assert - should generate try_from conversion code
+        let result_str = result.to_string();
+        assert!(
+            result_str.contains("try_from"),
+            "should use try_from for type conversion"
+        );
+        assert!(
+            result_str.contains("Conversion"),
+            "should handle conversion errors"
         );
     }
 }

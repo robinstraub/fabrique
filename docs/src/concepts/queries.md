@@ -6,12 +6,12 @@ Once you have created a model and its corresponding database table, you are read
 
 The model's `all` method retrieves all of the records from the model's associated database table:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
@@ -19,23 +19,23 @@ The model's `all` method retrieves all of the records from the model's associate
 #     id: Uuid,
 # }
 #
-# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 let products: Vec<Product> = Product::all(&pool).await?;
 # Ok(())
 # }
-# fn main() {}
 ```
 
 ## Building Queries
 
 The `all` method returns all results in the model's table. Since each Fabrique model serves as a query builder, you may add additional constraints to queries and then invoke the `get` method to retrieve the results:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
@@ -44,7 +44,8 @@ The `all` method returns all results in the model's table. Since each Fabrique m
 #     price_cents: i32,
 # }
 #
-# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 let products: Vec<Product> = Product::query()
     .select()
     .r#where(Product::PRICE_CENTS, ">=", 42)
@@ -52,7 +53,6 @@ let products: Vec<Product> = Product::query()
     .await?;
 # Ok(())
 # }
-# fn main() {}
 ```
 
 ## Retrieving Results
@@ -63,18 +63,19 @@ Fabrique provides several methods to execute a query and retrieve results:
 
 Returns all records matching the query as a `Vec<T>`:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
 # pub struct Product { id: Uuid, price_cents: i32 }
 #
-# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 let products: Vec<Product> = Product::query()
     .select()
     .r#where(Product::PRICE_CENTS, ">", 50)
@@ -82,25 +83,25 @@ let products: Vec<Product> = Product::query()
     .await?;
 # Ok(())
 # }
-# fn main() {}
 ```
 
 ### `first` — First or None
 
 Returns the first matching record as `Option<T>`:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
 # pub struct Product { id: Uuid, price_cents: i32 }
 #
-# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 let product: Option<Product> = Product::query()
     .select()
     .r#where(Product::PRICE_CENTS, ">", 100)
@@ -108,25 +109,26 @@ let product: Option<Product> = Product::query()
     .await?;
 # Ok(())
 # }
-# fn main() {}
 ```
 
 ### `first_or_fail` — First or Error
 
 Returns the first matching record, or an error if none found:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Product { id: Uuid, price_cents: i32 }
+# pub struct Product { id: Uuid, name: String, price_cents: i32 }
 #
-# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# Product::factory().price_cents(150).create(&pool).await?;
 let product: Product = Product::query()
     .select()
     .r#where(Product::PRICE_CENTS, ">", 100)
@@ -134,14 +136,13 @@ let product: Product = Product::query()
     .await?;
 # Ok(())
 # }
-# fn main() {}
 ```
 
 ## Column Constants
 
 When you derive the `Model` macro, Fabrique generates column constants for each field. These constants are used in query methods to provide type-safe column references:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
 # extern crate uuid;
@@ -169,12 +170,12 @@ Fabrique supports bidirectional joins between related models. When you define a 
 
 Use the `join::<T>()` method to add an INNER JOIN to your query:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
@@ -182,7 +183,8 @@ Use the `join::<T>()` method to add an INNER JOIN to your query:
 # #[derive(Factory, Model)]
 # pub struct Order { id: Uuid, #[fabrique(belongs_to = "User")] user_id: Uuid }
 #
-# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 // Parent → Child: User joining Orders
 let users = User::query()
     .join::<Order>()
@@ -199,7 +201,6 @@ let orders = Order::query()
     .await?;
 # Ok(())
 # }
-# fn main() {}
 ```
 
 Both directions work seamlessly — Fabrique generates the appropriate `Joinable` implementations when you define a `belongs_to` relationship.
@@ -208,12 +209,12 @@ Both directions work seamlessly — Fabrique generates the appropriate `Joinable
 
 For many-to-many relationships with a join table, use `join_through`:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
@@ -224,7 +225,8 @@ For many-to-many relationships with a join table, use `join_through`:
 # #[fabrique(table = "order_lines")]
 # pub struct OrderLine { #[fabrique(primary_key, belongs_to = "Order")] order_id: Uuid, #[fabrique(primary_key, belongs_to = "Product")] product_id: Uuid }
 #
-# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 let orders = Order::query()
     .join::<OrderLine>()
     .join_through::<Product, OrderLine, _>()
@@ -233,19 +235,18 @@ let orders = Order::query()
     .await?;
 # Ok(())
 # }
-# fn main() {}
 ```
 
 ### Selecting from Joined Models
 
 By default, `select()` returns the root model's columns. To select columns from a joined model instead, use `select_as`:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
@@ -253,7 +254,8 @@ By default, `select()` returns the root model's columns. To select columns from 
 # #[derive(Factory, Model)]
 # pub struct Order { id: Uuid, status: String, #[fabrique(belongs_to = "User")] user_id: Uuid }
 #
-# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 // Returns Vec<Order> instead of Vec<User>
 let orders: Vec<Order> = User::query()
     .join::<Order>()
@@ -263,7 +265,6 @@ let orders: Vec<Order> = User::query()
     .await?;
 # Ok(())
 # }
-# fn main() {}
 ```
 
 The compiler verifies that the selected model is in the join list. Attempting to select from a model that hasn't been joined causes a compile-time error.
@@ -272,9 +273,10 @@ The compiler verifies that the selected model is in the join list. Attempting to
 
 Column constants are not just names — they carry type information. When using `r#where`, the value must match the column's type:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
 # use uuid::Uuid;
@@ -293,6 +295,7 @@ Column constants are not just names — they carry type information. When using 
 ```rust,compile_fail
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
 # use uuid::Uuid;

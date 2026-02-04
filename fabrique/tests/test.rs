@@ -1,5 +1,5 @@
 use fabrique::prelude::*;
-use sqlx::{Pool, Postgres};
+use sqlx::Pool;
 use uuid::Uuid;
 
 #[derive(Debug, Default, Factory, PartialEq, Model)]
@@ -11,15 +11,15 @@ pub struct Product {
     pub in_stock: bool,
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_persistable_macro_compiles(connection: Pool<Postgres>) {
+#[fabrique_derive::test]
+async fn test_persistable_macro_compiles(connection: Pool<Backend>) {
     let result = Product::all(&connection).await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap().len(), 0);
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_create(connection: Pool<Postgres>) {
+#[fabrique_derive::test]
+async fn test_create(connection: Pool<Backend>) {
     let result = Product::factory()
         .name("Anvil 3000".to_owned())
         .price_cents(9999)
@@ -34,8 +34,8 @@ async fn test_create(connection: Pool<Postgres>) {
     assert!(product.in_stock);
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_delete(connection: Pool<Postgres>) {
+#[fabrique_derive::test]
+async fn test_delete(connection: Pool<Backend>) {
     let product = Product::factory().create(&connection).await.unwrap();
     let existing = Product::all(&connection).await.unwrap();
     assert!(!existing.is_empty());
@@ -45,8 +45,8 @@ async fn test_delete(connection: Pool<Postgres>) {
     assert!(existing.is_empty());
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_destroy(connection: Pool<Postgres>) {
+#[fabrique_derive::test]
+async fn test_destroy(connection: Pool<Backend>) {
     let id = Uuid::new_v4();
     Product::factory().id(id).create(&connection).await.unwrap();
     let result = Product::destroy(&connection, id).await;
@@ -55,8 +55,8 @@ async fn test_destroy(connection: Pool<Postgres>) {
     assert_eq!(products.len(), 0);
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_all(connection: Pool<Postgres>) {
+#[fabrique_derive::test]
+async fn test_all(connection: Pool<Backend>) {
     let product = Product::factory().create(&connection).await.unwrap();
 
     let result = Product::all(&connection).await;
@@ -64,8 +64,8 @@ async fn test_all(connection: Pool<Postgres>) {
     assert_eq!(result.unwrap(), vec![product]);
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_query_builder(connection: Pool<Postgres>) {
+#[fabrique_derive::test]
+async fn test_query_builder(connection: Pool<Backend>) {
     Product::factory()
         .name("Anvil 3000".to_owned())
         .price_cents(9999)

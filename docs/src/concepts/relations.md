@@ -14,7 +14,7 @@ These relationships enable:
 
 A belongs-to relationship indicates that a model holds a foreign key to another model. When you mark a field with `belongs_to`, Fabrique learns which model is being referenced. Combined with the referenced model's primary key (defined via the [Model](models.md) derive), Fabrique can establish the link between the two tables.
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
 # extern crate uuid;
@@ -44,7 +44,7 @@ This bidirectional join support means you can join in either direction regardles
 
 A has-many relationship is declared on the parent side to indicate it has multiple related records. The `HasMany<T>` field is not stored in the database; it's a marker that tells Fabrique to generate a lazy loading method.
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
 # extern crate uuid;
@@ -72,7 +72,7 @@ This generates an `orders()` method on `User` that returns a [query builder](que
 
 For many-to-many relationships, use the `through` attribute to specify a join model. The join model must have `belongs_to` relationships to both sides of the many-to-many relationship:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
 # extern crate uuid;
@@ -116,7 +116,14 @@ When a model has multiple foreign keys pointing to the same parent type, Fabriqu
 
 Consider a `Message` model with two references to `User`:
 
-```rust,ignore
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+# #[derive(Model)]
+# pub struct User { id: Uuid }
 #[derive(Model)]
 pub struct Message {
     id: Uuid,
@@ -127,11 +134,12 @@ pub struct Message {
     #[fabrique(belongs_to = "User")]
     recipient_id: Uuid,
 }
+# fn main() {}
 ```
 
 Since both fields reference `User`, Fabrique cannot determine which foreign key to use for a `HasMany<Message>` relationship. On the parent model, you must specify which foreign key each has-many relationship uses:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
 # extern crate uuid;

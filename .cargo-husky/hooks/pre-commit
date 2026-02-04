@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -e
+
+echo '+cargo fmt -- --check'
+cargo fmt -- --check
+echo '+cargo clippy --features sqlite --workspace -- -D warnings'
+cargo clippy --features sqlite --workspace -- -D warnings
+echo '+cargo test --features sqlite --workspace --exclude ui-tests'
+cargo test --features sqlite --workspace --exclude ui-tests
+echo '+cargo test -p ui-tests'
+cargo test -p ui-tests
