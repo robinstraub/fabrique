@@ -14,6 +14,9 @@ all-features = true
 [features]
 default = ["fake"]
 fake = ["dep:fake"]
+postgres = ["fabrique-core/postgres", "fabrique-derive/postgres"]
+mysql = ["fabrique-core/mysql", "fabrique-derive/mysql"]
+sqlite = ["fabrique-core/sqlite", "fabrique-derive/sqlite"]
 
 [dependencies]
 fabrique-core = { path = "../fabrique-core", version = "0.2.0" }

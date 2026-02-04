@@ -6,12 +6,12 @@ Factories provide a convenient way to generate model instances for testing and d
 
 Each model with `#[derive(Factory)]` gets a builder struct that mirrors its fields. Call `Model::factory()` to get a builder, set any fields you care about, then call `create()` to persist:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Model, Factory)]
@@ -21,14 +21,17 @@ Each model with `#[derive(Factory)]` gets a builder struct that mirrors its fiel
 #     price_cents: i32,
 # }
 #
-# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 let product = Product::factory()
     .name("Anvil 3000".to_string())  // Override name
     .create(&pool)                    // id and price_cents use defaults
     .await?;
+
+// The overridden field has the specified value
+assert_eq!(product.name, "Anvil 3000");
 # Ok(())
 # }
-# fn main() {}
 ```
 
 Fields you don't set are filled with generated values automatically.
@@ -39,7 +42,7 @@ By default, factories generate random values for all fields using the [fake](htt
 
 For more realistic data, use the `faker` attribute to specify a custom faker expression:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
 # extern crate uuid;
@@ -79,37 +82,43 @@ Factories understand model relationships and provide methods to create related r
 - **`for_<relation>()`** - Set a belongs-to relationship (accepts a model instance or another factory)
 - **`has_<relation>(factory, count)`** - Create child records for has-many relationships
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Model, Factory)]
-# pub struct Customer {
+# pub struct User {
 #     id: Uuid,
 #     name: String,
+#     email: String,
 #     orders: HasMany<Order>,
 # }
 #
 # #[derive(Model, Factory)]
 # pub struct Order {
 #     id: Uuid,
-#     #[fabrique(belongs_to = "Customer")]
-#     customer_id: Uuid,
+#     status: String,
+#     #[fabrique(belongs_to = "User")]
+#     user_id: Uuid,
 # }
 #
-# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
-// Create a customer with 3 orders in one call
-let customer = Customer::factory()
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+// Create a user with 3 orders in one call
+let user = User::factory()
     .has_orders(Order::factory(), 3)
     .create(&pool)
     .await?;
+
+// The 3 orders are linked to the user
+let orders = user.orders().get(&pool).await?;
+assert_eq!(orders.len(), 3);
 # Ok(())
 # }
-# fn main() {}
 ```
 
 The factory creates the parent first, then creates children with the correct foreign key values.

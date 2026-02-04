@@ -1,76 +1,134 @@
 # Documentation Guidelines
 
-This documentation follows the [Diataxis framework](https://diataxis.fr/), which organizes
-content into four distinct types based on user needs. Use these guidelines when writing or
-reviewing documentation.
+This document describes conventions for writing Fabrique documentation.
 
-## Folder Structure
+We follow the [Diataxis framework](https://diataxis.fr/) for content organization,
+with additional conventions for Rust code examples.
 
-| Location | Diataxis Type | Purpose |
-|--------|---------------|---------|
-| `tutorials/` | Tutorials | Learning-oriented lessons |
-| `concepts/` | Explanation | Understanding-oriented background |
-| `guides/` | How-to Guides | Task-oriented problem solving |
-| Rustdoc (generated) | Reference | Information-oriented technical descriptions |
+## Diataxis Framework
 
-## Tutorials (`tutorials/`)
+| Location              | Type          | Purpose                            |
+|-----------------------|---------------|------------------------------------|
+| `tutorials/`          | Tutorials     | Learning-oriented lessons          |
+| `concepts/`           | Explanation   | Understanding-oriented background  |
+| `guides/`             | How-to Guides | Task-oriented problem solving      |
+| Rustdoc (generated)   | Reference     | Information-oriented descriptions  |
+
+### Tutorials (`tutorials/`)
 
 > [diataxis.fr/tutorials](https://diataxis.fr/tutorials/)
 
 **Purpose**: Help users *learn* through guided, hands-on experience.
 
-**DO:**
-- Show the destination upfront
-- Deliver visible results early and often
-- Use concrete, specific steps
-- Ensure every step works reliably
+**DO:** Show the destination upfront, deliver visible results early, use
+concrete steps, ensure every step works reliably.
 
-**DON'T:**
-- Explain concepts in detail (link to `concepts/` instead)
-- Offer alternatives or options
-- Assume prior knowledge
+**DON'T:** Explain concepts in detail, offer alternatives, assume prior
+knowledge.
 
-## How-to Guides (`guides/`)
+### How-to Guides (`guides/`)
 
 > [diataxis.fr/how-to-guides](https://diataxis.fr/how-to-guides/)
 
 **Purpose**: Help users *accomplish* a specific task.
 
-**DO:**
-- Focus on a single, well-defined goal
-- Use action-oriented titles ("Using X", "Working with Y")
-- Assume the reader knows what they want to achieve
-- Provide conditional guidance ("If you need X, do Y")
+**DO:** Focus on a single goal, use action-oriented titles, assume the reader
+knows what they want, provide conditional guidance.
 
-**DON'T:**
-- Teach or explain why (link to `concepts/` instead)
-- Cover multiple unrelated tasks
-- Include unnecessary reference material
+**DON'T:** Teach or explain why, cover multiple unrelated tasks.
 
-## Explanation (`concepts/`)
+### Explanation (`concepts/`)
 
 > [diataxis.fr/explanation](https://diataxis.fr/explanation/)
 
 **Purpose**: Help users *understand* how things work and why.
 
-**DO:**
-- Provide context, background, and rationale
-- Make connections between concepts
-- Discuss alternatives and trade-offs
-- Use reflective language
+**DO:** Provide context and rationale, make connections, discuss trade-offs.
 
-**DON'T:**
-- Include step-by-step instructions
-- Document API signatures (use Rustdoc)
-- Mix with how-to content
+**DON'T:** Include step-by-step instructions, document API signatures.
 
-## Reference (Rustdoc)
+### Reference (Rustdoc)
 
 > [diataxis.fr/reference](https://diataxis.fr/reference/)
 
-Reference documentation is generated via **Rustdoc** from source code comments.
-See the published API documentation at [docs.rs/fabrique](https://docs.rs/fabrique).
+Reference documentation is generated via Rustdoc from source code comments.
 
----
+## Code Conventions
 
-*See [diataxis.fr](https://diataxis.fr/) for the complete framework.*
+### Executable Examples
+
+All code examples should be executable via `mdbook test`. Use the
+`#[fabrique::doctest]` macro to set up an in-memory SQLite database:
+
+```rust
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+let user = User::factory().create(&pool).await?;
+assert_eq!(user.name, "Test User");
+# Ok(())
+# }
+```
+
+Hide the doctest wrapper with `#` prefix. The visible code should focus on the
+feature being demonstrated.
+
+### Formatting
+
+**Section headers** — For complex examples, use 80-character comment blocks to
+separate logical sections (Models, Service functions, etc.). Not needed for
+simple examples.
+
+```rust
+// -----------------------------------------------------------------------------
+// Models
+// -----------------------------------------------------------------------------
+```
+
+**Omitted code** — Use `// --snip--` to indicate code that exists but is not shown.
+
+**Hidden code** — Use `#` prefix to hide boilerplate (imports, struct definitions)
+that would distract from the main point.
+
+**Line length** — Keep all lines under 80 characters, including hidden code.
+Format struct definitions on multiple lines.
+
+**Doc comments** — Use `///` on all public functions and structs:
+
+```rust
+/// A user who can place orders.
+pub struct User { ... }
+
+/// Fetches a user and all their orders.
+pub async fn get_user_with_orders(...) { ... }
+```
+
+**Test comments** — Describe expected behavior, not mechanical actions. Use
+impersonal phrasing:
+
+```rust
+// Good: get_user_pending_orders should only return pending orders
+// Bad:  Call get_user_pending_orders and check the result
+```
+
+### Content Best Practices
+
+**Explain design decisions** — When a choice might surprise readers, explain the
+reasoning. Example: why `unit_price_cents` is stored in `order_lines` even though
+products have a price (to capture the price at purchase time).
+
+**Use realistic examples** — Prefer domain-specific names (`User`, `Order`) over
+generic ones (`Foo`, `Bar`). Use realistic values (`"Wile E. Coyote"`, `4999`
+cents) over placeholders.
+
+## Useful Commands
+
+```bash
+# Build the project
+cargo build --features sqlite
+
+# Run documentation tests
+mdbook test docs -L target/debug/deps
+
+# Preview the documentation locally
+mdbook serve docs
+```

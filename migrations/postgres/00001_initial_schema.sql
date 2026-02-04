@@ -35,3 +35,10 @@ CREATE TABLE order_lines (
     unit_price_cents INTEGER NOT NULL,
     PRIMARY KEY (order_id, product_id)
 );
+
+CREATE TABLE messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    content TEXT NOT NULL,
+    sender_id UUID NOT NULL REFERENCES users(id),
+    recipient_id UUID NOT NULL REFERENCES users(id)
+);

@@ -6,14 +6,14 @@ When a model references the same parent model multiple times, you need to tell F
 
 Start with the model that has multiple references to the same parent. Each foreign key gets its own `belongs_to` attribute:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
 # extern crate uuid;
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 # #[derive(Clone, Factory, Model)]
-# pub struct User { id: Uuid, name: String }
+# pub struct User { id: Uuid, name: String, email: String }
 #[derive(Factory, Model)]
 pub struct Message {
     id: Uuid,
@@ -32,7 +32,7 @@ pub struct Message {
 
 On the parent model, each `HasMany` relationship must specify which foreign key it uses:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
 # extern crate uuid;
@@ -64,54 +64,13 @@ pub struct User {
 
 With explicit foreign keys, lazy loading methods work as expected:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
-# #[derive(Factory, Model)]
-# pub struct Message {
-#     id: Uuid,
-#     #[fabrique(belongs_to = "User")]
-#     sender_id: Uuid,
-#     #[fabrique(belongs_to = "User")]
-#     recipient_id: Uuid,
-# }
-# #[derive(Clone, Factory, Model)]
-# pub struct User {
-#     id: Uuid,
-#     name: String,
-#     #[fabrique(foreign_key = "sender_id")]
-#     sent_messages: HasMany<Message>,
-#     #[fabrique(foreign_key = "recipient_id")]
-#     received_messages: HasMany<Message>,
-# }
-# async fn example(pool: Pool<Postgres>, user: User) -> Result<(), fabrique::Error> {
-// Get messages sent by this user
-let sent = user.sent_messages().get(&pool).await?;
-
-// Get messages received by this user
-let received = user.received_messages().get(&pool).await?;
-# Ok(())
-# }
-# fn main() {}
-```
-
-## Using Factories
-
-Use the field setter methods directly on the child factory:
-
-```rust,no_run
-# extern crate fabrique;
-# extern crate sqlx;
-# extern crate uuid;
-# use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
-# use uuid::Uuid;
-# #[derive(Clone, Factory, Model)]
-# pub struct User { id: Uuid, name: String }
 # #[derive(Factory, Model)]
 # pub struct Message {
 #     id: Uuid,
@@ -121,7 +80,52 @@ Use the field setter methods directly on the child factory:
 #     #[fabrique(belongs_to = "User")]
 #     recipient_id: Uuid,
 # }
-# async fn example(pool: Pool<Postgres>) -> Result<(), fabrique::Error> {
+# #[derive(Clone, Factory, Model)]
+# pub struct User {
+#     id: Uuid,
+#     name: String,
+#     email: String,
+#     #[fabrique(foreign_key = "sender_id")]
+#     sent_messages: HasMany<Message>,
+#     #[fabrique(foreign_key = "recipient_id")]
+#     received_messages: HasMany<Message>,
+# }
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# let user = User::factory().create(&pool).await?;
+// Get messages sent by this user
+let sent = user.sent_messages().get(&pool).await?;
+
+// Get messages received by this user
+let received = user.received_messages().get(&pool).await?;
+# Ok(())
+# }
+```
+
+## Using Factories
+
+Use the field setter methods directly on the child factory:
+
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+# #[derive(Clone, Factory, Model)]
+# pub struct User { id: Uuid, name: String, email: String }
+# #[derive(Factory, Model)]
+# pub struct Message {
+#     id: Uuid,
+#     content: String,
+#     #[fabrique(belongs_to = "User")]
+#     sender_id: Uuid,
+#     #[fabrique(belongs_to = "User")]
+#     recipient_id: Uuid,
+# }
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 let alice = User::factory()
     .name("Alice".to_string())
     .create(&pool)
@@ -139,9 +143,12 @@ let message = Message::factory()
     .recipient_id(bob.id)
     .create(&pool)
     .await?;
+
+// The message references both users
+assert_eq!(message.sender_id, alice.id);
+assert_eq!(message.recipient_id, bob.id);
 # Ok(())
 # }
-# fn main() {}
 ```
 
 ## Why No for_user Method?

@@ -1,5 +1,6 @@
 use crate::Analysis;
 use crate::analysis::ast::ColumnField;
+use crate::codegen::placeholder;
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -39,7 +40,7 @@ impl<'a> HardDeleteCodegen<'a> {
         let clause = primary_key
             .clone()
             .enumerate()
-            .map(|(i, field)| format!("{} = ${}", field.ident, i + 1))
+            .map(|(i, field)| format!("{} = {}", field.ident, placeholder(i + 1)))
             .collect::<Vec<_>>()
             .join(" AND ");
 
@@ -74,7 +75,7 @@ impl<'a> HardDeleteCodegen<'a> {
         let clause = primary_key
             .iter()
             .enumerate()
-            .map(|(i, field)| format!("{} = ${}", field.ident, i + 1))
+            .map(|(i, field)| format!("{} = {}", field.ident, placeholder(i + 1)))
             .collect::<Vec<_>>()
             .join(" AND ");
 
@@ -113,17 +114,51 @@ mod tests {
     use super::*;
     use syn::parse_quote;
 
+    #[cfg(any(feature = "sqlite", feature = "mysql"))]
     #[test]
     fn test_a_basic_struct_derive_delete() {
-        // Arrange the codegen
         let input = parse_quote! { struct Anvil { id: String } };
         let analysis = Analysis::from(&input).unwrap();
         let codegen = HardDeleteCodegen::new(&analysis);
-
-        // Act the call to the generate method
         let result = codegen.generate();
 
-        // Assert the result
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                impl ::fabrique::HardDelete for Anvil {
+                    fn hard_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        async move {
+                            ::sqlx::query("DELETE FROM anvils WHERE id = ?").bind(id).execute(executor).await?;
+                            Ok(())
+                        }
+                    }
+
+                    fn hard_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        async move {
+                            ::sqlx::query("DELETE FROM anvils WHERE id = ?").bind(self.id).execute(executor).await?;
+                            Ok(())
+                        }
+                    }
+                }
+            }
+            .to_string()
+        );
+    }
+
+    #[cfg(feature = "postgres")]
+    #[test]
+    fn test_a_basic_struct_derive_delete() {
+        let input = parse_quote! { struct Anvil { id: String } };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = HardDeleteCodegen::new(&analysis);
+        let result = codegen.generate();
+
         assert_eq!(
             result.to_string(),
             quote! {
@@ -153,9 +188,9 @@ mod tests {
         );
     }
 
+    #[cfg(any(feature = "sqlite", feature = "mysql"))]
     #[test]
     fn test_composite_keys() {
-        // Arrange the codegen
         let input = parse_quote! {
             struct Anvil {
                 #[fabrique(primary_key)]
@@ -167,11 +202,53 @@ mod tests {
         };
         let analysis = Analysis::from(&input).unwrap();
         let codegen = HardDeleteCodegen::new(&analysis);
-
-        // Act the call to the generate method
         let result = codegen.generate();
 
-        // Assert the result
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                impl ::fabrique::HardDelete for Anvil {
+                    fn hard_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        async move {
+                            ::sqlx::query("DELETE FROM anvils WHERE user_id = ? AND organization_id = ?").bind(id.0).bind(id.1).execute(executor).await?;
+                            Ok(())
+                        }
+                    }
+
+                    fn hard_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where
+                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    {
+                        async move {
+                            ::sqlx::query("DELETE FROM anvils WHERE user_id = ? AND organization_id = ?").bind(self.user_id).bind(self.organization_id).execute(executor).await?;
+                            Ok(())
+                        }
+                    }
+                }
+            }
+            .to_string()
+        );
+    }
+
+    #[cfg(feature = "postgres")]
+    #[test]
+    fn test_composite_keys() {
+        let input = parse_quote! {
+            struct Anvil {
+                #[fabrique(primary_key)]
+                user_id: uuid::Uuid,
+
+                #[fabrique(primary_key)]
+                organization_id: uuid::Uuid
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = HardDeleteCodegen::new(&analysis);
+        let result = codegen.generate();
+
         assert_eq!(
             result.to_string(),
             quote! {

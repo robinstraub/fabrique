@@ -1,3 +1,5 @@
+#![feature(coverage_attribute)]
+
 //! Procedural macros for generating factory and model code.
 //!
 //! This crate provides two derive macros:
@@ -7,7 +9,7 @@
 //!   operations
 
 use proc_macro::TokenStream;
-use syn::{DeriveInput, parse_macro_input};
+use syn::{DeriveInput, ItemFn, parse_macro_input};
 
 mod analysis;
 mod codegen;
@@ -81,4 +83,78 @@ pub fn derive_factory(input: TokenStream) -> TokenStream {
     };
 
     FactoryCodegen::new(&analysis).generate_factory().into()
+}
+
+/// Test helper that wraps `#[sqlx::test]` with the correct migrations path
+/// for the active database backend.
+///
+/// ```rust,ignore
+/// #[fabrique::test]
+/// async fn test_create(pool: Pool<Backend>) {
+///     let product = Product::factory().create(&pool).await.unwrap();
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn test(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemFn);
+
+    #[cfg(feature = "postgres")]
+    let migrations = "../migrations/postgres";
+    #[cfg(feature = "sqlite")]
+    let migrations = "../migrations/sqlite";
+    #[cfg(feature = "mysql")]
+    let migrations = "../migrations/mysql";
+
+    quote::quote! {
+        #[::sqlx::test(migrations = #migrations)]
+        #input
+    }
+    .into()
+}
+
+/// Creates an in-memory SQLite database with migrations for documentation
+/// examples.
+///
+/// This macro transforms an async function into an executable doctest. It sets
+/// up a Tokio runtime, creates an in-memory SQLite database, runs migrations,
+/// and provides the connection pool to your test code. Use `pool` as the
+/// parameter name.
+///
+/// ```rust,ignore
+/// # extern crate fabrique;
+/// # extern crate tokio;
+/// # extern crate uuid;
+/// # use fabrique::prelude::*;
+/// # #[derive(Model, Factory)]
+/// # pub struct User { id: uuid::Uuid, name: String, email: String }
+/// #[fabrique::doctest]
+/// async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+///     let user = User::factory().create(&pool).await?;
+///     user.delete(&pool).await?;
+///     Ok(())
+/// }
+/// ```
+// Tested via mdbook doctests, not unit tests - coverage measured separately
+#[coverage(off)]
+#[proc_macro_attribute]
+pub fn doctest(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemFn);
+    let block = &input.block;
+
+    quote::quote! {
+        fn main() {
+            ::tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to create Tokio runtime")
+                .block_on(async {
+                    let pool = ::fabrique::__private::doctest_pool()
+                        .await
+                        .expect("Failed to create doctest pool");
+                    let __result: Result<(), ::fabrique::Error> = async #block.await;
+                    __result.expect("Doctest failed");
+                });
+        }
+    }
+    .into()
 }

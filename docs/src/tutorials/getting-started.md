@@ -17,7 +17,7 @@ You're working on an e-commerce website. The frontend team has defined the API c
 Here's what you're given — a `Product` struct and service function stubs that need implementation:
 
 ```rust,ignore
-use sqlx::{Pool, Postgres};
+use fabrique::prelude::*;
 use uuid::Uuid;
 
 pub struct Product {
@@ -29,7 +29,7 @@ pub struct Product {
 
 // Find a product by its ID
 pub async fn find_product_by_id(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
     id: Uuid,
 ) -> Result<Product, Box<dyn std::error::Error>> {
     unimplemented!()
@@ -37,14 +37,14 @@ pub async fn find_product_by_id(
 
 // List all products currently in stock
 pub async fn list_available_products(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
 ) -> Result<Vec<Product>, Box<dyn std::error::Error>> {
     unimplemented!()
 }
 
 // Create a new product
 pub async fn create_product(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
     name: String,
     price_cents: i32,
 ) -> Result<Product, Box<dyn std::error::Error>> {
@@ -53,7 +53,7 @@ pub async fn create_product(
 
 // Update a product's price
 pub async fn update_product_price(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
     id: Uuid,
     new_price_cents: i32,
 ) -> Result<Product, Box<dyn std::error::Error>> {
@@ -62,7 +62,7 @@ pub async fn update_product_price(
 
 // Delete a product
 pub async fn delete_product(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
     id: Uuid,
 ) -> Result<(), Box<dyn std::error::Error>> {
     unimplemented!()
@@ -135,7 +135,6 @@ Fabrique automatically:
 # extern crate sqlx;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Model)]
@@ -147,7 +146,7 @@ Fabrique automatically:
 # }
 #
 pub async fn find_product_by_id(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
     id: Uuid,
 ) -> Result<Product, fabrique::Error> {
     Product::find(pool, id).await
@@ -164,7 +163,6 @@ This queries `SELECT * FROM products WHERE id = $1` and returns the matching rec
 # extern crate sqlx;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Model)]
@@ -176,7 +174,7 @@ This queries `SELECT * FROM products WHERE id = $1` and returns the matching rec
 # }
 #
 pub async fn list_available_products(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
 ) -> Result<Vec<Product>, fabrique::Error> {
     Product::query()
         .select()
@@ -203,7 +201,6 @@ Column constants like `Product::IN_STOCK` are type-safe — passing the wrong ty
 # extern crate sqlx;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Model)]
@@ -215,7 +212,7 @@ Column constants like `Product::IN_STOCK` are type-safe — passing the wrong ty
 # }
 #
 pub async fn create_product(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
     name: String,
     price_cents: i32,
 ) -> Result<Product, fabrique::Error> {
@@ -240,7 +237,6 @@ The `create` method inserts the record and returns it. If a record with the same
 # extern crate sqlx;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Model)]
@@ -252,7 +248,7 @@ The `create` method inserts the record and returns it. If a record with the same
 # }
 #
 pub async fn update_product_price(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
     id: Uuid,
     new_price_cents: i32,
 ) -> Result<Product, fabrique::Error> {
@@ -276,7 +272,6 @@ The pattern is: fetch, modify, save. The `save` method performs an upsert — it
 # extern crate sqlx;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Model)]
@@ -288,7 +283,7 @@ The pattern is: fetch, modify, save. The `save` method performs an upsert — it
 # }
 #
 pub async fn delete_product(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
     id: Uuid,
 ) -> Result<(), fabrique::Error> {
     Product::destroy(pool, id).await
@@ -304,7 +299,7 @@ Here's the full working code:
 
 ```rust,ignore
 use fabrique::prelude::*;
-use sqlx::{Pool, Postgres};
+use fabrique::prelude::*;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Model)]
@@ -316,14 +311,14 @@ pub struct Product {
 }
 
 pub async fn find_product_by_id(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
     id: Uuid,
 ) -> Result<Product, fabrique::Error> {
     Product::find(pool, id).await
 }
 
 pub async fn list_available_products(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
 ) -> Result<Vec<Product>, fabrique::Error> {
     Product::query()
         .select()
@@ -333,7 +328,7 @@ pub async fn list_available_products(
 }
 
 pub async fn create_product(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
     name: String,
     price_cents: i32,
 ) -> Result<Product, fabrique::Error> {
@@ -347,7 +342,7 @@ pub async fn create_product(
 }
 
 pub async fn update_product_price(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
     id: Uuid,
     new_price_cents: i32,
 ) -> Result<Product, fabrique::Error> {
@@ -361,7 +356,7 @@ pub async fn update_product_price(
 }
 
 pub async fn delete_product(
-    pool: &Pool<Postgres>,
+    pool: &Pool<Backend>,
     id: Uuid,
 ) -> Result<(), fabrique::Error> {
     Product::destroy(pool, id).await
@@ -424,7 +419,6 @@ Now write tests:
 # extern crate sqlx;
 # extern crate uuid;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Factory, Model)]
@@ -436,7 +430,7 @@ Now write tests:
 # }
 #
 # pub async fn list_available_products(
-#     pool: &Pool<Postgres>,
+#     pool: &Pool<Backend>,
 # ) -> Result<Vec<Product>, fabrique::Error> {
 #     Product::query()
 #         .select()
@@ -447,7 +441,7 @@ Now write tests:
 # }
 #
 // Example test using sqlx::test
-async fn test_list_available_products_excludes_out_of_stock(pool: Pool<Postgres>) {
+async fn test_list_available_products_excludes_out_of_stock(pool: Pool<Backend>) {
     // Arrange
     Product::factory().in_stock(true).create(&pool).await.unwrap();
     Product::factory().in_stock(true).create(&pool).await.unwrap();

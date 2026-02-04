@@ -9,6 +9,11 @@ homepage = "https://github.com/robinstraub/fabrique"
 documentation = "https://docs.rs/fabrique-core"
 
 
+[features]
+postgres = ["sqlx/postgres"]
+mysql = ["sqlx/mysql"]
+sqlite = ["sqlx/sqlite"]
+
 [dependencies]
 sqlx = { workspace = true }
 thiserror = "2"
@@ -17,4 +22,5 @@ thiserror = "2"
 fabrique-derive = { path = "../fabrique-derive" }
 fabrique = { path = "../fabrique" }
 sqlx = { workspace = true, features = ["runtime-tokio", "uuid"] }
+tokio = { version = "1", features = ["rt", "macros"] }
 uuid = { version = "1", features = ["v4"] }

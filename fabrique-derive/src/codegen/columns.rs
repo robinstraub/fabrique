@@ -148,4 +148,59 @@ mod tests {
             .to_string()
         );
     }
+
+    #[test]
+    fn test_generate_columns_with_type_conversion() {
+        // Arrange
+        let input = parse_quote! {
+            struct Account {
+                id: String,
+                #[fabrique(as = "String")]
+                status: Status,
+            }
+        };
+        let analysis = Analysis::from(&input).unwrap();
+        let codegen = ColumnsCodegen::new(&analysis);
+
+        // Act
+        let result = codegen.generate();
+
+        // Assert
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                pub struct AccountIdColumn;
+                pub struct AccountStatusColumn;
+
+                impl ::fabrique::Column<Account> for AccountIdColumn {
+                    type Type = String;
+
+                    fn name(&self) -> &'static str {
+                        "id"
+                    }
+
+                    fn qualified_name(&self) -> &'static str {
+                        "accounts.id"
+                    }
+                }
+                impl ::fabrique::Column<Account> for AccountStatusColumn {
+                    type Type = String;
+
+                    fn name(&self) -> &'static str {
+                        "status"
+                    }
+
+                    fn qualified_name(&self) -> &'static str {
+                        "accounts.status"
+                    }
+                }
+
+                impl Account {
+                    pub const ID: AccountIdColumn = AccountIdColumn;
+                    pub const STATUS: AccountStatusColumn = AccountStatusColumn;
+                }
+            }
+            .to_string()
+        );
+    }
 }

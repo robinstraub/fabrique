@@ -31,7 +31,6 @@
 //!
 //! ```rust,no_run
 //! use fabrique::prelude::*;
-//! use sqlx::PgPool;
 //!
 //! // Define a model
 //! #[derive(Model, Factory)]
@@ -41,7 +40,7 @@
 //!     price_cents: i32,
 //! }
 //!
-//! # async fn example(db: &PgPool) -> Result<(), fabrique::Error> {
+//! # async fn example(db: &Pool<Backend>) -> Result<(), fabrique::Error> {
 //! // Query the database
 //! let expensive_products: Vec<Product> = Product::query()
 //!     .select()
@@ -119,3 +118,9 @@ pub mod model;
 pub mod prelude;
 pub mod relation;
 pub mod sql;
+
+#[cfg(feature = "sqlite")]
+#[doc(hidden)]
+pub use fabrique_core::__private;
+
+pub use fabrique_derive::doctest;

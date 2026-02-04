@@ -1,19 +1,16 @@
 [workspace]
 
-members = ["fabrique-derive", "fabrique", "fabrique-core"]
+members = ["fabrique-derive", "fabrique", "fabrique-core", "ui-tests"]
 
 resolver = "3"
 
 [workspace.dependencies]
 sqlx = { version = "0.9.0-alpha.1", features = [
+  "chrono",
   "runtime-tokio",
-  "postgres",
   "uuid",
 ] }
 cargo-husky = { version = "1", default-features = false, features = [
-  "precommit-hook",
-  "run-cargo-fmt",
-  "run-cargo-clippy",
-  "run-cargo-test",
+  "user-hooks",
 ] }
 fake = { version = "4", features = ["uuid", "chrono"] }

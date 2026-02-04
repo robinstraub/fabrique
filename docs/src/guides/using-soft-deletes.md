@@ -6,9 +6,13 @@ Soft deletes allow you to mark records as deleted without actually removing them
 
 To enable soft deletes, add a field annotated with `#[fabrique(soft_delete)]`. The field type must be an optional datetime:
 
-```rust,ignore
-# use fabrique::prelude::*;
-# use uuid::Uuid;
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
+# extern crate chrono;
+use fabrique::prelude::*;
+use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
 #[derive(Factory, Model)]
@@ -18,28 +22,38 @@ pub struct User {
     #[fabrique(soft_delete)]
     deleted_at: Option<DateTime<Utc>>,
 }
+# fn main() {}
 ```
 
 ## Deleting Records
 
 When you call `delete` on a model with soft deletes enabled, the `deleted_at` column is set to the current timestamp instead of removing the record:
 
-```rust,ignore
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# extern crate chrono;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 # use chrono::{DateTime, Utc};
 #
 # #[derive(Factory, Model)]
 # pub struct User {
 #     id: Uuid,
+#     name: String,
+#     email: String,
 #     #[fabrique(soft_delete)]
 #     deleted_at: Option<DateTime<Utc>>,
 # }
 #
-# async fn example(pool: Pool<Postgres>, user: User) -> Result<(), fabrique::Error> {
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+// Create a user into the database
+let user = User::factory().create(&pool).await?;
+
 user.delete(&pool).await?;
-// Record still exists with deleted_at set
 # Ok(())
 # }
 ```
@@ -50,23 +64,33 @@ Soft-deleted records are automatically excluded from query results.
 
 Use the `trashed` method to check if a model has been soft deleted:
 
-```rust,ignore
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# extern crate chrono;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 # use chrono::{DateTime, Utc};
 #
 # #[derive(Factory, Model)]
 # pub struct User {
 #     id: Uuid,
+#     name: String,
+#     email: String,
 #     #[fabrique(soft_delete)]
 #     deleted_at: Option<DateTime<Utc>>,
 # }
 #
-# async fn example(pool: Pool<Postgres>, user: User) -> Result<(), fabrique::Error> {
-if user.trashed(&pool).await? {
-    println!("This user has been deleted");
-}
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# let user = User::factory().create(&pool).await?;
+# let id = user.id;
+# user.delete(&pool).await?;
+// Retrieve a soft-deleted user by its id
+let user = User::find(&pool, id).await?;
+assert!(user.trashed(&pool).await?);
 # Ok(())
 # }
 ```
@@ -75,22 +99,37 @@ if user.trashed(&pool).await? {
 
 To restore a soft-deleted record, use the `restore` method:
 
-```rust,ignore
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# extern crate chrono;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 # use chrono::{DateTime, Utc};
 #
 # #[derive(Factory, Model)]
 # pub struct User {
 #     id: Uuid,
+#     name: String,
+#     email: String,
 #     #[fabrique(soft_delete)]
 #     deleted_at: Option<DateTime<Utc>>,
 # }
 #
-# async fn example(pool: Pool<Postgres>, user: User) -> Result<(), fabrique::Error> {
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# let user = User::factory().create(&pool).await?;
+# let id = user.id;
+# user.delete(&pool).await?;
+// Retrieve a soft-deleted user by its id
+let user = User::find(&pool, id).await?;
 user.restore(&pool).await?;
+
 // deleted_at is now null, record appears in queries again
+let user = User::find(&pool, id).await?;
+assert!(!user.trashed(&pool).await?);
 # Ok(())
 # }
 ```
@@ -99,22 +138,32 @@ user.restore(&pool).await?;
 
 To permanently remove a soft-deleted record from the database, use `hard_delete`:
 
-```rust,ignore
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# extern crate chrono;
 # use fabrique::prelude::*;
-# use sqlx::{Pool, Postgres};
 # use uuid::Uuid;
 # use chrono::{DateTime, Utc};
 #
 # #[derive(Factory, Model)]
 # pub struct User {
 #     id: Uuid,
+#     name: String,
+#     email: String,
 #     #[fabrique(soft_delete)]
 #     deleted_at: Option<DateTime<Utc>>,
 # }
 #
-# async fn example(pool: Pool<Postgres>, user: User) -> Result<(), fabrique::Error> {
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+// Create a user into the database
+let user = User::factory().create(&pool).await?;
+
+// Permanently remove the record
 user.hard_delete(&pool).await?;
-// Record is permanently removed
 # Ok(())
 # }
 ```

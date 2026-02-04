@@ -1,0 +1,13 @@
+[package]
+name = "ui-tests"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+fabrique = { path = "../fabrique", features = ["sqlite"] }
+fabrique-derive = { path = "../fabrique-derive", features = ["sqlite"] }
+sqlx = { workspace = true, features = ["sqlite"] }
+tokio = { version = "1", features = ["rt", "macros"] }
+trybuild = "1.0"
+uuid = "1"

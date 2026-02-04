@@ -1,5 +1,5 @@
 use fabrique::prelude::*;
-use sqlx::{Pool, Postgres};
+use sqlx::Pool;
 use uuid::Uuid;
 
 #[derive(Debug, Factory, Model)]
@@ -38,8 +38,8 @@ pub struct OrderLine {
     unit_price_cents: i32,
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_composite_primary_key(connection: Pool<Postgres>) {
+#[fabrique_derive::test]
+async fn test_composite_primary_key(connection: Pool<Backend>) {
     let user = User::factory()
         .id(Uuid::new_v4())
         .create(&connection)

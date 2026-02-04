@@ -14,12 +14,15 @@ impl<'a> DatabaseAwareCodegen<'a> {
     }
 
     /// Generates the `DatabaseAware` trait implementation.
+    ///
+    /// Uses the `Backend` type alias from `fabrique-core`, which resolves to
+    /// the concrete database type based on the active feature flag.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
 
         quote! {
             impl ::fabrique::DatabaseAware for #base_struct_ident {
-                type Database = ::sqlx::Postgres;
+                type Database = ::fabrique::Backend;
                 type Error = ::fabrique::Error;
             }
         }
@@ -41,12 +44,11 @@ mod tests {
         // Act
         let result = codegen.generate();
 
-        // Assert
         assert_eq!(
             result.to_string(),
             quote! {
                 impl ::fabrique::DatabaseAware for Anvil {
-                    type Database = ::sqlx::Postgres;
+                    type Database = ::fabrique::Backend;
                     type Error = ::fabrique::Error;
                 }
             }

@@ -1,5 +1,4 @@
 use fabrique::prelude::*;
-use sqlx::{Pool, Postgres};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Default, Factory, PartialEq, Model)]
@@ -12,8 +11,8 @@ pub struct User {
     pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_soft_delete(connection: Pool<Postgres>) {
+#[fabrique_derive::test]
+async fn test_soft_delete(connection: Pool<Backend>) {
     // Create a new row
     let id = Uuid::new_v4();
     let user = User::factory()
@@ -26,16 +25,12 @@ async fn test_soft_delete(connection: Pool<Postgres>) {
 
     // Soft delete the row
     let result = User::destroy(&connection, user.id).await;
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "destroy failed: {:?}", result.err());
     assert_eq!(User::all(&connection).await.unwrap(), vec![]);
 
     // Ensure the row still exists with a deleted_at value
     assert!(user.trashed(&connection).await.unwrap());
-    let result: User = sqlx::query_as("SELECT * FROM users WHERE id = $1")
-        .bind(id)
-        .fetch_one(&connection)
-        .await
-        .unwrap();
+    let result: User = User::find(&connection, id).await.unwrap();
     assert!(result.deleted_at.is_some());
 
     // Restore the row
