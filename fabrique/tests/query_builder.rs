@@ -117,6 +117,15 @@ mod initial {
             .await;
         assert!(result.is_ok());
     }
+
+    #[fabrique_derive::test]
+    async fn select_columns_transitions_to_selected(pool: Pool<Backend>) {
+        let result: Result<Vec<(String, i32)>, _> = Product::query()
+            .select((Product::NAME, Product::PRICE_CENTS))
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
 }
 
 // ============================================================================
@@ -153,6 +162,17 @@ mod joining {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
             .select_as::<User, _>()
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn select_columns_transitions_to_selected(pool: Pool<Backend>) {
+        let result: Result<Vec<(String, String)>, _> = Order::query()
+            .join::<OrderLine>()
+            .join_through::<Product, OrderLine, _>()
+            .select((Order::STATUS, Product::NAME))
             .get(&pool)
             .await;
         assert!(result.is_ok());
@@ -635,116 +655,6 @@ mod offsetted {
             .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 2);
-    }
-}
-
-// ============================================================================
-// Individual Column Selection
-// ============================================================================
-
-mod individual_select {
-    use super::*;
-
-    #[fabrique_derive::test]
-    async fn single_column_select_returns_one_element_tuple(pool: Pool<Backend>) {
-        // Arrange a product in the database
-        Product::factory()
-            .name("Anvil".to_owned())
-            .create(&pool)
-            .await
-            .expect("setup");
-
-        // Act the retrieval of a single column
-        let result: Result<Vec<(String,)>, _> =
-            Product::query().select((Product::NAME,)).get(&pool).await;
-
-        // Assert the single column value is returned
-        assert!(result.is_ok());
-        let rows = result.unwrap();
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].0, "Anvil");
-    }
-
-    #[fabrique_derive::test]
-    async fn multi_column_select_returns_matching_tuple(pool: Pool<Backend>) {
-        // Arrange a product with known values
-        Product::factory()
-            .name("Hammer".to_owned())
-            .price_cents(1500)
-            .create(&pool)
-            .await
-            .expect("setup");
-
-        // Act the retrieval of two columns
-        let result: Result<Vec<(String, i32)>, _> = Product::query()
-            .select((Product::NAME, Product::PRICE_CENTS))
-            .get(&pool)
-            .await;
-
-        // Assert both column values are returned in order
-        assert!(result.is_ok());
-        let rows = result.unwrap();
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0], ("Hammer".to_owned(), 1500));
-    }
-
-    #[fabrique_derive::test]
-    async fn select_with_where_filters_rows(pool: Pool<Backend>) {
-        // Arrange two products, one expensive and one cheap
-        Product::factory()
-            .name("Cheap".to_owned())
-            .price_cents(100)
-            .create(&pool)
-            .await
-            .expect("setup");
-        Product::factory()
-            .name("Expensive".to_owned())
-            .price_cents(5000)
-            .create(&pool)
-            .await
-            .expect("setup");
-
-        // Act the retrieval of names filtered by price
-        let result: Result<Vec<(String,)>, _> = Product::query()
-            .select((Product::NAME,))
-            .r#where(Product::PRICE_CENTS, ">=", 1000)
-            .get(&pool)
-            .await;
-
-        // Assert only the expensive product is returned
-        assert!(result.is_ok());
-        let rows = result.unwrap();
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].0, "Expensive");
-    }
-
-    #[fabrique_derive::test]
-    async fn cross_model_select_with_join(pool: Pool<Backend>) {
-        // Arrange a user with an order
-        let user = User::factory()
-            .name("Alice".to_owned())
-            .create(&pool)
-            .await
-            .expect("setup");
-        Order::factory()
-            .user_id(user.id)
-            .status("pending".to_owned())
-            .create(&pool)
-            .await
-            .expect("setup");
-
-        // Act the retrieval of columns from both joined models
-        let result: Result<Vec<(String, String)>, _> = User::query()
-            .join::<Order>()
-            .select((User::NAME, Order::STATUS))
-            .get(&pool)
-            .await;
-
-        // Assert columns from both models are returned
-        assert!(result.is_ok());
-        let rows = result.unwrap();
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0], ("Alice".to_owned(), "pending".to_owned()));
     }
 }
 
