@@ -40,7 +40,7 @@
 //! # struct Product { id: i32, name: String }
 //! # async fn example(pool: &sqlx::Pool<fabrique_core::database::Backend>) -> Result<(), Box<dyn std::error::Error>> {
 //! let products = Product::query()
-//!     .select()
+//!     .select_as::<Product, _>()
 //!     .r#where(Product::ID, "=", 42)
 //!     .get(pool).await?;
 //! # Ok(())
@@ -55,6 +55,7 @@
 
 use crate::database::{self, Backend, Column};
 use crate::model::Model;
+use crate::model::column_set::ColumnSet;
 use crate::model::join::{Contains, Joined, RootModel};
 use crate::relation::Joinable;
 use crate::sql::operators::{self, Direction};
@@ -460,11 +461,26 @@ where
         }
     }
 
-    /// Starts a SELECT query for this model.
+    /// Starts a SELECT query for individual columns.
+    ///
+    /// Accepts a tuple of column ZSTs (e.g., `(Product::ID, Product::NAME)`).
+    /// The output type is a tuple of the corresponding column value types.
     ///
     /// Transitions to [`Building<Selected>`] state.
-    pub fn select(self) -> QueryBuilder<Building<Joins::Database, Selected>, Joins, Joins::Root> {
-        self.select_impl::<Joins::Root>()
+    pub fn select<C, Models, Indices>(
+        self,
+        _columns: C,
+    ) -> QueryBuilder<Building<Joins::Database, Selected>, Joins, C::Output>
+    where
+        C: ColumnSet<Joins, Models, Indices>,
+    {
+        let inner =
+            SqlQueryBuilder::<Joins::Database, SqlInitial>::table(Joins::Root::table_name())
+                .select(C::qualified_names());
+        QueryBuilder {
+            state: Building { inner },
+            _marker: PhantomData,
+        }
     }
 
     /// Starts a SELECT query returning columns from a specific model.
@@ -613,13 +629,39 @@ where
         }
     }
 
-    /// Starts a SELECT query, flushing all accumulated joins.
+    /// Starts a SELECT query for individual columns, flushing all accumulated
+    /// joins.
+    ///
+    /// Accepts a tuple of column ZSTs (e.g., `(User::NAME, Order::STATUS)`).
+    /// The output type is a tuple of the corresponding column value types.
     ///
     /// Transitions to [`Building<SqlJoined<Selected>>`] state.
-    pub fn select(
+    pub fn select<C, Models, Indices>(
         self,
-    ) -> QueryBuilder<Building<Joins::Database, SqlJoined<Selected>>, Joins, Joins::Root> {
-        self.select_impl::<Joins::Root>()
+        _columns: C,
+    ) -> QueryBuilder<Building<Joins::Database, SqlJoined<Selected>>, Joins, C::Output>
+    where
+        C: ColumnSet<Joins, Models, Indices>,
+    {
+        // Create SELECT ... FROM
+        let qb = SqlQueryBuilder::<Joins::Database, SqlInitial>::table(Joins::Root::table_name())
+            .select(C::qualified_names());
+
+        // Flush accumulated joins
+        let mut joins_iter = self.state.joins.into_iter();
+        let (table, left, right) = joins_iter
+            .next()
+            .expect("Joining state guarantees at least one join");
+        let mut qb = qb.join(table, left, right);
+
+        for (table, left, right) in joins_iter {
+            qb = qb.join(table, left, right);
+        }
+
+        QueryBuilder {
+            state: Building { inner: qb },
+            _marker: PhantomData,
+        }
     }
 
     /// Starts a SELECT query returning columns from a joined model.

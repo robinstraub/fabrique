@@ -63,13 +63,8 @@ impl<'a> ColumnsCodegen<'a> {
                 impl ::fabrique::Column<#base_struct_ident> for #type_name {
                     type Type = #field_type;
 
-                    fn name(&self) -> &'static str {
-                        #column_name
-                    }
-
-                    fn qualified_name(&self) -> &'static str {
-                        #qualified_name
-                    }
+                    const NAME: &'static str = #column_name;
+                    const QUALIFIED_NAME: &'static str = #qualified_name;
                 }
             }
         });
@@ -120,24 +115,14 @@ mod tests {
                 impl ::fabrique::Column<Anvil> for AnvilIdColumn {
                     type Type = String;
 
-                    fn name(&self) -> &'static str {
-                        "id"
-                    }
-
-                    fn qualified_name(&self) -> &'static str {
-                        "anvils.id"
-                    }
+                    const NAME: &'static str = "id";
+                    const QUALIFIED_NAME: &'static str = "anvils.id";
                 }
                 impl ::fabrique::Column<Anvil> for AnvilNameColumn {
                     type Type = String;
 
-                    fn name(&self) -> &'static str {
-                        "name"
-                    }
-
-                    fn qualified_name(&self) -> &'static str {
-                        "anvils.name"
-                    }
+                    const NAME: &'static str = "name";
+                    const QUALIFIED_NAME: &'static str = "anvils.name";
                 }
 
                 impl Anvil {
@@ -175,24 +160,14 @@ mod tests {
                 impl ::fabrique::Column<Account> for AccountIdColumn {
                     type Type = String;
 
-                    fn name(&self) -> &'static str {
-                        "id"
-                    }
-
-                    fn qualified_name(&self) -> &'static str {
-                        "accounts.id"
-                    }
+                    const NAME: &'static str = "id";
+                    const QUALIFIED_NAME: &'static str = "accounts.id";
                 }
                 impl ::fabrique::Column<Account> for AccountStatusColumn {
                     type Type = String;
 
-                    fn name(&self) -> &'static str {
-                        "status"
-                    }
-
-                    fn qualified_name(&self) -> &'static str {
-                        "accounts.status"
-                    }
+                    const NAME: &'static str = "status";
+                    const QUALIFIED_NAME: &'static str = "accounts.status";
                 }
 
                 impl Account {

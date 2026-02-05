@@ -1,3 +1,4 @@
+pub mod column_set;
 pub mod join;
 mod query_builder;
 
@@ -5,6 +6,7 @@ use crate::{
     database::{Column, DatabaseAware},
     sql::Updating,
 };
+pub use column_set::ColumnSet;
 pub use join::{Joined, RootModel};
 pub use query_builder::{Building, Initial, QueryBuilder};
 
@@ -81,12 +83,12 @@ where
             match Self::soft_delete_column() {
                 Some(column) => {
                     Self::query()
-                        .select()
+                        .select_as::<Self, _>()
                         .where_null(column)
                         .get(executor)
                         .await
                 }
-                None => Self::query().select().get(executor).await,
+                None => Self::query().select_as::<Self, _>().get(executor).await,
             }
         }
     }
