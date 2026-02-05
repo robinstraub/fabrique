@@ -291,9 +291,6 @@ macro_rules! impl_get {
     ($state:ty) => {
         impl<DB: Database> QueryBuilder<DB, $state> {
             /// Executes the query and returns all matching rows.
-            ///
-            /// Supports both connection pools and transactions via the `Executor`
-            /// trait.
             pub async fn get<'e, T, E>(mut self, executor: E) -> Result<Vec<T>, sqlx::Error>
             where
                 E: Executor<'e, Database = DB>,
