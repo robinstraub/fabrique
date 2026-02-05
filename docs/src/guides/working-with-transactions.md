@@ -76,7 +76,6 @@ product.create(&mut tx).await?;
 
 // Simulating an error before commit
 let result = Product::query()
-    .select_as::<Product, _>()
     .r#where(Product::ID, "=", Uuid::nil())
     .first_or_fail(&mut *tx)
     .await;
@@ -115,7 +114,6 @@ let mut tx = pool.begin().await?;
 
 // Query builder with filter
 let products = Product::query()
-    .select_as::<Product, _>()
     .r#where(Product::IN_STOCK, "=", true)
     .get(&mut *tx)
     .await?;

@@ -47,7 +47,6 @@ assert_eq!(product.id, Uuid::default());
 # async fn example(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 // Query
 let products = Product::query()
-    .select_as::<Product, _>()
     .r#where(Product::PRICE_CENTS, ">=", 1000)
     .get(&pool)
     .await?;

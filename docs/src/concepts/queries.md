@@ -53,7 +53,6 @@ and then invoke the `get` method to retrieve the results:
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 let products: Vec<Product> = Product::query()
-    .select_as::<Product, _>()
     .r#where(Product::PRICE_CENTS, ">=", 42)
     .get(&pool)
     .await?;
@@ -83,7 +82,6 @@ Returns all records matching the query as a `Vec<T>`:
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 let products: Vec<Product> = Product::query()
-    .select_as::<Product, _>()
     .r#where(Product::PRICE_CENTS, ">", 50)
     .get(&pool)
     .await?;
@@ -109,7 +107,6 @@ Returns the first matching record as `Option<T>`:
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 let product: Option<Product> = Product::query()
-    .select_as::<Product, _>()
     .r#where(Product::PRICE_CENTS, ">", 100)
     .first(&pool)
     .await?;
@@ -136,7 +133,6 @@ Returns the first matching record, or an error if none found:
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 # Product::factory().price_cents(150).create(&pool).await?;
 let product: Product = Product::query()
-    .select_as::<Product, _>()
     .r#where(Product::PRICE_CENTS, ">", 100)
     .first_or_fail(&pool)
     .await?;
@@ -198,7 +194,6 @@ Use the `join::<T>()` method to add an INNER JOIN to your query:
 // Parent → Child: User joining Orders
 let users = User::query()
     .join::<Order>()
-    .select_as::<User, _>()
     .r#where(User::EMAIL, "=", "john@example.com".to_string())
     .get(&pool)
     .await?;
@@ -206,7 +201,6 @@ let users = User::query()
 // Child → Parent: Order joining User
 let orders = Order::query()
     .join::<User>()
-    .select_as::<Order, _>()
     .get(&pool)
     .await?;
 # Ok(())
@@ -250,7 +244,6 @@ For many-to-many relationships with a join table, use `join_through`:
 let orders = Order::query()
     .join::<OrderLine>()
     .join_through::<Product, OrderLine, _>()
-    .select_as::<Order, _>()
     .get(&pool)
     .await?;
 # Ok(())
@@ -259,8 +252,8 @@ let orders = Order::query()
 
 ### Selecting from Joined Models
 
-By default, `select_as::<RootModel, _>()` returns the root model's columns. To select
-columns from a joined model instead, specify that model's type in `select_as`:
+By default, the query returns the root model's columns. To select columns from a
+joined model instead, use `select_as` with that model's type:
 
 ```rust
 # extern crate fabrique;
@@ -380,7 +373,7 @@ Column constants are not just names — they carry type information. When using
 # pub struct Product { id: Uuid, price_cents: i32 }
 #
 # fn example() {
-# let _ = Product::query().select_as::<Product, _>()
+# let _ = Product::query()
 // ✓ Compiles: PRICE_CENTS is i32, 42 is i32
 .r#where(Product::PRICE_CENTS, ">", 42);
 # }
@@ -399,7 +392,7 @@ Column constants are not just names — they carry type information. When using
 # pub struct Product { id: Uuid, price_cents: i32 }
 #
 # fn example() {
-# let _ = Product::query().select_as::<Product, _>()
+# let _ = Product::query()
 // ✗ Won't compile: PRICE_CENTS is i32, "heavy" is &str
 .r#where(Product::PRICE_CENTS, ">", "heavy");
 # }

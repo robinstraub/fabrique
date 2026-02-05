@@ -40,7 +40,6 @@
 //! # struct Product { id: i32, name: String }
 //! # async fn example(pool: &sqlx::Pool<fabrique_core::database::Backend>) -> Result<(), Box<dyn std::error::Error>> {
 //! let products = Product::query()
-//!     .select_as::<Product, _>()
 //!     .r#where(Product::ID, "=", 42)
 //!     .get(pool).await?;
 //! # Ok(())
