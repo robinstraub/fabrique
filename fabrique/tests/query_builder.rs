@@ -71,7 +71,8 @@ mod initial {
 
     #[fabrique_derive::test]
     async fn select_transitions_to_selected(pool: Pool<Backend>) {
-        let result: Result<Vec<Product>, _> = Product::query().select().get(&pool).await;
+        let result: Result<Vec<Product>, _> =
+            Product::query().select_as::<Product, _>().get(&pool).await;
         assert!(result.is_ok());
     }
 
@@ -109,7 +110,11 @@ mod initial {
 
     #[fabrique_derive::test]
     async fn join_transitions_to_joining(pool: Pool<Backend>) {
-        let result: Result<Vec<User>, _> = User::query().join::<Order>().select().get(&pool).await;
+        let result: Result<Vec<User>, _> = User::query()
+            .join::<Order>()
+            .select_as::<User, _>()
+            .get(&pool)
+            .await;
         assert!(result.is_ok());
     }
 }
@@ -126,7 +131,7 @@ mod joining {
         let result: Result<Vec<Order>, _> = Order::query()
             .join::<User>()
             .join::<OrderLine>()
-            .select()
+            .select_as::<Order, _>()
             .get(&pool)
             .await;
         assert!(result.is_ok());
@@ -137,7 +142,7 @@ mod joining {
         let result: Result<Vec<Order>, _> = Order::query()
             .join::<OrderLine>()
             .join_through::<Product, OrderLine, _>()
-            .select()
+            .select_as::<Order, _>()
             .get(&pool)
             .await;
         assert!(result.is_ok());
@@ -145,7 +150,11 @@ mod joining {
 
     #[fabrique_derive::test]
     async fn select_transitions_to_selected(pool: Pool<Backend>) {
-        let result: Result<Vec<User>, _> = User::query().join::<Order>().select().get(&pool).await;
+        let result: Result<Vec<User>, _> = User::query()
+            .join::<Order>()
+            .select_as::<User, _>()
+            .get(&pool)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -176,7 +185,7 @@ mod selected {
             .expect("setup");
 
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
             .get(&pool)
             .await;
@@ -187,7 +196,7 @@ mod selected {
     #[fabrique_derive::test]
     async fn where_null_transitions_to_filtered(pool: Pool<Backend>) {
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .where_null(Product::NAME)
             .get(&pool)
             .await;
@@ -197,7 +206,7 @@ mod selected {
     #[fabrique_derive::test]
     async fn where_not_null_transitions_to_filtered(pool: Pool<Backend>) {
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .where_not_null(Product::NAME)
             .get(&pool)
             .await;
@@ -207,7 +216,7 @@ mod selected {
     #[fabrique_derive::test]
     async fn order_by_transitions_to_ordered(pool: Pool<Backend>) {
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .order_by(Product::NAME, "ASC")
             .get(&pool)
             .await;
@@ -216,7 +225,11 @@ mod selected {
 
     #[fabrique_derive::test]
     async fn limit_transitions_to_limited(pool: Pool<Backend>) {
-        let result: Result<Vec<Product>, _> = Product::query().select().limit(10).get(&pool).await;
+        let result: Result<Vec<Product>, _> = Product::query()
+            .select_as::<Product, _>()
+            .limit(10)
+            .get(&pool)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -224,7 +237,8 @@ mod selected {
     async fn get_executes(pool: Pool<Backend>) {
         Product::factory().create(&pool).await.expect("setup");
 
-        let result: Result<Vec<Product>, _> = Product::query().select().get(&pool).await;
+        let result: Result<Vec<Product>, _> =
+            Product::query().select_as::<Product, _>().get(&pool).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 1);
     }
@@ -233,7 +247,10 @@ mod selected {
     async fn first_executes(pool: Pool<Backend>) {
         Product::factory().create(&pool).await.expect("setup");
 
-        let result: Result<Option<Product>, _> = Product::query().select().first(&pool).await;
+        let result: Result<Option<Product>, _> = Product::query()
+            .select_as::<Product, _>()
+            .first(&pool)
+            .await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_some());
     }
@@ -242,13 +259,19 @@ mod selected {
     async fn first_or_fail_executes(pool: Pool<Backend>) {
         Product::factory().create(&pool).await.expect("setup");
 
-        let result: Result<Product, _> = Product::query().select().first_or_fail(&pool).await;
+        let result: Result<Product, _> = Product::query()
+            .select_as::<Product, _>()
+            .first_or_fail(&pool)
+            .await;
         assert!(result.is_ok());
     }
 
     #[fabrique_derive::test]
     async fn first_or_fail_fails_when_empty(pool: Pool<Backend>) {
-        let result: Result<Product, _> = Product::query().select().first_or_fail(&pool).await;
+        let result: Result<Product, _> = Product::query()
+            .select_as::<Product, _>()
+            .first_or_fail(&pool)
+            .await;
         assert!(result.is_err());
     }
 }
@@ -270,7 +293,7 @@ mod joined_selected {
 
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
-            .select()
+            .select_as::<User, _>()
             .r#where(User::EMAIL, "=", user.email)
             .get(&pool)
             .await;
@@ -288,7 +311,7 @@ mod joined_selected {
 
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
-            .select()
+            .select_as::<User, _>()
             .r#where(Order::STATUS, "=", "pending".to_string())
             .get(&pool)
             .await;
@@ -306,7 +329,7 @@ mod joined_selected {
 
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
-            .select()
+            .select_as::<User, _>()
             .order_by(User::NAME, "ASC")
             .get(&pool)
             .await;
@@ -323,7 +346,7 @@ mod joined_selected {
 
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
-            .select()
+            .select_as::<User, _>()
             .limit(10)
             .get(&pool)
             .await;
@@ -338,7 +361,11 @@ mod joined_selected {
             .await
             .expect("setup");
 
-        let result: Result<Vec<User>, _> = User::query().join::<Order>().select().get(&pool).await;
+        let result: Result<Vec<User>, _> = User::query()
+            .join::<Order>()
+            .select_as::<User, _>()
+            .get(&pool)
+            .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 1);
     }
@@ -351,8 +378,11 @@ mod joined_selected {
             .await
             .expect("setup");
 
-        let result: Result<Option<User>, _> =
-            User::query().join::<Order>().select().first(&pool).await;
+        let result: Result<Option<User>, _> = User::query()
+            .join::<Order>()
+            .select_as::<User, _>()
+            .first(&pool)
+            .await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_some());
     }
@@ -367,7 +397,7 @@ mod joined_selected {
 
         let result: Result<User, _> = User::query()
             .join::<Order>()
-            .select()
+            .select_as::<User, _>()
             .first_or_fail(&pool)
             .await;
         assert!(result.is_ok());
@@ -391,7 +421,7 @@ mod filtered_selected {
             .expect("setup");
 
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
             .r#where(Product::PRICE_CENTS, ">", 50)
             .get(&pool)
@@ -403,7 +433,7 @@ mod filtered_selected {
     #[fabrique_derive::test]
     async fn where_null_chains(pool: Pool<Backend>) {
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
             .where_null(Product::NAME)
             .get(&pool)
@@ -414,7 +444,7 @@ mod filtered_selected {
     #[fabrique_derive::test]
     async fn where_not_null_chains(pool: Pool<Backend>) {
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
             .where_not_null(Product::NAME)
             .get(&pool)
@@ -425,7 +455,7 @@ mod filtered_selected {
     #[fabrique_derive::test]
     async fn order_by_transitions_to_ordered(pool: Pool<Backend>) {
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
             .order_by(Product::NAME, "ASC")
             .get(&pool)
@@ -436,7 +466,7 @@ mod filtered_selected {
     #[fabrique_derive::test]
     async fn limit_transitions_to_limited(pool: Pool<Backend>) {
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
             .limit(10)
             .get(&pool)
@@ -453,7 +483,7 @@ mod filtered_selected {
             .expect("setup");
 
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
             .get(&pool)
             .await;
@@ -470,7 +500,7 @@ mod filtered_selected {
             .expect("setup");
 
         let result: Result<Option<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
             .first(&pool)
             .await;
@@ -487,7 +517,7 @@ mod filtered_selected {
             .expect("setup");
 
         let result: Result<Product, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
             .first_or_fail(&pool)
             .await;
@@ -505,7 +535,7 @@ mod ordered {
     #[fabrique_derive::test]
     async fn limit_transitions_to_limited(pool: Pool<Backend>) {
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .order_by(Product::NAME, "ASC")
             .limit(10)
             .get(&pool)
@@ -518,7 +548,7 @@ mod ordered {
         Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .order_by(Product::NAME, "ASC")
             .get(&pool)
             .await;
@@ -531,7 +561,7 @@ mod ordered {
         Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Option<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .order_by(Product::NAME, "ASC")
             .first(&pool)
             .await;
@@ -544,7 +574,7 @@ mod ordered {
         Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Product, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .order_by(Product::NAME, "ASC")
             .first_or_fail(&pool)
             .await;
@@ -562,7 +592,7 @@ mod limited {
     #[fabrique_derive::test]
     async fn offset_transitions_to_offsetted(pool: Pool<Backend>) {
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .limit(10)
             .offset(5)
             .get(&pool)
@@ -574,7 +604,11 @@ mod limited {
     async fn get_executes(pool: Pool<Backend>) {
         Product::factory().create(&pool).await.expect("setup");
 
-        let result: Result<Vec<Product>, _> = Product::query().select().limit(10).get(&pool).await;
+        let result: Result<Vec<Product>, _> = Product::query()
+            .select_as::<Product, _>()
+            .limit(10)
+            .get(&pool)
+            .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 1);
     }
@@ -594,13 +628,123 @@ mod offsetted {
         }
 
         let result: Result<Vec<Product>, _> = Product::query()
-            .select()
+            .select_as::<Product, _>()
             .limit(10)
             .offset(1)
             .get(&pool)
             .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 2);
+    }
+}
+
+// ============================================================================
+// Individual Column Selection
+// ============================================================================
+
+mod individual_select {
+    use super::*;
+
+    #[fabrique_derive::test]
+    async fn single_column_select_returns_one_element_tuple(pool: Pool<Backend>) {
+        // Arrange a product in the database
+        Product::factory()
+            .name("Anvil".to_owned())
+            .create(&pool)
+            .await
+            .expect("setup");
+
+        // Act the retrieval of a single column
+        let result: Result<Vec<(String,)>, _> =
+            Product::query().select((Product::NAME,)).get(&pool).await;
+
+        // Assert the single column value is returned
+        assert!(result.is_ok());
+        let rows = result.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "Anvil");
+    }
+
+    #[fabrique_derive::test]
+    async fn multi_column_select_returns_matching_tuple(pool: Pool<Backend>) {
+        // Arrange a product with known values
+        Product::factory()
+            .name("Hammer".to_owned())
+            .price_cents(1500)
+            .create(&pool)
+            .await
+            .expect("setup");
+
+        // Act the retrieval of two columns
+        let result: Result<Vec<(String, i32)>, _> = Product::query()
+            .select((Product::NAME, Product::PRICE_CENTS))
+            .get(&pool)
+            .await;
+
+        // Assert both column values are returned in order
+        assert!(result.is_ok());
+        let rows = result.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0], ("Hammer".to_owned(), 1500));
+    }
+
+    #[fabrique_derive::test]
+    async fn select_with_where_filters_rows(pool: Pool<Backend>) {
+        // Arrange two products, one expensive and one cheap
+        Product::factory()
+            .name("Cheap".to_owned())
+            .price_cents(100)
+            .create(&pool)
+            .await
+            .expect("setup");
+        Product::factory()
+            .name("Expensive".to_owned())
+            .price_cents(5000)
+            .create(&pool)
+            .await
+            .expect("setup");
+
+        // Act the retrieval of names filtered by price
+        let result: Result<Vec<(String,)>, _> = Product::query()
+            .select((Product::NAME,))
+            .r#where(Product::PRICE_CENTS, ">=", 1000)
+            .get(&pool)
+            .await;
+
+        // Assert only the expensive product is returned
+        assert!(result.is_ok());
+        let rows = result.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "Expensive");
+    }
+
+    #[fabrique_derive::test]
+    async fn cross_model_select_with_join(pool: Pool<Backend>) {
+        // Arrange a user with an order
+        let user = User::factory()
+            .name("Alice".to_owned())
+            .create(&pool)
+            .await
+            .expect("setup");
+        Order::factory()
+            .user_id(user.id)
+            .status("pending".to_owned())
+            .create(&pool)
+            .await
+            .expect("setup");
+
+        // Act the retrieval of columns from both joined models
+        let result: Result<Vec<(String, String)>, _> = User::query()
+            .join::<Order>()
+            .select((User::NAME, Order::STATUS))
+            .get(&pool)
+            .await;
+
+        // Assert columns from both models are returned
+        assert!(result.is_ok());
+        let rows = result.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0], ("Alice".to_owned(), "pending".to_owned()));
     }
 }
 

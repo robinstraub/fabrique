@@ -33,7 +33,7 @@ Product::update()
     .execute(&pool)
     .await?;
 # let products = Product::query()
-#     .select()
+#     .select_as::<Product, _>()
 #     .r#where(Product::PRICE_CENTS, ">", 10000)
 #     .get(&pool)
 #     .await?;
@@ -69,7 +69,10 @@ Product::update()
     .r#where(Product::NAME, "=", "Anvil".to_string())
     .execute(&pool)
     .await?;
-# let product = Product::query().select().r#where(Product::NAME, "=", "Anvil".to_string()).first_or_fail(&pool).await?;
+# let product = Product::query().select_as::<Product, _>()
+#     .r#where(Product::NAME, "=", "Anvil".to_string())
+#     .first_or_fail(&pool)
+#     .await?;
 # assert_eq!(product.price_cents, 9999);
 # assert!(product.in_stock);
 # Ok(())
@@ -205,9 +208,9 @@ The `.do_update()` method updates all non-primary-key columns with `col = EXCLUD
 
 ## Summary
 
-| Operation        | Method                                           |
-| ---------------- | ------------------------------------------------ |
-| Bulk update      | `Model::update().set().r#where().execute()`      |
-| Get updated rows | `.returning().get()`                             |
-| Insert or ignore | `.insert().set(...).on_conflict().do_nothing()`  |
-| Insert or update | `.insert().set(...).on_conflict().do_update()`   |
+| Operation        | Method                                          |
+| ---------------- | ----------------------------------------------- |
+| Bulk update      | `Model::update().set().r#where().execute()`     |
+| Get updated rows | `.returning().get()`                            |
+| Insert or ignore | `.insert().set(...).on_conflict().do_nothing()` |
+| Insert or update | `.insert().set(...).on_conflict().do_update()`  |

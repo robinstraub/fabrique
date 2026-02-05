@@ -222,7 +222,7 @@ impl<'a> ModelCodegen<'a> {
                     let pk = <Self as ::fabrique::Model>::primary_key(self);
                     let fk = #fk_expr;
                     <#target_type as ::fabrique::Query>::query()
-                        .select()
+                        .select_as::<#target_type, _>()
                         .r#where(fk, "=", pk)
                 }
             }
@@ -264,7 +264,7 @@ impl<'a> ModelCodegen<'a> {
                     <#target_type as ::fabrique::Query>::query()
                         .join::<#join_type>()
                         .join_through::<#base_struct_ident, #join_type, _>()
-                        .select()
+                        .select_as::<#target_type, _>()
                         #(#where_clauses)*
                 }
             }
@@ -441,7 +441,7 @@ mod tests {
                         let pk = <Self as ::fabrique::Model>::primary_key(self);
                         let fk = <Order as ::fabrique::BelongsTo<Self>>::foreign_key_column();
                         <Order as ::fabrique::Query>::query()
-                            .select()
+                            .select_as::<Order, _>()
                             .r#where(fk, "=", pk)
                     }
                 }
@@ -534,7 +534,7 @@ mod tests {
                         <Product as ::fabrique::Query>::query()
                             .join::<OrderLine>()
                             .join_through::<Order, OrderLine, _>()
-                            .select()
+                            .select_as::<Product, _>()
                             .r#where(Self::ID, "=", self.id)
                     }
                 }

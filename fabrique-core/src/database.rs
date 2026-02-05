@@ -37,16 +37,26 @@ pub trait Column<M>: Sized {
     /// The Rust type of values stored in this column.
     type Type;
 
-    /// Returns the unqualified column name (e.g., "name").
+    /// The unqualified column name (e.g., "name").
     ///
     /// Use this for INSERT and UPDATE SET clauses.
-    fn name(&self) -> &'static str;
+    const NAME: &'static str;
 
-    /// Returns the qualified column name (e.g., "products.name").
+    /// The qualified column name (e.g., "products.name").
     ///
     /// Use this for SELECT, WHERE, and JOIN clauses where table qualification
     /// is needed to avoid ambiguity.
-    fn qualified_name(&self) -> &'static str;
+    const QUALIFIED_NAME: &'static str;
+
+    /// Returns the unqualified column name.
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+
+    /// Returns the qualified column name.
+    fn qualified_name(&self) -> &'static str {
+        Self::QUALIFIED_NAME
+    }
 }
 
 /// A zero-sized type used as a placeholder column for models without soft
@@ -60,6 +70,9 @@ pub struct Nil;
 /// to use this column will panic.
 impl<M> Column<M> for Nil {
     type Type = Nil;
+
+    const NAME: &'static str = panic!("Attempted to use Nil as a column");
+    const QUALIFIED_NAME: &'static str = panic!("Attempted to use Nil as a column");
 
     fn name(&self) -> &'static str {
         panic!("Attempted to use Nil as a column")
