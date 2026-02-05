@@ -10,3 +10,5 @@ echo '+cargo test --features sqlite --workspace --exclude ui-tests'
 cargo test --features sqlite --workspace --exclude ui-tests
 echo '+cargo test -p ui-tests'
 cargo test -p ui-tests
+echo '+npx markdownlint-cli2'
+npx markdownlint-cli2

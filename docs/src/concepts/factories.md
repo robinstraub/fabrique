@@ -1,10 +1,15 @@
 # Factories
 
-Factories provide a convenient way to generate model instances for testing and database seeding. Instead of manually specifying every attribute, factories generate sensible defaults and let you override only what matters for your specific test case.
+Factories provide a convenient way to generate model instances for testing and
+database seeding. Instead of manually specifying every attribute, factories
+generate sensible defaults and let you override only what matters for your
+specific test case.
 
 ## The Builder Pattern
 
-Each model with `#[derive(Factory)]` gets a builder struct that mirrors its fields. Call `Model::factory()` to get a builder, set any fields you care about, then call `create()` to persist:
+Each model with `#[derive(Factory)]` gets a builder struct that mirrors its fields.
+Call `Model::factory()` to get a builder, set any fields you care about, then call
+`create()` to persist:
 
 ```rust
 # extern crate fabrique;
@@ -38,7 +43,8 @@ Fields you don't set are filled with generated values automatically.
 
 ## Random Value Generation
 
-By default, factories generate random values for all fields using the [fake](https://crates.io/crates/fake) crate. This means each factory instance gets unique data without additional configuration.
+By default, factories generate random values for all fields using the [fake](https://crates.io/crates/fake)
+crate. This means each factory instance gets unique data without additional configuration.
 
 For more realistic data, use the `faker` attribute to specify a custom faker expression:
 
@@ -68,7 +74,8 @@ pub struct User {
 
 The faker expression is evaluated each time, ensuring unique values across instances.
 
-To disable random generation and use `Default::default()` instead, disable the `fake` feature:
+To disable random generation and use `Default::default()` instead, disable the
+`fake` feature:
 
 ```toml
 [dependencies]
@@ -79,7 +86,8 @@ fabrique = { version = "0.1", default-features = false }
 
 Factories understand model relationships and provide methods to create related records:
 
-- **`for_<relation>()`** - Set a belongs-to relationship (accepts a model instance or another factory)
+- **`for_<relation>()`** - Set a belongs-to relationship (accepts a model instance
+  or another factory)
 - **`has_<relation>(factory, count)`** - Create child records for has-many relationships
 
 ```rust
@@ -121,9 +129,11 @@ assert_eq!(orders.len(), 3);
 # }
 ```
 
-The factory creates the parent first, then creates children with the correct foreign key values.
+The factory creates the parent first, then creates children with the correct
+foreign key values.
 
 ## See Also
 
-- [Testing with Factories](../guides/testing-with-factories.md) - Common testing patterns
+- [Testing with Factories](../guides/testing-with-factories.md) - Common testing
+  patterns
 - [Relations](relations.md) - How to define model relationships

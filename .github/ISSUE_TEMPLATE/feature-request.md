@@ -7,22 +7,24 @@ assignees: ''
 
 ---
 
-# Summary
+## Summary
 
 A one-sentence description of what needs to be implemented or changed.
 
-# Motivation
+## Motivation
 
 Explain why this change is needed and what problem it solves.
 
-# Proposed API
+## Proposed API
 
 Show the exact code interface, including types, method signatures, and key examples.
 
-# Implementation Notes
+## Implementation Notes
 
-Technical details, constraints, and important considerations for implementing this feature.
+Technical details, constraints, and important considerations for implementing this
+feature.
 
-# Acceptance Criteria
+## Acceptance Criteria
 
-A checklist of specific, measurable conditions that must be met for this issue to be considered complete.
+A checklist of specific, measurable conditions that must be met for this issue
+to be considered complete.

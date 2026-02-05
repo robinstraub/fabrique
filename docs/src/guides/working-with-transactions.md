@@ -1,6 +1,7 @@
 # Working with Transactions
 
-Fabrique works seamlessly with SQLx transactions. All database operations accept both connection pools and transactions.
+Fabrique works seamlessly with SQLx transactions. All database operations accept
+both connection pools and transactions.
 
 ## Basic Transaction Usage
 
@@ -15,7 +16,12 @@ Use `pool.begin()` to start a transaction, then pass it to Fabrique methods:
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Model)]
-# pub struct Product { pub id: Uuid, pub name: String, pub price_cents: i32, pub in_stock: bool }
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -49,7 +55,12 @@ If a transaction is dropped without calling `commit()`, it automatically rolls b
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Model)]
-# pub struct Product { pub id: Uuid, pub name: String, pub price_cents: i32, pub in_stock: bool }
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -89,7 +100,12 @@ All query methods work with transactions:
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Factory, Model)]
-# pub struct Product { pub id: Uuid, pub name: String, pub price_cents: i32, pub in_stock: bool }
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -120,7 +136,8 @@ tx.commit().await?;
 
 ## Writing Generic Functions
 
-You can write functions that accept both pools and transactions using SQLx's `Acquire` trait:
+You can write functions that accept both pools and transactions using SQLx's
+`Acquire` trait:
 
 ```rust
 # extern crate fabrique;
@@ -131,7 +148,12 @@ You can write functions that accept both pools and transactions using SQLx's `Ac
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Model)]
-# pub struct Product { pub id: Uuid, pub name: String, pub price_cents: i32, pub in_stock: bool }
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
+# }
 #
 pub async fn create_product<'a, A>(
     db: A,

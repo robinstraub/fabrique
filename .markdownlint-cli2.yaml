@@ -1,0 +1,11 @@
+globs:
+  - "**/*.md"
+
+ignores:
+  - "target/**"
+  - "node_modules/**"
+
+# Most markdown files are mdBook documentation which uses multiple h1 headings
+# per section (mdBook convention for SUMMARY.md and chapter organization)
+config:
+  MD025: false

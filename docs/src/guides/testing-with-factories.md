@@ -1,6 +1,7 @@
 # Testing with Factories
 
-Factories make it easy to set up test data without writing verbose setup code. This guide shows common patterns for using factories in tests.
+Factories make it easy to set up test data without writing verbose setup code.
+This guide shows common patterns for using factories in tests.
 
 ## Basic Test Setup
 
@@ -15,7 +16,12 @@ Create models with only the attributes relevant to your test:
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Product { id: Uuid, name: String, price_cents: i32, in_stock: bool }
+# pub struct Product {
+#     id: Uuid,
+#     name: String,
+#     price_cents: i32,
+#     in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -46,7 +52,12 @@ When testing models with relationships, factories handle the foreign keys automa
 # pub struct User { id: Uuid, name: String, email: String }
 #
 # #[derive(Factory, Model)]
-# pub struct Order { id: Uuid, #[fabrique(belongs_to = "User")] user_id: Uuid, status: String }
+# pub struct Order {
+#     id: Uuid,
+#     #[fabrique(belongs_to = "User")]
+#     user_id: Uuid,
+#     status: String,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -92,7 +103,12 @@ For simpler tests, create related models inline:
 # pub struct User { id: Uuid, name: String, email: String }
 #
 # #[derive(Factory, Model)]
-# pub struct Order { id: Uuid, #[fabrique(belongs_to = "User")] user_id: Uuid, status: String }
+# pub struct Order {
+#     id: Uuid,
+#     #[fabrique(belongs_to = "User")]
+#     user_id: Uuid,
+#     status: String,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -120,7 +136,12 @@ Create multiple records by calling `create` in a loop or using iterators:
 # use uuid::Uuid;
 #
 # #[derive(Factory, Model)]
-# pub struct Product { id: Uuid, name: String, price_cents: i32, in_stock: bool }
+# pub struct Product {
+#     id: Uuid,
+#     name: String,
+#     price_cents: i32,
+#     in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -138,7 +159,9 @@ for i in 0..5 {
 
 ## Generating Realistic Data
 
-By default, factories generate random values for each field. For more realistic test data, use the `faker` attribute with expressions from the [fake](https://crates.io/crates/fake) crate:
+By default, factories generate random values for each field. For more realistic
+test data, use the `faker` attribute with expressions from the
+[fake](https://crates.io/crates/fake) crate:
 
 ```rust
 # extern crate fabrique;
@@ -165,15 +188,15 @@ pub struct User {
 
 Common faker expressions:
 
-| Expression | Example Output |
-|------------|----------------|
-| `Name()` | "John Smith" |
-| `SafeEmail()` | "john.smith@example.com" |
-| `PhoneNumber()` | "+1 555-123-4567" |
-| `CompanyName()` | "Acme Industries" |
-| `CityName()` | "Springfield" |
-| `(1..100)` | Random integer 1-99 |
-| `(100..10000)` | Random integer for cents |
+| Expression      | Example Output                   |
+| --------------- | -------------------------------- |
+| `Name()`        | "John Smith"                     |
+| `SafeEmail()`   | "<john.smith@example.com>"       |
+| `PhoneNumber()` | "+1 555-123-4567"                |
+| `CompanyName()` | "Acme Industries"                |
+| `CityName()`    | "Springfield"                    |
+| `(1..100)`      | Random integer 1-99              |
+| `(100..10000)`  | Random integer for cents         |
 
 Import fakers from `fabrique::fake::faker`:
 
@@ -185,4 +208,5 @@ use fabrique::fake::faker::lorem::en::Sentence;
 # fn main() {}
 ```
 
-Each factory call generates fresh random values, so you get unique data across tests without hardcoding strings.
+Each factory call generates fresh random values, so you get unique data across
+tests without hardcoding strings.
