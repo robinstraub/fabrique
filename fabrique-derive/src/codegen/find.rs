@@ -37,15 +37,16 @@ impl<'a> FindCodegen<'a> {
         };
 
         quote! {
-            fn find<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+            fn find<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
             where
-                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
             {
                 async move {
+                    let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
                     Self::query()
                         .select()
                         #where_clauses
-                        .first_or_fail(executor)
+                        .first_or_fail(&mut *conn)
                         .await
                         .map_err(Into::into)
                 }
@@ -70,15 +71,16 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                fn find<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+                fn find<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
                 where
-                    E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                 {
                     async move {
+                        let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
                         Self::query()
                             .select()
                             .r#where(Self::ID, "=", id)
-                            .first_or_fail(executor)
+                            .first_or_fail(&mut *conn)
                             .await
                             .map_err(Into::into)
                     }
@@ -109,16 +111,17 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                fn find<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+                fn find<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
                 where
-                    E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                 {
                     async move {
+                        let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
                         Self::query()
                             .select()
                             .r#where(Self::ORDER_ID, "=", id.0)
                             .r#where(Self::PRODUCT_ID, "=", id.1)
-                            .first_or_fail(executor)
+                            .first_or_fail(&mut *conn)
                             .await
                             .map_err(Into::into)
                     }

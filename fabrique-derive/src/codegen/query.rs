@@ -47,15 +47,16 @@ mod tests {
             result.to_string(),
             quote! {
                 impl ::fabrique::Query for Anvil {
-                    fn find<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+                    fn find<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
                     where
-                        E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
                             Self::query()
                                 .select()
                                 .r#where(Self::ID, "=", id)
-                                .first_or_fail(executor)
+                                .first_or_fail(&mut *conn)
                                 .await
                                 .map_err(Into::into)
                         }

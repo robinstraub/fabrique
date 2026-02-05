@@ -63,12 +63,12 @@ where
     /// Finds a model instance by its primary key.
     ///
     /// Returns an error if no record is found.
-    fn find<'e, E>(
-        executor: E,
+    fn find<'e, A>(
+        executor: A,
         id: Self::PrimaryKey,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send + 'e
     where
-        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
 
     /// Retrieves all instances of this model from the database.
     fn all<'e, E>(executor: E) -> impl Future<Output = Result<Vec<Self>, Self::Error>> + Send + 'e
@@ -120,75 +120,75 @@ pub trait Delete: Model {
     ///
     /// If the model uses soft delete, this will perform a soft delete.
     /// Otherwise, it will permanently delete the record.
-    fn delete<'e, E>(
+    fn delete<'e, A>(
         self,
-        executor: E,
+        executor: A,
     ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
 
     /// Destroys a model by its primary key
     ///
     /// If the model uses soft delete, this will perform a soft destroy.
     /// Otherwise, it will permanently delete the record.
-    fn destroy<'e, E>(
-        executor: E,
+    fn destroy<'e, A>(
+        executor: A,
         id: Self::PrimaryKey,
     ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
 }
 
 /// Soft delete operations
 pub trait SoftDelete: Model {
     /// Soft deletes this model instance
-    fn soft_delete<'e, E>(
+    fn soft_delete<'e, A>(
         self,
-        executor: E,
+        executor: A,
     ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
 
     /// Soft destroys a model by its primary key
-    fn soft_destroy<'e, E>(
-        executor: E,
+    fn soft_destroy<'e, A>(
+        executor: A,
         id: Self::PrimaryKey,
     ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
 
     /// Restores a soft-deleted model instance
-    fn restore<'e, E>(
+    fn restore<'e, A>(
         &self,
-        executor: E,
+        executor: A,
     ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
 
     /// Checks if this model instance is soft-deleted
-    fn trashed<'e, E>(
+    fn trashed<'e, A>(
         &self,
-        executor: E,
+        executor: A,
     ) -> impl Future<Output = Result<bool, Self::Error>> + Send + 'e
     where
-        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
 }
 
 /// Hard delete operations for soft-deletable models
 pub trait HardDelete: Model {
     /// Permanently deletes this model instance (bypassing soft delete)
-    fn hard_delete<'e, E>(
+    fn hard_delete<'e, A>(
         self,
-        executor: E,
+        executor: A,
     ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
 
     /// Permanently destroys a model by its primary key
-    fn hard_destroy<'e, E>(
-        executor: E,
+    fn hard_destroy<'e, A>(
+        executor: A,
         id: Self::PrimaryKey,
     ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
     where
-        E: sqlx::Executor<'e, Database = Self::Database> + 'e;
+        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
 }

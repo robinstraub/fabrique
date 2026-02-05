@@ -177,7 +177,7 @@ where
 ## Summary
 
 - Start transactions with `pool.begin().await?`
-- Pass `&mut tx` for persistence methods (`create`, `save`)
-- Pass `&mut *tx` for query methods (`get`, `first`, `execute`)
+- Pass `&mut tx` for model methods (`create`, `save`, `find`, `delete`, `destroy`)
+- Pass `&mut *tx` for query builder methods (`get`, `first`, `execute`)
 - Call `tx.commit().await?` to persist changes
 - Transactions auto-rollback on drop if not committed

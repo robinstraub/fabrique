@@ -64,12 +64,13 @@ impl<'a> SoftDeleteCodegen<'a> {
         let bindings = primary_key.map(|ColumnField { ident, .. }| quote! { self.#ident });
 
         quote! {
-            fn soft_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+            fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
             where
-                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
             {
                 async move {
-                    ::sqlx::query(#query)#(.bind(#bindings))*.execute(executor).await?;
+                    let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                    ::sqlx::query(#query)#(.bind(#bindings))*.execute(&mut *conn).await?;
                     Ok(())
                 }
             }
@@ -108,14 +109,15 @@ impl<'a> SoftDeleteCodegen<'a> {
         };
 
         quote! {
-            fn soft_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+            fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
             where
-                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
             {
                 async move {
+                    let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
                     ::sqlx::query(#query)
                         #binds
-                        .execute(executor)
+                        .execute(&mut *conn)
                         .await?;
                     Ok(())
                 }
@@ -154,13 +156,14 @@ impl<'a> SoftDeleteCodegen<'a> {
         });
 
         quote! {
-            fn restore<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+            fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
             where
-                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
             {
                 #(#pk_captures)*
                 async move {
-                    ::sqlx::query(#query)#(.bind(#bindings))*.execute(executor).await?;
+                    let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                    ::sqlx::query(#query)#(.bind(#bindings))*.execute(&mut *conn).await?;
                     Ok(())
                 }
             }
@@ -198,13 +201,14 @@ impl<'a> SoftDeleteCodegen<'a> {
         });
 
         quote! {
-            fn trashed<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
+            fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
             where
-                E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
             {
                 #(#pk_captures)*
                 async move {
-                    ::sqlx::query_scalar(#query)#(.bind(#bindings))*.fetch_one(executor).await.map_err(Into::into)
+                    let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                    ::sqlx::query_scalar(#query)#(.bind(#bindings))*.fetch_one(&mut *conn).await.map_err(Into::into)
                 }
             }
         }
@@ -243,37 +247,41 @@ mod tests {
             result.unwrap().to_string(),
             quote! {
                 impl ::fabrique::SoftDelete for Anvil {
-                    fn soft_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = datetime('now') WHERE id = ?").bind(self.id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = datetime('now') WHERE id = ?").bind(self.id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn soft_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = datetime('now') WHERE id = ?").bind(id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = datetime('now') WHERE id = ?").bind(id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn restore<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         let id = self.id.clone();
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE id = ?").bind(id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE id = ?").bind(id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn trashed<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         let id = self.id.clone();
                         async move {
-                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE id = ?").bind(id).fetch_one(executor).await.map_err(Into::into)
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE id = ?").bind(id).fetch_one(&mut *conn).await.map_err(Into::into)
                         }
                     }
                 }
@@ -299,37 +307,41 @@ mod tests {
             result.unwrap().to_string(),
             quote! {
                 impl ::fabrique::SoftDelete for Anvil {
-                    fn soft_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = ?").bind(self.id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = ?").bind(self.id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn soft_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = ?").bind(id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = ?").bind(id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn restore<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         let id = self.id.clone();
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE id = ?").bind(id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE id = ?").bind(id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn trashed<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         let id = self.id.clone();
                         async move {
-                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE id = ?").bind(id).fetch_one(executor).await.map_err(Into::into)
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE id = ?").bind(id).fetch_one(&mut *conn).await.map_err(Into::into)
                         }
                     }
                 }
@@ -355,37 +367,41 @@ mod tests {
             result.unwrap().to_string(),
             quote! {
                 impl ::fabrique::SoftDelete for Anvil {
-                    fn soft_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(self.id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(self.id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn soft_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn restore<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         let id = self.id.clone();
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE id = $1").bind(id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE id = $1").bind(id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn trashed<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         let id = self.id.clone();
                         async move {
-                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE id = $1").bind(id).fetch_one(executor).await.map_err(Into::into)
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE id = $1").bind(id).fetch_one(&mut *conn).await.map_err(Into::into)
                         }
                     }
                 }
@@ -414,39 +430,43 @@ mod tests {
             result.unwrap().to_string(),
             quote! {
                 impl ::fabrique::SoftDelete for Anvil {
-                    fn soft_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = datetime('now') WHERE user_id = ? AND organization_id = ?").bind(self.user_id).bind(self.organization_id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = datetime('now') WHERE user_id = ? AND organization_id = ?").bind(self.user_id).bind(self.organization_id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn soft_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = datetime('now') WHERE user_id = ? AND organization_id = ?").bind(id.0).bind(id.1).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = datetime('now') WHERE user_id = ? AND organization_id = ?").bind(id.0).bind(id.1).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn restore<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         let user_id = self.user_id.clone();
                         let organization_id = self.organization_id.clone();
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE user_id = ? AND organization_id = ?").bind(user_id).bind(organization_id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE user_id = ? AND organization_id = ?").bind(user_id).bind(organization_id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn trashed<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         let user_id = self.user_id.clone();
                         let organization_id = self.organization_id.clone();
                         async move {
-                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE user_id = ? AND organization_id = ?").bind(user_id).bind(organization_id).fetch_one(executor).await.map_err(Into::into)
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE user_id = ? AND organization_id = ?").bind(user_id).bind(organization_id).fetch_one(&mut *conn).await.map_err(Into::into)
                         }
                     }
                 }
@@ -475,39 +495,43 @@ mod tests {
             result.unwrap().to_string(),
             quote! {
                 impl ::fabrique::SoftDelete for Anvil {
-                    fn soft_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = ? AND organization_id = ?").bind(self.user_id).bind(self.organization_id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = ? AND organization_id = ?").bind(self.user_id).bind(self.organization_id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn soft_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = ? AND organization_id = ?").bind(id.0).bind(id.1).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = ? AND organization_id = ?").bind(id.0).bind(id.1).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn restore<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         let user_id = self.user_id.clone();
                         let organization_id = self.organization_id.clone();
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE user_id = ? AND organization_id = ?").bind(user_id).bind(organization_id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE user_id = ? AND organization_id = ?").bind(user_id).bind(organization_id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn trashed<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         let user_id = self.user_id.clone();
                         let organization_id = self.organization_id.clone();
                         async move {
-                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE user_id = ? AND organization_id = ?").bind(user_id).bind(organization_id).fetch_one(executor).await.map_err(Into::into)
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE user_id = ? AND organization_id = ?").bind(user_id).bind(organization_id).fetch_one(&mut *conn).await.map_err(Into::into)
                         }
                     }
                 }
@@ -536,39 +560,43 @@ mod tests {
             result.unwrap().to_string(),
             quote! {
                 impl ::fabrique::SoftDelete for Anvil {
-                    fn soft_delete<'e, E>(self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn soft_destroy<'e, E>(executor: E, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(id.0).bind(id.1).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(id.0).bind(id.1).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn restore<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         let user_id = self.user_id.clone();
                         let organization_id = self.organization_id.clone();
                         async move {
-                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE user_id = $1 AND organization_id = $2").bind(user_id).bind(organization_id).execute(executor).await?;
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE user_id = $1 AND organization_id = $2").bind(user_id).bind(organization_id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn trashed<'e, E>(&self, executor: E) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
-                    where E: ::sqlx::Executor<'e, Database = Self::Database> + 'e,
+                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
                     {
                         let user_id = self.user_id.clone();
                         let organization_id = self.organization_id.clone();
                         async move {
-                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(user_id).bind(organization_id).fetch_one(executor).await.map_err(Into::into)
+                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(user_id).bind(organization_id).fetch_one(&mut *conn).await.map_err(Into::into)
                         }
                     }
                 }
