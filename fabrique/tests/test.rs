@@ -74,7 +74,6 @@ async fn test_query_builder(connection: Pool<Backend>) {
         .unwrap();
 
     let result = Product::query()
-        .select_as::<Product, _>()
         .r#where(Product::PRICE_CENTS, ">=", 1000)
         .get(&connection)
         .await;

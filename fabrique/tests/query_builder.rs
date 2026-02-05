@@ -126,6 +126,21 @@ mod initial {
             .await;
         assert!(result.is_ok());
     }
+
+    #[fabrique_derive::test]
+    async fn where_implicit_select_transitions_to_filtered(pool: Pool<Backend>) {
+        let result: Result<Vec<Product>, _> = Product::query()
+            .r#where(Product::PRICE_CENTS, ">=", 1000)
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn get_implicit_select_executes(pool: Pool<Backend>) {
+        let result: Result<Vec<Product>, _> = Product::query().get(&pool).await;
+        assert!(result.is_ok());
+    }
 }
 
 // ============================================================================
@@ -185,6 +200,22 @@ mod joining {
             .select_as::<Order, _>()
             .get(&pool)
             .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn where_implicit_select_transitions_to_filtered(pool: Pool<Backend>) {
+        let result: Result<Vec<User>, _> = User::query()
+            .join::<Order>()
+            .r#where(User::EMAIL, "=", "test@example.com".to_string())
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn get_implicit_select_executes(pool: Pool<Backend>) {
+        let result: Result<Vec<User>, _> = User::query().join::<Order>().get(&pool).await;
         assert!(result.is_ok());
     }
 }
