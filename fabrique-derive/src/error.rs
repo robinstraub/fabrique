@@ -55,3 +55,23 @@ impl From<Error> for syn::Error {
         syn::Error::new(error.span, error.kind.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_crate_error_converts_to_syn_error() {
+        // Arrange a crate error
+        let error = Error::new(Span::call_site(), ErrorKind::MissingPrimaryKey);
+
+        // Act the conversion
+        let error: syn::Error = error.into();
+
+        // Assert the syn error serialized value
+        assert_eq!(
+            error.to_string(),
+            "Missing primary key, either add an id column or mark an existing column as primary"
+        );
+    }
+}

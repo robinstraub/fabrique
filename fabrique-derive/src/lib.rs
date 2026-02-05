@@ -28,6 +28,8 @@ use crate::codegen::*;
 /// - `Delete` trait (delete and destroy operations)
 /// - `HardDelete` trait (permanent deletion)
 /// - `SoftDelete` trait (conditional, if soft delete field is present)
+// Tested via UI tests (trybuild) - coverage can't be measured for proc macros
+#[coverage(off)]
 #[proc_macro_derive(Model, attributes(fabrique))]
 pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -70,6 +72,8 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 }
 
 /// Derives a factory struct for the annotated type.
+// Tested via UI tests (trybuild) - coverage can't be measured for proc macros
+#[coverage(off)]
 #[proc_macro_derive(Factory, attributes(factory, fabrique))]
 pub fn derive_factory(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
