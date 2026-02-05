@@ -22,9 +22,9 @@ async fn products_in_stock_are_returned(pool: Pool<Backend>) {
 All testable code must be covered by tests.
 
 `#[coverage(off)]` is strictly reserved for proc-macro entry points
-(`#[proc_macro_derive]` and `#[proc_macro_attribute]` functions). These functions must remain
-minimal and delegate to internal functions that can be covered by
-tests.
+(`#[proc_macro_derive]` and `#[proc_macro_attribute]` functions). These
+functions must remain minimal and delegate to internal functions that can be
+covered by tests.
 
 Use [trybuild](https://docs.rs/trybuild) UI tests in the `ui-tests`
 crate for compile-time error assertions.
