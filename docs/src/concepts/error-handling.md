@@ -1,10 +1,12 @@
 # Error Handling
 
-Fabrique provides a database-agnostic error type that covers the most common failure cases: missing records, type conversion failures, and other database errors.
+Fabrique provides a database-agnostic error type that covers the most common failure
+cases: missing records, type conversion failures, and other database errors.
 
 ## The Error Type
 
-All Fabrique operations return `Result<T, fabrique::Error>`. The error type has three variants:
+All Fabrique operations return `Result<T, fabrique::Error>`. The error type has
+three variants:
 
 ```rust,ignore
 pub enum Error {
@@ -68,7 +70,8 @@ Methods that return `Option` instead of `NotFound`:
 
 ## Conversion
 
-Returned when converting between Rust and database types fails. This typically happens with custom types using the [`as` attribute](type-conversions.md):
+Returned when converting between Rust and database types fails. This typically
+happens with custom types using the [`as` attribute](type-conversions.md):
 
 ```rust,no_run
 # extern crate fabrique;
@@ -94,14 +97,20 @@ Returned when converting between Rust and database types fails. This typically h
 # }
 #
 # #[derive(Clone, Debug, Model)]
-# pub struct Account { pub id: Uuid, #[fabrique(as = "String")] pub status: Status }
+# pub struct Account {
+#     pub id: Uuid,
+#     #[fabrique(as = "String")]
+#     pub status: Status
+# }
 #
 # async fn example(pool: &Pool<Backend>) -> Result<(), fabrique::Error> {
 let result = Account::find(pool, Uuid::nil()).await;
 
 match result {
     Ok(account) => println!("Found account"),
-    Err(fabrique::Error::Conversion { field, from, to, value, reason, direction }) => {
+    Err(fabrique::Error::Conversion {
+        field, from, to, value, reason, direction
+    }) => {
         println!(
             "Conversion error on field '{}': {} -> {} failed for value '{}': {}",
             field, from, to, value, reason
@@ -116,14 +125,14 @@ match result {
 
 The `Conversion` error includes:
 
-| Field | Description |
-|-------|-------------|
-| `field` | The struct field name that failed |
-| `from` | The source type name |
-| `to` | The target type name |
-| `value` | String representation of the failing value |
-| `reason` | Error message from your `TryFrom` implementation |
-| `direction` | `FromDb` (reading) or `ToDb` (writing) |
+| Field       | Description                                      |
+| ----------- | ------------------------------------------------ |
+| `field`     | The struct field name that failed                |
+| `from`      | The source type name                             |
+| `to`        | The target type name                             |
+| `value`     | String representation of the failing value       |
+| `reason`    | Error message from your `TryFrom` implementation |
+| `direction` | `FromDb` (reading) or `ToDb` (writing)           |
 
 ### Conversion Direction
 
@@ -138,7 +147,8 @@ pub enum ConversionDirection {
 
 ## Other
 
-Wraps all other database errors — connection failures, constraint violations, query syntax errors, etc.:
+Wraps all other database errors — connection failures, constraint violations,
+query syntax errors, etc.:
 
 ```rust
 # extern crate fabrique;
@@ -180,8 +190,8 @@ assert!(matches!(result, Err(fabrique::Error::Other(_))));
 
 ## Summary
 
-| Variant | When it occurs |
-|---------|----------------|
-| `NotFound` | Record doesn't exist (`find`, `first_or_fail`) |
+| Variant      | When it occurs                                  |
+| ------------ | ----------------------------------------------- |
+| `NotFound`   | Record doesn't exist (`find`, `first_or_fail`)  |
 | `Conversion` | Type conversion failed (custom types with `as`) |
-| `Other` | Connection, constraint, or query errors |
+| `Other`      | Connection, constraint, or query errors         |

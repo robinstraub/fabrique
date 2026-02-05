@@ -15,7 +15,12 @@ To insert a new record, instantiate a model and call the `save` method:
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, PartialEq, Factory, Model)]
-# pub struct Product { id: Uuid, name: String, price_cents: i32, in_stock: bool }
+# pub struct Product {
+#     id: Uuid,
+#     name: String,
+#     price_cents: i32,
+#     in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -34,11 +39,15 @@ assert_eq!(saved.name, "Anvil 3000");
 # }
 ```
 
-The `save` method performs an UPSERT: it inserts if the record is new, or updates if a record with the same primary key already exists.
+The `save` method performs an UPSERT: it inserts if the record is new, or
+updates if a record with the same primary key already exists.
 
-> **Tip:** For more control over upsert behavior (e.g., specifying conflict columns or choosing which fields to update), see [Advanced Querying](advanced-querying.md#on-conflict-upsert).
+> **Tip:** For more control over upsert behavior (e.g., specifying conflict
+> columns or choosing which fields to update), see
+> [Advanced Querying](advanced-querying.md#on-conflict-upsert).
 
-Alternatively, use `create` to insert a new record. This method fails if a record with the same primary key already exists:
+Alternatively, use `create` to insert a new record. This method fails if a
+record with the same primary key already exists:
 
 ```rust
 # extern crate fabrique;
@@ -49,7 +58,12 @@ Alternatively, use `create` to insert a new record. This method fails if a recor
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, PartialEq, Factory, Model)]
-# pub struct Product { id: Uuid, name: String, price_cents: i32, in_stock: bool }
+# pub struct Product {
+#     id: Uuid,
+#     name: String,
+#     price_cents: i32,
+#     in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -81,7 +95,12 @@ To update a model, retrieve it, modify its attributes, and call `save`:
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, PartialEq, Factory, Model)]
-# pub struct Product { id: Uuid, name: String, price_cents: i32, in_stock: bool }
+# pub struct Product {
+#     id: Uuid,
+#     name: String,
+#     price_cents: i32,
+#     in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -108,7 +127,12 @@ Update multiple records matching a query using the `update` builder:
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, PartialEq, Factory, Model)]
-# pub struct Product { id: Uuid, name: String, price_cents: i32, in_stock: bool }
+# pub struct Product {
+#     id: Uuid,
+#     name: String,
+#     price_cents: i32,
+#     in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -141,7 +165,12 @@ To delete a model, call the `delete` method:
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, PartialEq, Factory, Model)]
-# pub struct Product { id: Uuid, name: String, price_cents: i32, in_stock: bool }
+# pub struct Product {
+#     id: Uuid,
+#     name: String,
+#     price_cents: i32,
+#     in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -167,7 +196,12 @@ If you know the primary key, delete without retrieving the model first using `de
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, PartialEq, Factory, Model)]
-# pub struct Product { id: Uuid, name: String, price_cents: i32, in_stock: bool }
+# pub struct Product {
+#     id: Uuid,
+#     name: String,
+#     price_cents: i32,
+#     in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -182,4 +216,5 @@ assert!(matches!(result, Err(fabrique::Error::NotFound)));
 # }
 ```
 
-> **Note:** If you need to keep deleted records for auditing or recovery, see [Using Soft Deletes](using-soft-deletes.md).
+> **Note:** If you need to keep deleted records for auditing or recovery, see
+> [Using Soft Deletes](using-soft-deletes.md).

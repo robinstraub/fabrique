@@ -124,3 +124,4 @@ pub mod sql;
 pub use fabrique_core::__private;
 
 pub use fabrique_derive::doctest;
+pub use fabrique_derive::test;

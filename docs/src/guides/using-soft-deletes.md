@@ -1,10 +1,13 @@
 # Using Soft Deletes
 
-Soft deletes allow you to mark records as deleted without actually removing them from the database. This is useful for auditing, recovery, or when you need to preserve referential integrity.
+Soft deletes allow you to mark records as deleted without actually removing them
+from the database. This is useful for auditing, recovery, or when you need to
+preserve referential integrity.
 
 ## Enabling Soft Deletes
 
-To enable soft deletes, add a field annotated with `#[fabrique(soft_delete)]`. The field type must be an optional datetime:
+To enable soft deletes, add a field annotated with `#[fabrique(soft_delete)]`.
+The field type must be an optional datetime:
 
 ```rust
 # extern crate fabrique;
@@ -27,7 +30,8 @@ pub struct User {
 
 ## Deleting Records
 
-When you call `delete` on a model with soft deletes enabled, the `deleted_at` column is set to the current timestamp instead of removing the record:
+When you call `delete` on a model with soft deletes enabled, the `deleted_at`
+column is set to the current timestamp instead of removing the record:
 
 ```rust
 # extern crate fabrique;

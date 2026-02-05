@@ -10,8 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  codestyle:
-    name: Codestyle
+  codestyle-rust:
+    name: Codestyle (Rust)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -27,6 +27,15 @@ jobs:
           cargo clippy --workspace --all-targets --features sqlite -- -D warnings
           cargo clippy --workspace --all-targets --features postgres --exclude ui-tests -- -D warnings
           cargo clippy --workspace --all-targets --features mysql --exclude ui-tests -- -D warnings
+
+  codestyle-markdown:
+    name: Codestyle (Markdown)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Lint markdown
+        run: npx --yes markdownlint-cli2@0.20.0
 
   test-postgres:
     name: Tests (PostgreSQL)
@@ -186,4 +195,4 @@ jobs:
         run: mdbook build docs
 
       - name: Test mdBook code examples
-        run: mdbook test docs -L target/debug/deps
+        run: CARGO_MANIFEST_DIR=$PWD/docs mdbook test docs -L target/debug/deps

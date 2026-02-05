@@ -1,20 +1,25 @@
 # Getting Started
 
-This tutorial walks you through adding Fabrique to an existing e-commerce application. You'll learn how to convert plain Rust structs into database-backed models and implement service functions that your views can call.
+This tutorial walks you through adding Fabrique to an existing e-commerce
+application. You'll learn how to convert plain Rust structs into database-backed
+models and implement service functions that your views can call.
 
 ## Prerequisites
 
 - Rust 1.75 or later
-- PostgreSQL database running locally
+- A supported database (SQLite, PostgreSQL, or MySQL)
 - Basic knowledge of SQL and async Rust
 
 ## Scenario
 
-You're working on an e-commerce website. The frontend team has defined the API contract, and you need to implement the persistence layer. Your task is to make all the service functions work with a PostgreSQL database.
+You're working on an e-commerce website. The frontend team has defined the API
+contract, and you need to implement the persistence layer. Your task is to make
+all the service functions work with a database.
 
 ## The Starting Point
 
-Here's what you're given — a `Product` struct and service function stubs that need implementation:
+Here's what you're given — a `Product` struct and service function stubs that
+need implementation:
 
 ```rust,ignore
 use fabrique::prelude::*;
@@ -73,18 +78,14 @@ Let's implement each function using Fabrique.
 
 ## Database Setup
 
-First, create the database and products table:
+First, create the products table:
 
 ```sql
-CREATE DATABASE shop;
-
-\c shop
-
 CREATE TABLE products (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(255) NOT NULL,
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
     price_cents INTEGER NOT NULL,
-    in_stock BOOLEAN NOT NULL DEFAULT true
+    in_stock BOOLEAN NOT NULL DEFAULT 1
 );
 ```
 
@@ -154,7 +155,8 @@ pub async fn find_product_by_id(
 # fn main() {}
 ```
 
-This queries `SELECT * FROM products WHERE id = $1` and returns the matching record. If no product is found, it returns an error.
+This queries `SELECT * FROM products WHERE id = $1` and returns the matching
+record. If no product is found, it returns an error.
 
 ### Listing Available Products
 
@@ -192,7 +194,8 @@ The query builder provides a fluent API. Here we:
 3. Add a WHERE clause with `.r#where()`
 4. Execute and collect results with `.get(pool)`
 
-Column constants like `Product::IN_STOCK` are type-safe — passing the wrong type won't compile.
+Column constants like `Product::IN_STOCK` are type-safe — passing the wrong type
+won't compile.
 
 ### Creating a Product
 
@@ -228,7 +231,8 @@ pub async fn create_product(
 # fn main() {}
 ```
 
-The `create` method inserts the record and returns it. If a record with the same primary key already exists, it returns an error.
+The `create` method inserts the record and returns it. If a record with the same
+primary key already exists, it returns an error.
 
 ### Updating a Product's Price
 
@@ -263,7 +267,8 @@ pub async fn update_product_price(
 # fn main() {}
 ```
 
-The pattern is: fetch, modify, save. The `save` method performs an upsert — it inserts if the record is new, or updates if it exists.
+The pattern is: fetch, modify, save. The `save` method performs an upsert — it
+inserts if the record is new, or updates if it exists.
 
 ### Deleting a Product
 
@@ -297,8 +302,11 @@ The `destroy` method deletes by primary key without fetching the record first.
 
 Here's the full working code:
 
-```rust,ignore
-use fabrique::prelude::*;
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
 use fabrique::prelude::*;
 use uuid::Uuid;
 
@@ -333,7 +341,7 @@ pub async fn create_product(
     price_cents: i32,
 ) -> Result<Product, fabrique::Error> {
     let product = Product {
-        id: Uuid::nil(), // In production, use Uuid::new_v4()
+        id: Uuid::new_v4(),
         name,
         price_cents,
         in_stock: true,
@@ -362,9 +370,11 @@ pub async fn delete_product(
     Product::destroy(pool, id).await
 }
 
-#[tokio::main]
-async fn main() -> Result<(), fabrique::Error> {
-    let pool = Pool::<Postgres>::connect("postgres://localhost/shop").await?;
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create an in-memory SQLite database and run migrations
+    let pool = sqlx::SqlitePool::connect(":memory:").await?;
+    sqlx::migrate!("../migrations/sqlite").run(&pool).await?;
 
     // Create products
     let anvil = create_product(&pool, "Anvil 3000".to_string(), 4999).await?;
@@ -381,7 +391,8 @@ async fn main() -> Result<(), fabrique::Error> {
 
     // Update a price
     let updated = update_product_price(&pool, anvil.id, 3999).await?;
-    println!("Updated {} to ${:.2}", updated.name, updated.price_cents as f64 / 100.0);
+    let price = updated.price_cents as f64 / 100.0;
+    println!("Updated {} to ${:.2}", updated.name, price);
 
     // Delete a product
     delete_product(&pool, rocket.id).await?;
@@ -395,7 +406,7 @@ async fn main() -> Result<(), fabrique::Error> {
 
 To test the service functions, add `Factory` to enable test data generation:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
 # extern crate uuid;
@@ -414,9 +425,10 @@ pub struct Product {
 
 Now write tests:
 
-```rust,no_run
+```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
 # use fabrique::prelude::*;
 # use uuid::Uuid;
@@ -437,11 +449,13 @@ Now write tests:
 #         .r#where(Product::IN_STOCK, "=", true)
 #         .get(pool)
 #         .await
-#         .map_err(Into::into)
 # }
 #
-// Example test using sqlx::test
-async fn test_list_available_products_excludes_out_of_stock(pool: Pool<Backend>) {
+// Example test using fabrique::test
+#[fabrique::test]
+async fn test_list_available_products_excludes_out_of_stock(
+    pool: Pool<Backend>,
+) {
     // Arrange
     Product::factory().in_stock(true).create(&pool).await.unwrap();
     Product::factory().in_stock(true).create(&pool).await.unwrap();
@@ -453,10 +467,10 @@ async fn test_list_available_products_excludes_out_of_stock(pool: Pool<Backend>)
     // Assert
     assert_eq!(available.len(), 2);
 }
-# fn main() {}
 ```
 
-Factories let you set only the fields that matter for each test. Other fields use sensible defaults.
+Factories let you set only the fields that matter for each test. Other fields
+use sensible defaults.
 
 ## Summary
 
@@ -471,6 +485,9 @@ You've learned how to integrate Fabrique into an existing application:
 
 ## Next Steps
 
-- Learn about [Relations](../concepts/relations.md) to model users, orders, and products together
-- Explore [Advanced Querying](../guides/advanced-querying.md) for complex queries
-- Read about [Working with Transactions](../guides/working-with-transactions.md) for atomic operations
+- Learn about [Relations](../concepts/relations.md) to model users, orders, and
+  products together
+- Explore [Advanced Querying](../guides/advanced-querying.md) for complex
+  queries
+- Read about [Working with Transactions](../guides/working-with-transactions.md)
+  for atomic operations

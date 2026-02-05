@@ -1,10 +1,13 @@
 # Handling Multiple belongs_to Relationships
 
-When a model references the same parent model multiple times, you need to tell Fabrique which foreign key to use for each relationship. This guide shows how to set this up correctly.
+When a model references the same parent model multiple times, you need to tell
+Fabrique which foreign key to use for each relationship. This guide shows how to
+set this up correctly.
 
 ## Define the Child Model
 
-Start with the model that has multiple references to the same parent. Each foreign key gets its own `belongs_to` attribute:
+Start with the model that has multiple references to the same parent. Each
+foreign key gets its own `belongs_to` attribute:
 
 ```rust
 # extern crate fabrique;
@@ -30,7 +33,8 @@ pub struct Message {
 
 ## Define the Parent Model with Explicit Foreign Keys
 
-On the parent model, each `HasMany` relationship must specify which foreign key it uses:
+On the parent model, each `HasMany` relationship must specify which foreign key
+it uses:
 
 ```rust
 # extern crate fabrique;
@@ -153,6 +157,9 @@ assert_eq!(message.recipient_id, bob.id);
 
 ## Why No for_user Method?
 
-When a model has a single `belongs_to` to `User`, Fabrique generates a `for_user()` method on the factory. With multiple references to `User`, this method is not generated because it would be ambiguous.
+When a model has a single `belongs_to` to `User`, Fabrique generates a
+`for_user()` method on the factory. With multiple references to `User`, this
+method is not generated because it would be ambiguous.
 
-Instead, use the direct setter methods (`sender_id()`, `recipient_id()`) as shown above.
+Instead, use the direct setter methods (`sender_id()`, `recipient_id()`) as
+shown above.

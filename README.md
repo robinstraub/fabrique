@@ -41,22 +41,35 @@ let product = Product::factory()
 
 ## Running Tests
 
-Requires Docker, [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov), and [lcov](https://github.com/linux-test-project/lcov). This runs unit tests and integration tests against all three backends (PostgreSQL, SQLite, MySQL), then merges the coverage reports.
+Requires Docker, [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov),
+and [lcov](https://github.com/linux-test-project/lcov). This runs unit tests and
+integration tests against all three backends (PostgreSQL, SQLite, MySQL), then
+merges the coverage reports.
 
 ```bash
 docker compose up -d
-cargo llvm-cov --features sqlite -p fabrique-derive -p fabrique-core --lib --lcov --output-path lcov-unit.info
-DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres" cargo llvm-cov --features postgres -p fabrique --lcov --output-path lcov-postgres.info
-cargo llvm-cov --features sqlite -p fabrique --lcov --output-path lcov-sqlite.info
-DATABASE_URL="mysql://root:mysql@localhost:3306/fabrique" cargo llvm-cov --features mysql -p fabrique --lcov --output-path lcov-mysql.info
-lcov -a lcov-unit.info -a lcov-postgres.info -a lcov-sqlite.info -a lcov-mysql.info -o lcov-total.info
+cargo llvm-cov --features sqlite \
+  -p fabrique-derive -p fabrique-core --lib \
+  --lcov --output-path lcov-unit.info
+DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres" \
+  cargo llvm-cov --features postgres -p fabrique \
+  --lcov --output-path lcov-postgres.info
+cargo llvm-cov --features sqlite -p fabrique \
+  --lcov --output-path lcov-sqlite.info
+DATABASE_URL="mysql://root:mysql@localhost:3306/fabrique" \
+  cargo llvm-cov --features mysql -p fabrique \
+  --lcov --output-path lcov-mysql.info
+lcov -a lcov-unit.info -a lcov-postgres.info \
+  -a lcov-sqlite.info -a lcov-mysql.info -o lcov-total.info
 lcov --list lcov-total.info
 ```
 
 ## Documentation
 
-- **[User Guide](https://robinstraub.github.io/fabrique/)** — Tutorials, concepts, and how-to guides
-- **[API Reference](https://docs.rs/fabrique)** — Technical documentation on docs.rs
+- **[User Guide](https://robinstraub.github.io/fabrique/)** — Tutorials,
+  concepts, and how-to guides
+- **[API Reference](https://docs.rs/fabrique)** — Technical documentation on
+  docs.rs
 
 ## License
 

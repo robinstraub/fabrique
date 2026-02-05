@@ -1,6 +1,7 @@
 # Advanced Querying
 
-This guide covers advanced query features: bulk updates, upserts with `ON CONFLICT`, and the `RETURNING` clause.
+This guide covers advanced query features: bulk updates, upserts with
+`ON CONFLICT`, and the `RETURNING` clause.
 
 ## Bulk Updates
 
@@ -15,7 +16,12 @@ Update multiple records matching a condition with the update builder:
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Factory, Model)]
-# pub struct Product { pub id: Uuid, pub name: String, pub price_cents: i32, pub in_stock: bool }
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -47,7 +53,12 @@ Chain multiple `.set()` calls to update several columns:
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Factory, Model)]
-# pub struct Product { pub id: Uuid, pub name: String, pub price_cents: i32, pub in_stock: bool }
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -78,7 +89,12 @@ Get back the updated rows with `.returning()`:
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Factory, Model)]
-# pub struct Product { pub id: Uuid, pub name: String, pub price_cents: i32, pub in_stock: bool }
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -115,7 +131,12 @@ Silently ignore conflicts:
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Factory, Model)]
-# pub struct Product { pub id: Uuid, pub name: String, pub price_cents: i32, pub in_stock: bool }
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -150,7 +171,12 @@ Update the existing row on conflict:
 # use uuid::Uuid;
 #
 # #[derive(Clone, Debug, Factory, Model)]
-# pub struct Product { pub id: Uuid, pub name: String, pub price_cents: i32, pub in_stock: bool }
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
+# }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
@@ -179,9 +205,9 @@ The `.do_update()` method updates all non-primary-key columns with `col = EXCLUD
 
 ## Summary
 
-| Operation | Method |
-|-----------|--------|
-| Bulk update | `Model::update().set().r#where().execute()` |
-| Get updated rows | `.returning().get()` |
-| Insert or ignore | `Model::query().insert().set(...).on_conflict().do_nothing()` |
-| Insert or update | `Model::query().insert().set(...).on_conflict().do_update()` |
+| Operation        | Method                                           |
+| ---------------- | ------------------------------------------------ |
+| Bulk update      | `Model::update().set().r#where().execute()`      |
+| Get updated rows | `.returning().get()`                             |
+| Insert or ignore | `.insert().set(...).on_conflict().do_nothing()`  |
+| Insert or update | `.insert().set(...).on_conflict().do_update()`   |
