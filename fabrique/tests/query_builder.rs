@@ -135,6 +135,15 @@ mod initial {
     }
 
     #[fabrique_derive::test]
+    async fn order_by_implicit_select_transitions_to_ordered(pool: Pool<Backend>) {
+        let result: Result<Vec<Product>, _> = Product::query()
+            .order_by(Product::NAME, "ASC")
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
     async fn limit_implicit_select_transitions_to_limited(pool: Pool<Backend>) {
         let result: Result<Vec<Product>, _> = Product::query().limit(10).get(&pool).await;
         assert!(result.is_ok());
