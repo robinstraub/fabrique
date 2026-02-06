@@ -73,9 +73,7 @@ lcov --list lcov-total.info
 
 ## Contributors
 
-<a href="https://github.com/robinstraub/fabrique/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=robinstraub/fabrique" />
-</a>
+[![Contributors](https://contrib.rocks/image?repo=robinstraub/fabrique)](https://github.com/robinstraub/fabrique/graphs/contributors)
 
 ## License
 
