@@ -70,6 +70,10 @@ lcov --list lcov-total.info
 - **[API Reference](https://docs.rs/fabrique)** — Technical documentation on
   docs.rs
 
+## Contributors
+
+[![Contributors](https://contrib.rocks/image?repo=robinstraub/fabrique)](https://github.com/robinstraub/fabrique/graphs/contributors)
+
 ## License
 
 MIT License
