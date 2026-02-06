@@ -27,7 +27,6 @@ pub struct Product {
 
 // Query
 let products = Product::query()
-    .select_as::<Product, _>()
     .r#where(Product::PRICE_CENTS, ">=", 1000)
     .get(&pool)
     .await?;

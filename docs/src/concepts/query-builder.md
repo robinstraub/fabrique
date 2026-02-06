@@ -86,9 +86,15 @@ points in query construction, and methods are transitions between states.
 stateDiagram-v2
     [*] --> Initial
     Initial --> Joining: join()
-    Initial --> Selected: select()
+    Initial --> Selected: select() / select_as()
+    Initial --> Filtered‹Selected›: where() (implicit select)
+    Initial --> Ordered: order_by() (implicit select)
+    Initial --> Limited: limit() (implicit select)
     Joining --> Joining: join() / join_through()
     Joining --> Joined‹Selected›: select() / select_as()
+    Joining --> Filtered‹Selected›: where() (implicit select)
+    Joining --> Ordered: order_by() (implicit select)
+    Joining --> Limited: limit() (implicit select)
     Selected --> Filtered‹Selected›: where()
     Selected --> Ordered: order_by()
     Selected --> Limited: limit()
@@ -101,6 +107,8 @@ stateDiagram-v2
     Ordered --> Limited: limit()
     Limited --> Offsetted: offset()
 
+    Initial --> [*]: get() / first() (implicit select)
+    Joining --> [*]: get() / first() (implicit select)
     Selected --> [*]: get() / first()
     Joined‹Selected› --> [*]: get() / first()
     Filtered‹Selected› --> [*]: get() / first()

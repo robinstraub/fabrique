@@ -54,7 +54,6 @@ mod tests {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
                             Self::query()
-                                .select_as::<Self, _>()
                                 .r#where(Self::ID, "=", id)
                                 .first_or_fail(&mut *conn)
                                 .await

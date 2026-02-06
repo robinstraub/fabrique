@@ -43,7 +43,6 @@
 //! # async fn example(db: &Pool<Backend>) -> Result<(), fabrique::Error> {
 //! // Query the database
 //! let expensive_products: Vec<Product> = Product::query()
-//!     .select_as::<Product, _>()
 //!     .r#where(Product::PRICE_CENTS, ">=", 1000)
 //!     .get(db)
 //!     .await?;

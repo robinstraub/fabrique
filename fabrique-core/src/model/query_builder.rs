@@ -40,7 +40,6 @@
 //! # struct Product { id: i32, name: String }
 //! # async fn example(pool: &sqlx::Pool<fabrique_core::database::Backend>) -> Result<(), Box<dyn std::error::Error>> {
 //! let products = Product::query()
-//!     .select_as::<Product, _>()
 //!     .r#where(Product::ID, "=", 42)
 //!     .get(pool).await?;
 //! # Ok(())
@@ -497,6 +496,136 @@ where
         self.select_impl::<Output>()
     }
 
+    /// Adds a WHERE clause, implicitly selecting all columns from the root
+    /// model.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().r#where(...)`.
+    pub fn r#where<Column, Operator, JoinedModel, Index>(
+        self,
+        column: Column,
+        operator: Operator,
+        value: Column::Type,
+    ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
+    where
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Index>,
+        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        Operator: Into<operators::Operator>,
+    {
+        self.select_impl::<Joins::Root>()
+            .r#where(column, operator, value)
+    }
+
+    /// Adds a WHERE IS NULL clause, implicitly selecting all columns from the
+    /// root model.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().where_null(...)`.
+    pub fn where_null<Column, JoinedModel, Index>(
+        self,
+        column: Column,
+    ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
+    where
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Index>,
+        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>().where_null(column)
+    }
+
+    /// Adds a WHERE IS NOT NULL clause, implicitly selecting all columns from
+    /// the root model.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().where_not_null(...)`.
+    pub fn where_not_null<Column, JoinedModel, Index>(
+        self,
+        column: Column,
+    ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
+    where
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Index>,
+        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>().where_not_null(column)
+    }
+
+    /// Adds an ORDER BY clause, implicitly selecting all columns from the root
+    /// model.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().order_by(...)`.
+    pub fn order_by<Column, JoinedModel, Index>(
+        self,
+        column: Column,
+        direction: impl Into<Direction>,
+    ) -> QueryBuilder<Building<Joins::Database, Ordered>, Joins, Joins::Root>
+    where
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Index>,
+    {
+        self.select_impl::<Joins::Root>()
+            .order_by(column, direction)
+    }
+
+    /// Adds a LIMIT clause, implicitly selecting all columns from the root
+    /// model.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().limit(...)`.
+    pub fn limit<'a>(
+        self,
+        count: i64,
+    ) -> QueryBuilder<Building<Joins::Database, Limited>, Joins, Joins::Root>
+    where
+        i64: sqlx::Encode<'a, Joins::Database> + sqlx::Type<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>().limit(count)
+    }
+
+    /// Executes the query, implicitly selecting all columns from the root
+    /// model.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().get(...)`.
+    pub async fn get<'e, E>(self, executor: E) -> Result<Vec<Joins::Root>, Joins::Error>
+    where
+        Joins::Error: From<sqlx::Error>,
+        E: sqlx::Executor<'e, Database = Joins::Database>,
+        Joins::Root:
+            for<'r> sqlx::FromRow<'r, <Joins::Database as sqlx::Database>::Row> + Send + Unpin,
+        <Joins::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>().get(executor).await
+    }
+
+    /// Retrieves the first row, implicitly selecting all columns from the root
+    /// model.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().first(...)`.
+    pub async fn first<'e, E>(self, executor: E) -> Result<Option<Joins::Root>, Joins::Error>
+    where
+        Joins::Error: From<sqlx::Error>,
+        E: sqlx::Executor<'e, Database = Joins::Database>,
+        Joins::Root:
+            for<'r> sqlx::FromRow<'r, <Joins::Database as sqlx::Database>::Row> + Send + Unpin,
+        <Joins::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>().first(executor).await
+    }
+
+    /// Retrieves the first row or fails, implicitly selecting all columns from
+    /// the root model.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().first_or_fail(...)`.
+    pub async fn first_or_fail<'e, E>(self, executor: E) -> Result<Joins::Root, Joins::Error>
+    where
+        Joins::Error: From<sqlx::Error>,
+        E: sqlx::Executor<'e, Database = Joins::Database>,
+        Joins::Root:
+            for<'r> sqlx::FromRow<'r, <Joins::Database as sqlx::Database>::Row> + Send + Unpin,
+        <Joins::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>()
+            .first_or_fail(executor)
+            .await
+    }
+
     /// Adds a JOIN before SELECT.
     ///
     /// Transitions to [`Joining`] state to accumulate joins.
@@ -602,6 +731,136 @@ where
             state: self.state,
             _marker: PhantomData,
         }
+    }
+
+    /// Adds a WHERE clause, implicitly selecting all columns from the root
+    /// model and flushing accumulated joins.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().r#where(...)`.
+    pub fn r#where<Column, Operator, JoinedModel, Index>(
+        self,
+        column: Column,
+        operator: Operator,
+        value: Column::Type,
+    ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
+    where
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Index>,
+        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        Operator: Into<operators::Operator>,
+    {
+        self.select_impl::<Joins::Root>()
+            .r#where(column, operator, value)
+    }
+
+    /// Adds a WHERE IS NULL clause, implicitly selecting all columns from the
+    /// root model and flushing accumulated joins.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().where_null(...)`.
+    pub fn where_null<Column, JoinedModel, Index>(
+        self,
+        column: Column,
+    ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
+    where
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Index>,
+        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>().where_null(column)
+    }
+
+    /// Adds a WHERE IS NOT NULL clause, implicitly selecting all columns from
+    /// the root model and flushing accumulated joins.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().where_not_null(...)`.
+    pub fn where_not_null<Column, JoinedModel, Index>(
+        self,
+        column: Column,
+    ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
+    where
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Index>,
+        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>().where_not_null(column)
+    }
+
+    /// Adds an ORDER BY clause, implicitly selecting all columns from the root
+    /// model and flushing accumulated joins.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().order_by(...)`.
+    pub fn order_by<Column, JoinedModel, Index>(
+        self,
+        column: Column,
+        direction: impl Into<Direction>,
+    ) -> QueryBuilder<Building<Joins::Database, Ordered>, Joins, Joins::Root>
+    where
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Index>,
+    {
+        self.select_impl::<Joins::Root>()
+            .order_by(column, direction)
+    }
+
+    /// Adds a LIMIT clause, implicitly selecting all columns from the root
+    /// model and flushing accumulated joins.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().limit(...)`.
+    pub fn limit<'a>(
+        self,
+        count: i64,
+    ) -> QueryBuilder<Building<Joins::Database, Limited>, Joins, Joins::Root>
+    where
+        i64: sqlx::Encode<'a, Joins::Database> + sqlx::Type<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>().limit(count)
+    }
+
+    /// Executes the query, implicitly selecting all columns from the root
+    /// model and flushing accumulated joins.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().get(...)`.
+    pub async fn get<'e, E>(self, executor: E) -> Result<Vec<Joins::Root>, Joins::Error>
+    where
+        Joins::Error: From<sqlx::Error>,
+        E: sqlx::Executor<'e, Database = Joins::Database>,
+        Joins::Root:
+            for<'r> sqlx::FromRow<'r, <Joins::Database as sqlx::Database>::Row> + Send + Unpin,
+        <Joins::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>().get(executor).await
+    }
+
+    /// Retrieves the first row, implicitly selecting all columns from the root
+    /// model and flushing accumulated joins.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().first(...)`.
+    pub async fn first<'e, E>(self, executor: E) -> Result<Option<Joins::Root>, Joins::Error>
+    where
+        Joins::Error: From<sqlx::Error>,
+        E: sqlx::Executor<'e, Database = Joins::Database>,
+        Joins::Root:
+            for<'r> sqlx::FromRow<'r, <Joins::Database as sqlx::Database>::Row> + Send + Unpin,
+        <Joins::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>().first(executor).await
+    }
+
+    /// Retrieves the first row or fails, implicitly selecting all columns from
+    /// the root model and flushing accumulated joins.
+    ///
+    /// Equivalent to `.select_as::<RootModel, _>().first_or_fail(...)`.
+    pub async fn first_or_fail<'e, E>(self, executor: E) -> Result<Joins::Root, Joins::Error>
+    where
+        Joins::Error: From<sqlx::Error>,
+        E: sqlx::Executor<'e, Database = Joins::Database>,
+        Joins::Root:
+            for<'r> sqlx::FromRow<'r, <Joins::Database as sqlx::Database>::Row> + Send + Unpin,
+        <Joins::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>()
+            .first_or_fail(executor)
+            .await
     }
 
     /// Internal helper for select operations with join flushing.

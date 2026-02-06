@@ -290,7 +290,6 @@ pub async fn get_user_with_orders(
     user_id: Uuid,
 ) -> Result<(User, Vec<Order>), fabrique::Error> {
     let user: User = User::query()
-        .select_as::<User, _>()
         .r#where(User::ID, "=", user_id)
         .first_or_fail(pool)
         .await?;
@@ -353,7 +352,6 @@ pub async fn get_user_pending_orders(
     user_id: Uuid,
 ) -> Result<Vec<Order>, fabrique::Error> {
     let user: User = User::query()
-        .select_as::<User, _>()
         .r#where(User::ID, "=", user_id)
         .first_or_fail(pool)
         .await?;
