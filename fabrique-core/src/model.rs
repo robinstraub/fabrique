@@ -81,14 +81,8 @@ where
     {
         async move {
             match Self::soft_delete_column() {
-                Some(column) => {
-                    Self::query()
-                        .select_as::<Self, _>()
-                        .where_null(column)
-                        .get(executor)
-                        .await
-                }
-                None => Self::query().select_as::<Self, _>().get(executor).await,
+                Some(column) => Self::query().where_null(column).get(executor).await,
+                None => Self::query().get(executor).await,
             }
         }
     }

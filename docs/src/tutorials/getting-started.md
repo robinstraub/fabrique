@@ -179,7 +179,6 @@ pub async fn list_available_products(
     pool: &Pool<Backend>,
 ) -> Result<Vec<Product>, fabrique::Error> {
     Product::query()
-        .select_as::<Product, _>()
         .r#where(Product::IN_STOCK, "=", true)
         .get(pool)
         .await
@@ -190,9 +189,8 @@ pub async fn list_available_products(
 The query builder provides a fluent API. Here we:
 
 1. Start a query with `Product::query()`
-2. Specify a SELECT with `.select_as::<Product, _>()`
-3. Add a WHERE clause with `.r#where()`
-4. Execute and collect results with `.get(pool)`
+2. Add a WHERE clause with `.r#where()`
+3. Execute and collect results with `.get(pool)`
 
 Column constants like `Product::IN_STOCK` are type-safe — passing the wrong type
 won't compile.
@@ -257,7 +255,6 @@ pub async fn update_product_price(
     new_price_cents: i32,
 ) -> Result<Product, fabrique::Error> {
     let mut product: Product = Product::query()
-        .select_as::<Product, _>()
         .r#where(Product::ID, "=", id)
         .first_or_fail(pool)
         .await?;
@@ -329,7 +326,6 @@ pub async fn list_available_products(
     pool: &Pool<Backend>,
 ) -> Result<Vec<Product>, fabrique::Error> {
     Product::query()
-        .select_as::<Product, _>()
         .r#where(Product::IN_STOCK, "=", true)
         .get(pool)
         .await
@@ -355,7 +351,6 @@ pub async fn update_product_price(
     new_price_cents: i32,
 ) -> Result<Product, fabrique::Error> {
     let mut product: Product = Product::query()
-        .select_as::<Product, _>()
         .r#where(Product::ID, "=", id)
         .first_or_fail(pool)
         .await?;
@@ -445,7 +440,6 @@ Now write tests:
 #     pool: &Pool<Backend>,
 # ) -> Result<Vec<Product>, fabrique::Error> {
 #     Product::query()
-#         .select_as::<Product, _>()
 #         .r#where(Product::IN_STOCK, "=", true)
 #         .get(pool)
 #         .await

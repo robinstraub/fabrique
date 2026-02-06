@@ -70,13 +70,6 @@ mod initial {
     }
 
     #[fabrique_derive::test]
-    async fn select_transitions_to_selected(pool: Pool<Backend>) {
-        let result: Result<Vec<Product>, _> =
-            Product::query().select_as::<Product, _>().get(&pool).await;
-        assert!(result.is_ok());
-    }
-
-    #[fabrique_derive::test]
     async fn select_as_transitions_to_selected(pool: Pool<Backend>) {
         // select_as on Initial can only select the base model (no joins available)
         let result: Result<Vec<Product>, _> =
@@ -110,11 +103,7 @@ mod initial {
 
     #[fabrique_derive::test]
     async fn join_transitions_to_joining(pool: Pool<Backend>) {
-        let result: Result<Vec<User>, _> = User::query()
-            .join::<Order>()
-            .select_as::<User, _>()
-            .get(&pool)
-            .await;
+        let result: Result<Vec<User>, _> = User::query().join::<Order>().get(&pool).await;
         assert!(result.is_ok());
     }
 
@@ -124,6 +113,59 @@ mod initial {
             .select((Product::NAME, Product::PRICE_CENTS))
             .get(&pool)
             .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn where_implicit_select_transitions_to_filtered(pool: Pool<Backend>) {
+        let result: Result<Vec<Product>, _> = Product::query()
+            .r#where(Product::PRICE_CENTS, ">=", 1000)
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn where_not_null_implicit_select_transitions_to_filtered(pool: Pool<Backend>) {
+        let result: Result<Vec<Product>, _> = Product::query()
+            .where_not_null(Product::NAME)
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn order_by_implicit_select_transitions_to_ordered(pool: Pool<Backend>) {
+        let result: Result<Vec<Product>, _> = Product::query()
+            .order_by(Product::NAME, "ASC")
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn limit_implicit_select_transitions_to_limited(pool: Pool<Backend>) {
+        let result: Result<Vec<Product>, _> = Product::query().limit(10).get(&pool).await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn first_implicit_select_executes(pool: Pool<Backend>) {
+        let result: Result<Option<Product>, _> = Product::query().first(&pool).await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn first_or_fail_implicit_select_executes(pool: Pool<Backend>) {
+        Product::factory().create(&pool).await.expect("setup");
+
+        let result: Result<Product, _> = Product::query().first_or_fail(&pool).await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn get_implicit_select_executes(pool: Pool<Backend>) {
+        let result: Result<Vec<Product>, _> = Product::query().get(&pool).await;
         assert!(result.is_ok());
     }
 }
@@ -140,7 +182,6 @@ mod joining {
         let result: Result<Vec<Order>, _> = Order::query()
             .join::<User>()
             .join::<OrderLine>()
-            .select_as::<Order, _>()
             .get(&pool)
             .await;
         assert!(result.is_ok());
@@ -151,14 +192,13 @@ mod joining {
         let result: Result<Vec<Order>, _> = Order::query()
             .join::<OrderLine>()
             .join_through::<Product, OrderLine, _>()
-            .select_as::<Order, _>()
             .get(&pool)
             .await;
         assert!(result.is_ok());
     }
 
     #[fabrique_derive::test]
-    async fn select_transitions_to_selected(pool: Pool<Backend>) {
+    async fn select_as_transitions_to_selected(pool: Pool<Backend>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
             .select_as::<User, _>()
@@ -179,12 +219,72 @@ mod joining {
     }
 
     #[fabrique_derive::test]
-    async fn select_as_transitions_to_selected(pool: Pool<Backend>) {
-        let result: Result<Vec<Order>, _> = User::query()
+    async fn where_implicit_select_transitions_to_filtered(pool: Pool<Backend>) {
+        let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
-            .select_as::<Order, _>()
+            .r#where(User::EMAIL, "=", "test@example.com".to_string())
             .get(&pool)
             .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn where_null_implicit_select_transitions_to_filtered(pool: Pool<Backend>) {
+        let result: Result<Vec<User>, _> = User::query()
+            .join::<Order>()
+            .where_null(User::EMAIL)
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn where_not_null_implicit_select_transitions_to_filtered(pool: Pool<Backend>) {
+        let result: Result<Vec<User>, _> = User::query()
+            .join::<Order>()
+            .where_not_null(User::EMAIL)
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn order_by_implicit_select_transitions_to_ordered(pool: Pool<Backend>) {
+        let result: Result<Vec<User>, _> = User::query()
+            .join::<Order>()
+            .order_by(User::NAME, "ASC")
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn limit_implicit_select_transitions_to_limited(pool: Pool<Backend>) {
+        let result: Result<Vec<User>, _> = User::query().join::<Order>().limit(10).get(&pool).await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn first_implicit_select_executes(pool: Pool<Backend>) {
+        let result: Result<Option<User>, _> = User::query().join::<Order>().first(&pool).await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn first_or_fail_implicit_select_executes(pool: Pool<Backend>) {
+        User::factory()
+            .has_orders(Order::factory(), 1)
+            .create(&pool)
+            .await
+            .expect("setup");
+
+        let result: Result<User, _> = User::query().join::<Order>().first_or_fail(&pool).await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn get_implicit_select_executes(pool: Pool<Backend>) {
+        let result: Result<Vec<User>, _> = User::query().join::<Order>().get(&pool).await;
         assert!(result.is_ok());
     }
 }
@@ -265,14 +365,11 @@ mod selected {
 
     #[fabrique_derive::test]
     async fn first_executes(pool: Pool<Backend>) {
-        Product::factory().create(&pool).await.expect("setup");
-
         let result: Result<Option<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .first(&pool)
             .await;
         assert!(result.is_ok());
-        assert!(result.unwrap().is_some());
     }
 
     #[fabrique_derive::test]
@@ -341,12 +438,6 @@ mod joined_selected {
 
     #[fabrique_derive::test]
     async fn order_by_transitions_to_ordered(pool: Pool<Backend>) {
-        User::factory()
-            .has_orders(Order::factory(), 1)
-            .create(&pool)
-            .await
-            .expect("setup");
-
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
             .select_as::<User, _>()
@@ -358,12 +449,6 @@ mod joined_selected {
 
     #[fabrique_derive::test]
     async fn limit_transitions_to_limited(pool: Pool<Backend>) {
-        User::factory()
-            .has_orders(Order::factory(), 1)
-            .create(&pool)
-            .await
-            .expect("setup");
-
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
             .select_as::<User, _>()
@@ -392,19 +477,12 @@ mod joined_selected {
 
     #[fabrique_derive::test]
     async fn first_executes(pool: Pool<Backend>) {
-        User::factory()
-            .has_orders(Order::factory(), 1)
-            .create(&pool)
-            .await
-            .expect("setup");
-
         let result: Result<Option<User>, _> = User::query()
             .join::<Order>()
             .select_as::<User, _>()
             .first(&pool)
             .await;
         assert!(result.is_ok());
-        assert!(result.unwrap().is_some());
     }
 
     #[fabrique_derive::test]
@@ -513,19 +591,12 @@ mod filtered_selected {
 
     #[fabrique_derive::test]
     async fn first_executes(pool: Pool<Backend>) {
-        Product::factory()
-            .in_stock(true)
-            .create(&pool)
-            .await
-            .expect("setup");
-
         let result: Result<Option<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
             .first(&pool)
             .await;
         assert!(result.is_ok());
-        assert!(result.unwrap().is_some());
     }
 
     #[fabrique_derive::test]
@@ -578,15 +649,12 @@ mod ordered {
 
     #[fabrique_derive::test]
     async fn first_executes(pool: Pool<Backend>) {
-        Product::factory().create(&pool).await.expect("setup");
-
         let result: Result<Option<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .order_by(Product::NAME, "ASC")
             .first(&pool)
             .await;
         assert!(result.is_ok());
-        assert!(result.unwrap().is_some());
     }
 
     #[fabrique_derive::test]

@@ -33,7 +33,6 @@ Product::update()
     .execute(&pool)
     .await?;
 # let products = Product::query()
-#     .select_as::<Product, _>()
 #     .r#where(Product::PRICE_CENTS, ">", 10000)
 #     .get(&pool)
 #     .await?;
@@ -69,7 +68,7 @@ Product::update()
     .r#where(Product::NAME, "=", "Anvil".to_string())
     .execute(&pool)
     .await?;
-# let product = Product::query().select_as::<Product, _>()
+# let product = Product::query()
 #     .r#where(Product::NAME, "=", "Anvil".to_string())
 #     .first_or_fail(&pool)
 #     .await?;
