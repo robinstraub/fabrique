@@ -42,9 +42,9 @@ jobs:
 
       - name: Build with stable
         run: |
-          cargo build --workspace --features sqlite
-          cargo build --workspace --features postgres --exclude ui-tests
-          cargo build --workspace --features mysql --exclude ui-tests
+          cargo check --workspace --features sqlite
+          cargo check --workspace --features postgres --exclude ui-tests
+          cargo check --workspace --features mysql --exclude ui-tests
 
   codestyle-markdown:
     name: Codestyle (Markdown)
