@@ -1,6 +1,5 @@
 error: Unknown field: `unknown_attribute`. Available values: `as`, `belongs_to`, `faker`, `foreign_key`, `primary_key`, `soft_delete`, `through`
  --> tests/ui/invalid_attribute_name.rs:5:5
   |
-5 | /     #[fabrique(unknown_attribute = true)]
-6 | |     weight: u32,
-  | |_______________^
+5 |     #[fabrique(unknown_attribute = true)]
+  |     ^

@@ -1,6 +1,5 @@
 error: Unknown value: `` at belongs_to
  --> tests/ui/invalid_string_literal_in_belongs_to.rs:5:5
   |
-5 | /     #[fabrique(belongs_to = "")]
-6 | |     hammer_id: u32,
-  | |__________________^
+5 |     #[fabrique(belongs_to = "")]
+  |     ^
