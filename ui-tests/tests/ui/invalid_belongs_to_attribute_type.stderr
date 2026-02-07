@@ -1,6 +1,5 @@
 error: Unexpected type `bool` at belongs_to
  --> tests/ui/invalid_belongs_to_attribute_type.rs:5:5
   |
-5 | /     #[fabrique(belongs_to = true)]
-6 | |     hammer_id: u32,
-  | |__________________^
+5 |     #[fabrique(belongs_to = true)]
+  |     ^

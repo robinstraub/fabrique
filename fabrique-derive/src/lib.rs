@@ -1,4 +1,4 @@
-#![feature(coverage_attribute)]
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 //! Procedural macros for generating factory and model code.
 //!
@@ -29,7 +29,7 @@ use crate::codegen::*;
 /// - `HardDelete` trait (permanent deletion)
 /// - `SoftDelete` trait (conditional, if soft delete field is present)
 // Tested via UI tests (trybuild) - coverage can't be measured for proc macros
-#[coverage(off)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 #[proc_macro_derive(Model, attributes(fabrique))]
 pub fn derive_model(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -73,7 +73,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
 /// Derives a factory struct for the annotated type.
 // Tested via UI tests (trybuild) - coverage can't be measured for proc macros
-#[coverage(off)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 #[proc_macro_derive(Factory, attributes(factory, fabrique))]
 pub fn derive_factory(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -139,7 +139,7 @@ pub fn test(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 /// ```
 // Tested via mdbook doctests, not unit tests - coverage measured separately
-#[coverage(off)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 #[proc_macro_attribute]
 pub fn doctest(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);

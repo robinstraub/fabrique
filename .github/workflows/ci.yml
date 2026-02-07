@@ -20,13 +20,28 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        run: cargo +nightly fmt --all -- --check
 
       - name: Run clippy
         run: |
           cargo clippy --workspace --all-targets --features sqlite -- -D warnings
           cargo clippy --workspace --all-targets --features postgres --exclude ui-tests -- -D warnings
           cargo clippy --workspace --all-targets --features mysql --exclude ui-tests -- -D warnings
+
+  build-stable:
+    name: Build (Stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Build with stable
+        run: |
+          cargo build --features sqlite
+          cargo build --features postgres
+          cargo build --features mysql
 
   codestyle-markdown:
     name: Codestyle (Markdown)
@@ -61,6 +76,8 @@ jobs:
 
       - name: Install Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
@@ -82,6 +99,8 @@ jobs:
 
       - name: Install Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
@@ -118,6 +137,8 @@ jobs:
 
       - name: Install Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
@@ -139,6 +160,8 @@ jobs:
 
       - name: Install Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
@@ -175,13 +198,13 @@ jobs:
   docs:
     name: Documentation
     runs-on: ubuntu-latest
-    env:
-      RUSTUP_TOOLCHAIN: nightly-2025-12-01
     steps:
       - uses: actions/checkout@v5
 
       - name: Install Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
 
       - name: Install mdBook and preprocessors
         uses: taiki-e/install-action@v2
