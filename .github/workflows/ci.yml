@@ -19,6 +19,9 @@ jobs:
       - name: Install Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
+      - name: Install nightly for rustfmt
+        run: rustup toolchain install nightly --component rustfmt
+
       - name: Check formatting
         run: cargo +nightly fmt --all -- --check
 
@@ -39,9 +42,9 @@ jobs:
 
       - name: Build with stable
         run: |
-          cargo build --features sqlite
-          cargo build --features postgres
-          cargo build --features mysql
+          cargo build --workspace --features sqlite
+          cargo build --workspace --features postgres --exclude ui-tests
+          cargo build --workspace --features mysql --exclude ui-tests
 
   codestyle-markdown:
     name: Codestyle (Markdown)
@@ -203,8 +206,6 @@ jobs:
 
       - name: Install Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: nightly
 
       - name: Install mdBook and preprocessors
         uses: taiki-e/install-action@v2
