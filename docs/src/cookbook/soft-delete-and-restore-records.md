@@ -1,13 +1,18 @@
-# Using Soft Deletes
+# Keep Order History Intact with Soft Deletes
 
-Soft deletes allow you to mark records as deleted without actually removing them
-from the database. This is useful for auditing, recovery, or when you need to
-preserve referential integrity.
+A product is discontinued, but existing orders reference it.
+A hard DELETE would either violate foreign key constraints or
+cascade-delete order history. Soft deletes solve this: the
+record stays in the database with a timestamp marking when it
+was archived.
 
-## Enabling Soft Deletes
+For the full list of model methods, see
+[Models > Convenience Methods](../concepts/models.md#convenience-methods).
 
-To enable soft deletes, add a field annotated with `#[fabrique(soft_delete)]`.
-The field type must be an optional datetime:
+## Enable Soft Deletes on a Model
+
+Add a nullable datetime field annotated with
+`#[fabrique(soft_delete)]`:
 
 ```rust
 # extern crate fabrique;
@@ -19,8 +24,11 @@ use uuid::Uuid;
 use chrono::{DateTime, Utc};
 
 #[derive(Factory, Model)]
-pub struct User {
+pub struct Product {
     id: Uuid,
+    name: String,
+    price_cents: i32,
+    in_stock: bool,
 
     #[fabrique(soft_delete)]
     deleted_at: Option<DateTime<Utc>>,
@@ -28,10 +36,14 @@ pub struct User {
 # fn main() {}
 ```
 
-## Deleting Records
+This single annotation changes the behavior of `.delete()` and
+`.destroy()` — they now set `deleted_at` instead of issuing a
+`DELETE` statement.
 
-When you call `delete` on a model with soft deletes enabled, the `deleted_at`
-column is set to the current timestamp instead of removing the record:
+## Archive a Product
+
+Call `.delete()` on the instance. The row — and all its order
+line references — stays intact:
 
 ```rust
 # extern crate fabrique;
@@ -43,30 +55,51 @@ column is set to the current timestamp instead of removing the record:
 # use uuid::Uuid;
 # use chrono::{DateTime, Utc};
 #
-# #[derive(Factory, Model)]
-# pub struct User {
-#     id: Uuid,
-#     name: String,
-#     email: String,
+# #[derive(Clone, Factory, Model)]
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
 #     #[fabrique(soft_delete)]
-#     deleted_at: Option<DateTime<Utc>>,
+#     pub deleted_at: Option<DateTime<Utc>>,
 # }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-// Create a user into the database
-let user = User::factory().create(&pool).await?;
+let anvil = Product::factory()
+    .name("Anvil 3000".to_string())
+    .create(&pool)
+    .await?;
+let id = anvil.id;
 
-user.delete(&pool).await?;
+// Archive it — sets deleted_at to now()
+anvil.delete(&pool).await?;
+
+// Convenience methods like all() skip soft-deleted records
+let active = Product::all(&pool).await?;
+assert!(active.iter().all(|p| p.id != id));
+
+// find() still returns it — useful for admin views
+let archived = Product::find(&pool, id).await?;
+assert!(archived.trashed(&pool).await?);
 # Ok(())
 # }
 ```
 
-Soft-deleted records are automatically excluded from query results.
+> **Note:** The query builder does not add hidden WHERE
+> clauses — `Product::query().get()` returns all records,
+> including soft-deleted ones. This is by design: implicit
+> filtering would conflict with explicit `where_not_null` /
+> `where_null` clauses and add runtime cost. Convenience
+> methods like `all()` handle the filtering for you; for
+> custom queries, add
+> `.where_null(Product::DELETED_AT)` explicitly.
 
-## Checking if a Record is Deleted
+## Check and Restore
 
-Use the `trashed` method to check if a model has been soft deleted:
+The supplier restocks the Anvil 3000. Use `.restore()` to
+clear `deleted_at` and bring the product back:
 
 ```rust
 # extern crate fabrique;
@@ -78,30 +111,36 @@ Use the `trashed` method to check if a model has been soft deleted:
 # use uuid::Uuid;
 # use chrono::{DateTime, Utc};
 #
-# #[derive(Factory, Model)]
-# pub struct User {
-#     id: Uuid,
-#     name: String,
-#     email: String,
+# #[derive(Clone, Factory, Model)]
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
 #     #[fabrique(soft_delete)]
-#     deleted_at: Option<DateTime<Utc>>,
+#     pub deleted_at: Option<DateTime<Utc>>,
 # }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-# let user = User::factory().create(&pool).await?;
-# let id = user.id;
-# user.delete(&pool).await?;
-// Retrieve a soft-deleted user by its id
-let user = User::find(&pool, id).await?;
-assert!(user.trashed(&pool).await?);
+# let product = Product::factory().create(&pool).await?;
+# let id = product.id;
+# product.delete(&pool).await?;
+let archived = Product::find(&pool, id).await?;
+archived.restore(&pool).await?;
+
+// Back in active results
+let product = Product::find(&pool, id).await?;
+assert!(!product.trashed(&pool).await?);
 # Ok(())
 # }
 ```
 
-## Restoring Deleted Records
+## Archive by ID Without Fetching
 
-To restore a soft-deleted record, use the `restore` method:
+In a REST endpoint you typically have the ID but not the full
+model. `Product::destroy()` soft-deletes by primary key
+without a prior SELECT:
 
 ```rust
 # extern crate fabrique;
@@ -113,34 +152,32 @@ To restore a soft-deleted record, use the `restore` method:
 # use uuid::Uuid;
 # use chrono::{DateTime, Utc};
 #
-# #[derive(Factory, Model)]
-# pub struct User {
-#     id: Uuid,
-#     name: String,
-#     email: String,
+# #[derive(Clone, Factory, Model)]
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
 #     #[fabrique(soft_delete)]
-#     deleted_at: Option<DateTime<Utc>>,
+#     pub deleted_at: Option<DateTime<Utc>>,
 # }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-# let user = User::factory().create(&pool).await?;
-# let id = user.id;
-# user.delete(&pool).await?;
-// Retrieve a soft-deleted user by its id
-let user = User::find(&pool, id).await?;
-user.restore(&pool).await?;
-
-// deleted_at is now null, record appears in queries again
-let user = User::find(&pool, id).await?;
-assert!(!user.trashed(&pool).await?);
+# let product = Product::factory().create(&pool).await?;
+# let id = product.id;
+// DELETE /products/:id handler
+Product::destroy(&pool, id).await?;
+# let product = Product::find(&pool, id).await?;
+# assert!(product.trashed(&pool).await?);
 # Ok(())
 # }
 ```
 
-## Permanently Deleting Records
+## Permanently Remove When Needed
 
-To permanently remove a soft-deleted record from the database, use `hard_delete`:
+For GDPR compliance or data purges, `hard_delete()` issues a
+real `DELETE` — bypassing the soft delete mechanism:
 
 ```rust
 # extern crate fabrique;
@@ -152,22 +189,25 @@ To permanently remove a soft-deleted record from the database, use `hard_delete`
 # use uuid::Uuid;
 # use chrono::{DateTime, Utc};
 #
-# #[derive(Factory, Model)]
-# pub struct User {
-#     id: Uuid,
-#     name: String,
-#     email: String,
+# #[derive(Clone, Factory, Model)]
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
 #     #[fabrique(soft_delete)]
-#     deleted_at: Option<DateTime<Utc>>,
+#     pub deleted_at: Option<DateTime<Utc>>,
 # }
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-// Create a user into the database
-let user = User::factory().create(&pool).await?;
-
+# let product = Product::factory().create(&pool).await?;
+# let id = product.id;
 // Permanently remove the record
-user.hard_delete(&pool).await?;
+product.hard_delete(&pool).await?;
+
+// Or by ID, without fetching first:
+// Product::hard_destroy(&pool, id).await?;
 # Ok(())
 # }
 ```

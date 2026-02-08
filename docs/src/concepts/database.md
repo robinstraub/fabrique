@@ -43,19 +43,32 @@ query works with both, and code remains backend-agnostic:
 ```rust
 # extern crate fabrique;
 # extern crate sqlx;
+# extern crate tokio;
 # extern crate uuid;
-use fabrique::prelude::*;
+# use fabrique::prelude::*;
 # use uuid::Uuid;
-# #[derive(fabrique::Model)]
-# pub struct User { id: Uuid }
-
+#
+# #[derive(Clone, Factory, Model)]
+# pub struct User {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub email: String,
+# }
+#
+# #[fabrique::doctest]
+# async fn main(
+#     pool: Pool<Backend>,
+# ) -> Result<(), fabrique::Error> {
 async fn count_users(
     pool: &Pool<Backend>,
 ) -> Result<usize, fabrique::Error> {
     let users = User::all(pool).await?;
     Ok(users.len())
 }
-# fn main() {}
+
+# let count = count_users(&pool).await?;
+# Ok(())
+# }
 ```
 
 Transactions are acquired from the pool with `pool.begin()` and
@@ -122,22 +135,25 @@ See the [API reference](https://docs.rs/fabrique) for the full
 
 ## SQLite for Testing
 
-SQLite's in-memory mode makes it a natural choice for testing: no
-external database setup, fast execution, and complete isolation
-between tests. The `dev-dependencies` mechanism lets a project use
-a different backend in production while keeping SQLite for tests —
-Cargo unifies features only during `cargo test`:
+SQLite's in-memory mode makes it a natural choice for testing:
+no external database setup, fast execution, and complete
+isolation between tests.
+
+Enable the `sqlite` feature in your project:
 
 ```toml
 [dependencies]
-fabrique = { version = "0.2", features = ["postgres"] }
-
-[dev-dependencies]
 fabrique = { version = "0.2", features = ["sqlite"] }
 ```
 
-The `#[fabrique::doctest]` macro leverages this approach for
-documentation examples.
+> **Note:** Backend features are mutually exclusive. If your
+> production environment uses PostgreSQL or MySQL, use Cargo
+> feature flags or a workspace setup to switch backends between
+> development and deployment — do not enable two backend features
+> simultaneously.
+
+The `#[fabrique::doctest]` macro leverages SQLite's in-memory
+mode for documentation examples.
 
 ---
 

@@ -7,7 +7,6 @@ let you override only what matters for your specific test case.
 > **Note:** Factories will move behind a `testing` feature flag
 > ([#105](https://github.com/robinstraub/fabrique/issues/105)) to
 > prevent accidental use in production code.
-> <!-- TODO: remove this note once #105 is merged -->
 
 ## The Builder Pattern
 

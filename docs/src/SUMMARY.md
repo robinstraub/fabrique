@@ -19,6 +19,7 @@
 
 # Cookbook
 
-- [Bulk Update and Upsert](cookbook/bulk-update-and-upsert.md)
-- [Soft Delete and Restore Records](cookbook/soft-delete-and-restore-records.md)
+- [Efficiently Reprice a Catalog with Bulk Updates](cookbook/bulk-update-and-upsert.md)
+- [Keep Order History Intact with Soft Deletes](cookbook/soft-delete-and-restore-records.md)
+- [Simplify Complex Test Setup with Factories](cookbook/simplify-test-setup-with-factories.md)
 - [Handle Ambiguous Relations](cookbook/handle-ambiguous-relations.md)

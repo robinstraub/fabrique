@@ -19,7 +19,8 @@ CREATE TABLE products (
     id BINARY(16) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     price_cents INTEGER NOT NULL,
-    in_stock BOOLEAN NOT NULL DEFAULT true
+    in_stock BOOLEAN NOT NULL DEFAULT true,
+    deleted_at DATETIME
 );
 
 CREATE TABLE orders (
