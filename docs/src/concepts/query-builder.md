@@ -316,8 +316,7 @@ no relationship is declared between the models, it won't compile:
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-# let user = User::factory().create(&pool).await?;
-# Order::factory().for_user(user).create(&pool).await?;
+# Order::factory().create(&pool).await?;
 // Both directions work — the relation is declared once
 let users = User::query()
     .join::<Order>()
@@ -381,7 +380,7 @@ chain must be valid at each step:
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-# Order::factory().for_user(User::factory()).create(&pool).await?;
+# Order::factory().create(&pool).await?;
 // Order → OrderLine (direct) → Product (through OrderLine)
 let orders = Order::query()
     .join::<OrderLine>()
@@ -486,8 +485,7 @@ model:
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-# let user = User::factory().create(&pool).await?;
-# Order::factory().for_user(user).create(&pool).await?;
+# Order::factory().create(&pool).await?;
 let orders: Vec<Order> = User::query()
     .join::<Order>()
     .select_as::<Order, _>()
@@ -555,8 +553,7 @@ present:
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-# let user = User::factory().create(&pool).await?;
-# Order::factory().for_user(user).create(&pool).await?;
+# Order::factory().create(&pool).await?;
 let rows: Vec<(String, String)> = User::query()
     .join::<Order>()
     .select((User::NAME, Order::STATUS))

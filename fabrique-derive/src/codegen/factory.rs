@@ -265,15 +265,26 @@ impl<'a> FactoryCodegen<'a> {
             let field = &relation.base_ident;
             let factory_field = relation.factory_field;
             let enum_ident = Self::relation_enum_ident(&struct_name, relation.name);
+            let factory_type = Ident::new(
+                &format!("{}Factory", relation.referenced_type),
+                relation.referenced_type.span(),
+            );
 
             quote! {
-                if let Some(relation) = self.#factory_field.take() {
-                    let key = match relation {
-                        #enum_ident::PrimaryKey(pk) => pk,
-                        #enum_ident::Factory(factory) => {
+                {
+                    let key = match self.#factory_field.take() {
+                        Some(#enum_ident::PrimaryKey(pk)) => pk,
+                        Some(#enum_ident::Factory(factory)) => {
                             let instance = fabrique::Factory::create(factory, &mut *conn).await?;
                             fabrique::Model::primary_key(&instance)
                         }
+                        None => match self.#field.take() {
+                            Some(pk) => pk,
+                            None => {
+                                let instance = fabrique::Factory::create(#factory_type::new(), &mut *conn).await?;
+                                fabrique::Model::primary_key(&instance)
+                            }
+                        },
                     };
                     self.#field = Some(key);
                 }
@@ -606,13 +617,20 @@ mod tests {
                             let mut conn = executor.acquire().await
                                 .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
 
-                            if let Some(relation) = self.hammer_relation.take() {
-                                let key = match relation {
-                                    AnvilHammerRelation::PrimaryKey(pk) => pk,
-                                    AnvilHammerRelation::Factory(factory) => {
+                            {
+                                let key = match self.hammer_relation.take() {
+                                    Some(AnvilHammerRelation::PrimaryKey(pk)) => pk,
+                                    Some(AnvilHammerRelation::Factory(factory)) => {
                                         let instance = fabrique::Factory::create(factory, &mut *conn).await?;
                                         fabrique::Model::primary_key(&instance)
                                     }
+                                    None => match self.hammer_id.take() {
+                                        Some(pk) => pk,
+                                        None => {
+                                            let instance = fabrique::Factory::create(HammerFactory::new(), &mut *conn).await?;
+                                            fabrique::Model::primary_key(&instance)
+                                        }
+                                    },
                                 };
                                 self.hammer_id = Some(key);
                             }
@@ -764,13 +782,20 @@ mod tests {
                         let mut conn = executor.acquire().await
                             .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
 
-                        if let Some(relation) = self.hammer_relation.take() {
-                            let key = match relation {
-                                AnvilHammerRelation::PrimaryKey(pk) => pk,
-                                AnvilHammerRelation::Factory(factory) => {
+                        {
+                            let key = match self.hammer_relation.take() {
+                                Some(AnvilHammerRelation::PrimaryKey(pk)) => pk,
+                                Some(AnvilHammerRelation::Factory(factory)) => {
                                     let instance = fabrique::Factory::create(factory, &mut *conn).await?;
                                     fabrique::Model::primary_key(&instance)
                                 }
+                                None => match self.hammer_id.take() {
+                                    Some(pk) => pk,
+                                    None => {
+                                        let instance = fabrique::Factory::create(HammerFactory::new(), &mut *conn).await?;
+                                        fabrique::Model::primary_key(&instance)
+                                    }
+                                },
                             };
                             self.hammer_id = Some(key);
                         }

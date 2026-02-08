@@ -14,8 +14,8 @@ For the full factory API, see
 ## Seed a Full Order in One Chain
 
 An order needs a user, products, and the join records linking
-them. With factories, the entire graph is built from the
-leaf up:
+them. With factories, the entire graph is built in one chain
+— missing parents are auto-created:
 
 ```rust
 # extern crate fabrique;
@@ -62,7 +62,6 @@ leaf up:
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 let order = Order::factory()
-    .for_user(User::factory())
     .has_products(Product::factory(), 3)
     .create(&pool)
     .await?;
@@ -162,13 +161,11 @@ generate everything else:
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 // Arrange — only the status matters for this test
 Order::factory()
-    .for_user(User::factory())
     .status("shipped".to_string())
     .create(&pool)
     .await?;
 
 Order::factory()
-    .for_user(User::factory())
     .status("pending".to_string())
     .create(&pool)
     .await?;

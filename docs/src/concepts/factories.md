@@ -83,9 +83,9 @@ list of available generators.
 
 ## Relation Support
 
-Factories understand model relationships. `for_<relation>()`
-accepts either a **factory** (to create a new parent) or a
-**model instance** (to reuse an existing one):
+Factories understand `belongs_to` relationships. When a
+factory creates a record with a foreign key, it automatically
+creates the parent record if none is specified:
 
 ```rust
 # extern crate fabrique;
@@ -113,7 +113,54 @@ accepts either a **factory** (to create a new parent) or a
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-// Pass a factory: creates a new user for this order
+// A User is auto-created — no manual setup needed
+let order = Order::factory()
+    .create(&pool)
+    .await?;
+
+assert_ne!(order.user_id, Uuid::nil());
+# Ok(())
+# }
+```
+
+> **Cyclic relation graphs:** If your relation graph contains
+> a cycle, you might wonder whether auto-creation recurses
+> infinitely. It doesn't — SQL already requires at least one
+> foreign key in the cycle to be nullable, and factories skip
+> optional foreign keys (`Option<Uuid>`), which breaks the
+> chain.
+
+Use `for_<relation>()` to take control — pass a **factory**
+to customize the parent, or a **model instance** to reuse an
+existing one:
+
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+#
+# #[derive(Clone, Model, Factory)]
+# pub struct User {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub email: String,
+#     pub orders: HasMany<Order>,
+# }
+#
+# #[derive(Clone, Model, Factory)]
+# pub struct Order {
+#     pub id: Uuid,
+#     pub status: String,
+#     #[fabrique(belongs_to = "User")]
+#     pub user_id: Uuid,
+# }
+#
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+// Pass a factory: creates a new user with specific attributes
 let order = Order::factory()
     .for_user(User::factory().name("Wile E.".to_string()))
     .create(&pool)
@@ -220,9 +267,8 @@ assert_eq!(orders.len(), 3);
 # }
 ```
 
-Both combine for complex object graphs in a single call. Since
-`for_<relation>()` accepts a factory, you can nest them to chain
-dependencies:
+Both combine for complex object graphs in a single call.
+Missing parents are auto-created at every level of the chain:
 
 ```rust
 # extern crate fabrique;
@@ -273,20 +319,16 @@ dependencies:
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 // 1 order, 3 order lines, each with its own product
 let order = Order::factory()
-    .for_user(User::factory())
-    .has_order_lines(
-        OrderLine::factory()
-            .for_product(Product::factory()),
-        3,
-    )
+    .has_order_lines(OrderLine::factory(), 3)
     .create(&pool)
     .await?;
 # Ok(())
 # }
 ```
 
-The factory creates records in dependency order: products first,
-then order lines with the correct foreign keys, then the order.
+The factory creates records in dependency order: a user and
+products are auto-created, then order lines with the correct
+foreign keys, then the order — all from a single chain.
 
 ---
 
