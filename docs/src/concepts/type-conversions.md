@@ -131,7 +131,7 @@ When a field uses `as`, query parameters use the database type:
 # Order::factory().status("shipped".to_string()).for_user(user).create(&pool).await?;
 // Use String (database type), not OrderStatus
 let pending_orders = Order::query()
-    .r#where(Order::STATUS, "=", "pending".to_string())
+    .r#where(Order::STATUS, "=", "pending")
     .get(&pool)
     .await?;
 

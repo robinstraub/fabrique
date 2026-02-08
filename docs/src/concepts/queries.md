@@ -194,7 +194,7 @@ Use the `join::<T>()` method to add an INNER JOIN to your query:
 // Parent → Child: User joining Orders
 let users = User::query()
     .join::<Order>()
-    .r#where(User::EMAIL, "=", "john@example.com".to_string())
+    .r#where(User::EMAIL, "=", "john@example.com")
     .get(&pool)
     .await?;
 
@@ -283,7 +283,7 @@ joined model instead, use `select_as` with that model's type:
 let orders: Vec<Order> = User::query()
     .join::<Order>()
     .select_as::<Order, _>()
-    .r#where(User::EMAIL, "=", "john@example.com".to_string())
+    .r#where(User::EMAIL, "=", "john@example.com")
     .get(&pool)
     .await?;
 # Ok(())

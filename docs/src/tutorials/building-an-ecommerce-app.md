@@ -357,7 +357,7 @@ pub async fn get_user_pending_orders(
         .await?;
 
     user.orders()
-        .r#where(Order::STATUS, "=", "pending".to_string())
+        .r#where(Order::STATUS, "=", "pending")
         .get(pool)
         .await
 }

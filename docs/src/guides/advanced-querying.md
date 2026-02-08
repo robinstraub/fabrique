@@ -65,11 +65,11 @@ Chain multiple `.set()` calls to update several columns:
 Product::update()
     .set(Product::PRICE_CENTS, 9999)
     .set(Product::IN_STOCK, true)
-    .r#where(Product::NAME, "=", "Anvil".to_string())
+    .r#where(Product::NAME, "=", "Anvil")
     .execute(&pool)
     .await?;
 # let product = Product::query()
-#     .r#where(Product::NAME, "=", "Anvil".to_string())
+#     .r#where(Product::NAME, "=", "Anvil")
 #     .first_or_fail(&pool)
 #     .await?;
 # assert_eq!(product.price_cents, 9999);
@@ -147,7 +147,7 @@ Silently ignore conflicts:
 Product::query()
     .insert()
     .set(Product::ID, id)
-    .set(Product::NAME, "Anvil".to_string())
+    .set(Product::NAME, "Anvil")
     .set(Product::PRICE_CENTS, 4999)
     .set(Product::IN_STOCK, true)
     .on_conflict()
@@ -188,7 +188,7 @@ Update the existing row on conflict:
 let saved: Product = Product::query()
     .insert()
     .set(Product::ID, id)
-    .set(Product::NAME, "New Name".to_string())
+    .set(Product::NAME, "New Name")
     .set(Product::PRICE_CENTS, 5000)
     .set(Product::IN_STOCK, true)
     .on_conflict()
