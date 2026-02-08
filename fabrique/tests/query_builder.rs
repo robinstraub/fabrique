@@ -79,8 +79,7 @@ mod initial {
 
     #[fabrique_derive::test]
     async fn insert_transitions_to_inserting(pool: Pool<Backend>) {
-        let result = Product::query()
-            .insert()
+        let result = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
@@ -868,8 +867,7 @@ mod inserting {
 
     #[fabrique_derive::test]
     async fn set_transitions_to_inserted(pool: Pool<Backend>) {
-        let result = Product::query()
-            .insert()
+        let result = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
@@ -889,8 +887,7 @@ mod inserted {
 
     #[fabrique_derive::test]
     async fn set_chains(pool: Pool<Backend>) {
-        let result = Product::query()
-            .insert()
+        let result = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
@@ -912,8 +909,7 @@ mod inserted {
             .expect("setup");
 
         // Conflict handling
-        let result = Product::query()
-            .insert()
+        let result = Product::insert()
             .set(Product::ID, id)
             .set(Product::NAME, "Conflict")
             .set(Product::PRICE_CENTS, 200)
@@ -928,8 +924,7 @@ mod inserted {
     #[cfg(not(feature = "mysql"))]
     #[fabrique_derive::test]
     async fn returning_transitions_to_returned(pool: Pool<Backend>) {
-        let result: Result<Option<Product>, _> = Product::query()
-            .insert()
+        let result: Result<Option<Product>, _> = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
@@ -943,8 +938,7 @@ mod inserted {
 
     #[fabrique_derive::test]
     async fn execute_executes(pool: Pool<Backend>) {
-        let result = Product::query()
-            .insert()
+        let result = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Original")
             .set(Product::PRICE_CENTS, 100)
@@ -975,8 +969,7 @@ mod conflicted {
             .expect("setup");
 
         // Upsert with do_update
-        let result: Result<Vec<Product>, _> = Product::query()
-            .insert()
+        let result: Result<Vec<Product>, _> = Product::insert()
             .set(Product::ID, id)
             .set(Product::NAME, "Updated")
             .set(Product::PRICE_CENTS, 200)
@@ -1004,8 +997,7 @@ mod conflicted {
             .expect("setup");
 
         // Upsert with do_nothing
-        let result = Product::query()
-            .insert()
+        let result = Product::insert()
             .set(Product::ID, id)
             .set(Product::NAME, "Ignored")
             .set(Product::PRICE_CENTS, 200)
@@ -1038,8 +1030,7 @@ mod upserted {
             .expect("setup");
 
         // Upsert with returning
-        let result: Result<Vec<Product>, _> = Product::query()
-            .insert()
+        let result: Result<Vec<Product>, _> = Product::insert()
             .set(Product::ID, id)
             .set(Product::NAME, "Updated")
             .set(Product::PRICE_CENTS, 200)
@@ -1065,8 +1056,7 @@ mod upserted {
             .expect("setup");
 
         // Upsert with execute
-        let result = Product::query()
-            .insert()
+        let result = Product::insert()
             .set(Product::ID, id)
             .set(Product::NAME, "Updated")
             .set(Product::PRICE_CENTS, 200)
@@ -1095,8 +1085,7 @@ mod returned {
 
     #[fabrique_derive::test]
     async fn get_executes(pool: Pool<Backend>) {
-        let result: Result<Vec<Product>, _> = Product::query()
-            .insert()
+        let result: Result<Vec<Product>, _> = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
@@ -1110,8 +1099,7 @@ mod returned {
 
     #[fabrique_derive::test]
     async fn first_executes(pool: Pool<Backend>) {
-        let result: Result<Option<Product>, _> = Product::query()
-            .insert()
+        let result: Result<Option<Product>, _> = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
@@ -1125,8 +1113,7 @@ mod returned {
 
     #[fabrique_derive::test]
     async fn first_or_fail_executes(pool: Pool<Backend>) {
-        let result: Result<Product, _> = Product::query()
-            .insert()
+        let result: Result<Product, _> = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)

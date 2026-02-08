@@ -10,7 +10,7 @@ Rather than writing `QueryBuilder::<Product>::new()`, models provide
 direct entry points:
 
 - `Product::query()` — starts a SELECT path
-- `Product::query().insert()` — starts an INSERT
+- `Product::insert()` — starts an INSERT
 - `Product::update()` — starts an UPDATE
 
 > **Why `query()` and not `select()`?** In SQL, `SELECT` comes
@@ -178,7 +178,7 @@ let cheapest: Product = Product::query()
 
 ### Inserting
 
-`Product::query().insert()` starts an INSERT query. `.set()` assigns
+`Product::insert()` starts an INSERT query. `.set()` assigns
 column values, then `.execute()` runs the query without returning
 data:
 
@@ -200,8 +200,7 @@ data:
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-Product::query()
-    .insert()
+Product::insert()
     .set(Product::ID, Uuid::new_v4())
     .set(Product::NAME, "Anvil 3000")
     .set(Product::PRICE_CENTS, 4999)
@@ -233,8 +232,7 @@ the executor — this avoids a separate SELECT roundtrip:
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-let anvil: Product = Product::query()
-    .insert()
+let anvil: Product = Product::insert()
     .set(Product::ID, Uuid::new_v4())
     .set(Product::NAME, "Anvil 3000")
     .set(Product::PRICE_CENTS, 4999)

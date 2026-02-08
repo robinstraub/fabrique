@@ -66,8 +66,7 @@ impl<'a> PersistCodegen<'a> {
             {
                 async move {
                     let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                    <Self as ::fabrique::Query>::query()
-                        .insert()
+                    <Self as ::fabrique::Query>::insert()
                         #(#set_calls)*
                         .returning()
                         .first_or_fail(&mut *conn)
@@ -86,8 +85,7 @@ impl<'a> PersistCodegen<'a> {
                 async move {
                     let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
                     let pk = self.primary_key();
-                    <Self as ::fabrique::Query>::query()
-                        .insert()
+                    <Self as ::fabrique::Query>::insert()
                         #(#set_calls)*
                         .execute(&mut *conn)
                         .await?;
@@ -137,8 +135,7 @@ impl<'a> PersistCodegen<'a> {
             {
                 async move {
                     let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                    <Self as ::fabrique::Query>::query()
-                        .insert()
+                    <Self as ::fabrique::Query>::insert()
                         #(#set_calls)*
                         .on_conflict()
                         .do_update()
@@ -159,8 +156,7 @@ impl<'a> PersistCodegen<'a> {
                 async move {
                     let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
                     let pk = self.primary_key();
-                    <Self as ::fabrique::Query>::query()
-                        .insert()
+                    <Self as ::fabrique::Query>::insert()
                         #(#set_calls)*
                         .on_conflict()
                         .do_update()
@@ -202,8 +198,7 @@ mod tests {
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            <Self as ::fabrique::Query>::query()
-                                .insert()
+                            <Self as ::fabrique::Query>::insert()
                                 .set(Self::ID, self.id)
                                 .returning()
                                 .first_or_fail(&mut *conn)
@@ -218,8 +213,7 @@ mod tests {
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            <Self as ::fabrique::Query>::query()
-                                .insert()
+                            <Self as ::fabrique::Query>::insert()
                                 .set(Self::ID, self.id)
                                 .on_conflict()
                                 .do_update()
@@ -258,8 +252,7 @@ mod tests {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
                             let pk = self.primary_key();
-                            <Self as ::fabrique::Query>::query()
-                                .insert()
+                            <Self as ::fabrique::Query>::insert()
                                 .set(Self::ID, self.id)
                                 .execute(&mut *conn)
                                 .await?;
@@ -276,8 +269,7 @@ mod tests {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
                             let pk = self.primary_key();
-                            <Self as ::fabrique::Query>::query()
-                                .insert()
+                            <Self as ::fabrique::Query>::insert()
                                 .set(Self::ID, self.id)
                                 .on_conflict()
                                 .do_update()
