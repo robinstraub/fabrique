@@ -169,8 +169,7 @@ statement:
 #     .await?;
 # let id = product.id;
 // Insert or update if the product already exists
-let saved: Product = Product::query()
-    .insert()
+let saved: Product = Product::insert()
     .set(Product::ID, id)
     .set(Product::NAME, "Anvil 3000")
     .set(Product::PRICE_CENTS, 5000)
@@ -213,8 +212,7 @@ If you only want to skip duplicates without updating, use
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 # let id = Uuid::new_v4();
 // Insert if not exists, silently skip if exists
-Product::query()
-    .insert()
+Product::insert()
     .set(Product::ID, id)
     .set(Product::NAME, "Anvil 3000")
     .set(Product::PRICE_CENTS, 4999)

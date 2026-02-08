@@ -4,7 +4,7 @@ mod query_builder;
 
 use crate::{
     database::{Column, DatabaseAware},
-    sql::Updating,
+    sql::{Inserting, Updating},
 };
 pub use column_set::ColumnSet;
 pub use join::{Joined, RootModel};
@@ -53,6 +53,13 @@ where
     /// Creates a new SELECT query builder for this model.
     fn query() -> QueryBuilder<Initial, Joined<Self, ()>> {
         QueryBuilder::new()
+    }
+
+    /// Creates a new INSERT query builder for this model.
+    ///
+    /// Returns a builder in the `Inserting` state, ready for `.set()` calls.
+    fn insert() -> QueryBuilder<Building<Self::Database, Inserting>, Joined<Self, ()>> {
+        Self::query().insert()
     }
 
     /// Creates a new UPDATE query builder for this model.
