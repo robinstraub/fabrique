@@ -203,7 +203,7 @@ data:
 Product::query()
     .insert()
     .set(Product::ID, Uuid::new_v4())
-    .set(Product::NAME, "Anvil 3000".to_string())
+    .set(Product::NAME, "Anvil 3000")
     .set(Product::PRICE_CENTS, 4999)
     .set(Product::IN_STOCK, true)
     .execute(&pool)
@@ -236,7 +236,7 @@ the executor — this avoids a separate SELECT roundtrip:
 let anvil: Product = Product::query()
     .insert()
     .set(Product::ID, Uuid::new_v4())
-    .set(Product::NAME, "Anvil 3000".to_string())
+    .set(Product::NAME, "Anvil 3000")
     .set(Product::PRICE_CENTS, 4999)
     .set(Product::IN_STOCK, true)
     .returning()
@@ -323,7 +323,7 @@ no relationship is declared between the models, it won't compile:
 // Both directions work — the relation is declared once
 let users = User::query()
     .join::<Order>()
-    .r#where(User::EMAIL, "=", "wile@acme.com".to_string())
+    .r#where(User::EMAIL, "=", "wile@acme.com")
     .get(&pool)
     .await?;
 
@@ -493,7 +493,7 @@ model:
 let orders: Vec<Order> = User::query()
     .join::<Order>()
     .select_as::<Order, _>()
-    .r#where(User::EMAIL, "=", "wile@acme.com".to_string())
+    .r#where(User::EMAIL, "=", "wile@acme.com")
     .get(&pool)
     .await?;
 # Ok(())

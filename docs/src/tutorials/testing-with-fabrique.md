@@ -266,7 +266,7 @@ returns only pending orders:
 #         .first_or_fail(pool)
 #         .await?;
 #     user.orders()
-#         .r#where(Order::STATUS, "=", "pending".to_string())
+#         .r#where(Order::STATUS, "=", "pending")
 #         .get(pool)
 #         .await
 # }
