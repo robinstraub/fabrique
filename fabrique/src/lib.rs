@@ -1,10 +1,10 @@
 //! # Fabrique
 //!
-//! Fluent ORM for Rust with type-safe queries and integrated testing tools.
+//! SQL-first, type-safe, ergonomic database toolkit for Rust.
 //!
-//! Fabrique is an object-relational mapper (ORM) that makes it enjoyable to
-//! interact with your database. It provides a fluent, type-safe API for
-//! defining models, querying data, and generating test fixtures.
+//! Fabrique provides a fluent API for defining models, querying
+//! data, and generating test fixtures — built on SQL semantics
+//! rather than hiding them.
 //!
 //! ## Core Features
 //!
@@ -67,8 +67,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! fabrique = "0.1"
-//! sqlx = { version = "0.8", features = ["runtime-tokio", "postgres"] }
+//! fabrique = { version = "0.2", features = ["sqlite"] }
 //! ```
 //!
 //! Then define your models and start querying. See the [`model`] module for a

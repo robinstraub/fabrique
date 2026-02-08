@@ -20,7 +20,8 @@ CREATE TABLE products (
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
     price_cents INTEGER NOT NULL,
-    in_stock BOOLEAN NOT NULL DEFAULT 1
+    in_stock BOOLEAN NOT NULL DEFAULT 1,
+    deleted_at TEXT
 );
 
 CREATE TABLE orders (

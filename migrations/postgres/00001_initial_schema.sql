@@ -18,7 +18,8 @@ CREATE TABLE products (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     price_cents INTEGER NOT NULL,
-    in_stock BOOLEAN NOT NULL DEFAULT true
+    in_stock BOOLEAN NOT NULL DEFAULT true,
+    deleted_at TIMESTAMPTZ
 );
 
 CREATE TABLE orders (

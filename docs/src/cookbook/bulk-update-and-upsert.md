@@ -1,11 +1,15 @@
-# Advanced Querying
+# Efficiently Reprice a Catalog with Bulk Updates
 
-This guide covers advanced query features: bulk updates, upserts with
-`ON CONFLICT`, and the `RETURNING` clause.
+You have a catalog of products and need to reprice them — apply
+a discount, adjust margins, or import a supplier price list.
+Doing this one record at a time means N queries for N products.
+The [query builder](../concepts/query-builder.md#writing-data)
+lets you do it in one.
 
-## Bulk Updates
+## Apply a Discount in One Query
 
-Update multiple records matching a condition with the update builder:
+Mark all expensive products as discounted. A single UPDATE
+touches every matching row:
 
 ```rust
 # extern crate fabrique;
@@ -25,8 +29,12 @@ Update multiple records matching a condition with the update builder:
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-# Product::factory().price_cents(15000).in_stock(true).create(&pool).await?;
-// Mark all expensive products as out of stock
+# Product::factory()
+#     .price_cents(15000)
+#     .in_stock(true)
+#     .create(&pool)
+#     .await?;
+// Mark all products over $100 as out of stock
 Product::update()
     .set(Product::IN_STOCK, false)
     .r#where(Product::PRICE_CENTS, ">", 10000)
@@ -41,7 +49,7 @@ Product::update()
 # }
 ```
 
-Chain multiple `.set()` calls to update several columns:
+Chain multiple `.set()` calls to update several columns at once:
 
 ```rust
 # extern crate fabrique;
@@ -61,26 +69,32 @@ Chain multiple `.set()` calls to update several columns:
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-# Product::factory().name("Anvil".to_string()).price_cents(100).in_stock(false).create(&pool).await?;
+# Product::factory()
+#     .name("Anvil 3000".to_string())
+#     .price_cents(100)
+#     .in_stock(false)
+#     .create(&pool)
+#     .await?;
 Product::update()
-    .set(Product::PRICE_CENTS, 9999)
+    .set(Product::PRICE_CENTS, 4999)
     .set(Product::IN_STOCK, true)
-    .r#where(Product::NAME, "=", "Anvil")
+    .r#where(Product::NAME, "=", "Anvil 3000".to_string())
     .execute(&pool)
     .await?;
 # let product = Product::query()
-#     .r#where(Product::NAME, "=", "Anvil")
+#     .r#where(Product::NAME, "=", "Anvil 3000".to_string())
 #     .first_or_fail(&pool)
 #     .await?;
-# assert_eq!(product.price_cents, 9999);
+# assert_eq!(product.price_cents, 4999);
 # assert!(product.in_stock);
 # Ok(())
 # }
 ```
 
-## RETURNING Clause
+## Get the Updated Records Back
 
-Get back the updated rows with `.returning()`:
+Add `.returning()` to retrieve the affected rows without a
+separate SELECT:
 
 ```rust
 # extern crate fabrique;
@@ -100,8 +114,16 @@ Get back the updated rows with `.returning()`:
 #
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-# Product::factory().price_cents(15000).in_stock(true).create(&pool).await?;
-# Product::factory().price_cents(20000).in_stock(true).create(&pool).await?;
+# Product::factory()
+#     .price_cents(15000)
+#     .in_stock(true)
+#     .create(&pool)
+#     .await?;
+# Product::factory()
+#     .price_cents(20000)
+#     .in_stock(true)
+#     .create(&pool)
+#     .await?;
 let updated: Vec<Product> = Product::update()
     .set(Product::IN_STOCK, false)
     .r#where(Product::PRICE_CENTS, ">", 10000)
@@ -109,20 +131,67 @@ let updated: Vec<Product> = Product::update()
     .get(&pool)
     .await?;
 
-println!("Updated {} products", updated.len());
+println!("Repriced {} products", updated.len());
 # assert_eq!(updated.len(), 2);
 # assert!(updated.iter().all(|p| !p.in_stock));
 # Ok(())
 # }
 ```
 
-## ON CONFLICT (Upsert)
+## Import a Price List (Upsert)
 
-Handle conflicts on insert with `.on_conflict()`. This is useful for upsert operations.
+When importing external data, some products may already exist.
+`on_conflict().do_update()` turns the INSERT into an upsert —
+inserting new rows and updating existing ones in a single
+statement:
 
-### Do Nothing
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+#
+# #[derive(Clone, Debug, Factory, Model)]
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
+# }
+#
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# let product = Product::factory()
+#     .name("Old Name".to_string())
+#     .create(&pool)
+#     .await?;
+# let id = product.id;
+// Insert or update if the product already exists
+let saved: Product = Product::query()
+    .insert()
+    .set(Product::ID, id)
+    .set(Product::NAME, "Anvil 3000".to_string())
+    .set(Product::PRICE_CENTS, 5000)
+    .set(Product::IN_STOCK, true)
+    .on_conflict()
+    .do_update()
+    .returning()
+    .first_or_fail(&pool)
+    .await?;
+# assert_eq!(saved.name, "Anvil 3000");
+# assert_eq!(saved.price_cents, 5000);
+# Ok(())
+# }
+```
 
-Silently ignore conflicts:
+`.do_update()` updates all non-primary-key columns with the
+values from the INSERT — the SQL equivalent of
+`SET col = EXCLUDED.col` for each column.
+
+If you only want to skip duplicates without updating, use
+`.do_nothing()`:
 
 ```rust
 # extern crate fabrique;
@@ -143,11 +212,11 @@ Silently ignore conflicts:
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 # let id = Uuid::new_v4();
-// Insert if not exists, do nothing if exists
+// Insert if not exists, silently skip if exists
 Product::query()
     .insert()
     .set(Product::ID, id)
-    .set(Product::NAME, "Anvil")
+    .set(Product::NAME, "Anvil 3000".to_string())
     .set(Product::PRICE_CENTS, 4999)
     .set(Product::IN_STOCK, true)
     .on_conflict()
@@ -155,61 +224,7 @@ Product::query()
     .execute(&pool)
     .await?;
 # let found = Product::find(&pool, id).await?;
-# assert_eq!(found.name, "Anvil");
+# assert_eq!(found.name, "Anvil 3000");
 # Ok(())
 # }
 ```
-
-### Do Update
-
-Update the existing row on conflict:
-
-```rust
-# extern crate fabrique;
-# extern crate sqlx;
-# extern crate tokio;
-# extern crate uuid;
-# use fabrique::prelude::*;
-# use uuid::Uuid;
-#
-# #[derive(Clone, Debug, Factory, Model)]
-# pub struct Product {
-#     pub id: Uuid,
-#     pub name: String,
-#     pub price_cents: i32,
-#     pub in_stock: bool,
-# }
-#
-# #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-# let product = Product::factory().name("Old Name".to_string()).create(&pool).await?;
-# let id = product.id;
-// Insert or update if exists
-let saved: Product = Product::query()
-    .insert()
-    .set(Product::ID, id)
-    .set(Product::NAME, "New Name")
-    .set(Product::PRICE_CENTS, 5000)
-    .set(Product::IN_STOCK, true)
-    .on_conflict()
-    .do_update()
-    .returning()
-    .first_or_fail(&pool)
-    .await?;
-# // Product was updated with new values
-# assert_eq!(saved.name, "New Name");
-# assert_eq!(saved.price_cents, 5000);
-# Ok(())
-# }
-```
-
-The `.do_update()` method updates all non-primary-key columns with `col = EXCLUDED.col`.
-
-## Summary
-
-| Operation        | Method                                          |
-| ---------------- | ----------------------------------------------- |
-| Bulk update      | `Model::update().set().r#where().execute()`     |
-| Get updated rows | `.returning().get()`                            |
-| Insert or ignore | `.insert().set(...).on_conflict().do_nothing()` |
-| Insert or update | `.insert().set(...).on_conflict().do_update()`  |

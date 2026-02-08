@@ -4,13 +4,16 @@
 [![codecov](https://codecov.io/gh/robinstraub/fabrique/graph/badge.svg?token=5zZr9fVZyz)](https://codecov.io/gh/robinstraub/fabrique)
 [![docs.rs](https://docs.rs/fabrique/badge.svg)](https://docs.rs/fabrique)
 
-A lightweight ORM for Rust that combines ease of use with Rust's safety guarantees.
+SQL-first, type-safe, ergonomic database toolkit for Rust.
 
 ## Features
 
-- **Fluent API** — Expressive, chainable query building
-- **Derive-based** — Models and factories generated from struct definitions
-- **Factory support** — Test data generation with relationship handling
+- **SQL-first** — Builds on SQL semantics rather than hiding
+  them; the query builder maps directly to the SQL you'd write
+- **Type-safe** — Column constants, typed where clauses, and
+  compile-time join validation catch errors before they run
+- **Ergonomic** — Convention-driven models, fluent query
+  builder, and factories for test data generation
 
 ## Quick Example
 
