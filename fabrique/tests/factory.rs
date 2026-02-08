@@ -53,6 +53,16 @@ pub struct OrderLine {
 }
 
 #[fabrique_derive::test]
+async fn test_auto_creates_belongs_to(connection: Pool<Backend>) {
+    // Order has belongs_to User — create without for_user()
+    let order = Order::factory().create(&connection).await.unwrap();
+
+    // A User was auto-created and the FK is valid
+    let user = User::find(&connection, order.user_id).await.unwrap();
+    assert_eq!(user.id, order.user_id);
+}
+
+#[fabrique_derive::test]
 async fn test_factory_for_relations_accept_models(connection: Pool<Backend>) {
     let user = User::factory().create(&connection).await.unwrap();
     let product = Product::factory().create(&connection).await.unwrap();
@@ -73,7 +83,7 @@ async fn test_factory_for_relations_accept_models(connection: Pool<Backend>) {
 #[fabrique_derive::test]
 async fn test_factory_for_relations_accept_factories(connection: Pool<Backend>) {
     OrderLine::factory()
-        .for_order(Order::factory().for_user(User::factory()))
+        .for_order(Order::factory())
         .for_product(Product::factory())
         .create(&connection)
         .await
@@ -105,7 +115,6 @@ async fn test_has_many_creates_children(connection: Pool<Backend>) {
 async fn test_many_to_many_through_creates_join_records(connection: Pool<Backend>) {
     // Create an Order with 1 Product through OrderLine (many-to-many)
     let order = Order::factory()
-        .for_user(User::factory())
         .has_products(Product::factory().name("Anvil 3000".to_string()), 1)
         .create(&connection)
         .await
