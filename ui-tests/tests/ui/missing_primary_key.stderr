@@ -1,0 +1,5 @@
+error: Missing primary key, either add an id column or mark an existing column as primary
+ --> tests/ui/missing_primary_key.rs:4:8
+  |
+4 | struct Product {
+  |        ^^^^^^^

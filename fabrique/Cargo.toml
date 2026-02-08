@@ -2,7 +2,7 @@
 name = "fabrique"
 version = "0.2.0"
 edition = "2024"
-description = "A lightweight ORM for Rust inspired by Laravel Eloquent, with built-in factories for testing"
+description = "SQL-first, type-safe, ergonomic database toolkit for Rust"
 license = "MIT"
 repository = "https://github.com/robinstraub/fabrique"
 homepage = "https://github.com/robinstraub/fabrique"

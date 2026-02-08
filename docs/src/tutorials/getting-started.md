@@ -218,7 +218,7 @@ pub async fn create_product(
     price_cents: i32,
 ) -> Result<Product, fabrique::Error> {
     let product = Product {
-        id: Uuid::nil(), // In production, use Uuid::new_v4()
+        id: Uuid::new_v4(),
         name,
         price_cents,
         in_stock: true,
@@ -397,74 +397,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## Adding Factories for Testing
+## What's Next: Testing
 
-To test the service functions, add `Factory` to enable test data generation:
-
-```rust
-# extern crate fabrique;
-# extern crate sqlx;
-# extern crate uuid;
-# use fabrique::prelude::*;
-# use uuid::Uuid;
-#
-#[derive(Clone, Debug, Factory, Model)]
-pub struct Product {
-    pub id: Uuid,
-    pub name: String,
-    pub price_cents: i32,
-    pub in_stock: bool,
-}
-# fn main() {}
-```
-
-Now write tests:
-
-```rust
-# extern crate fabrique;
-# extern crate sqlx;
-# extern crate tokio;
-# extern crate uuid;
-# use fabrique::prelude::*;
-# use uuid::Uuid;
-#
-# #[derive(Clone, Debug, Factory, Model)]
-# pub struct Product {
-#     pub id: Uuid,
-#     pub name: String,
-#     pub price_cents: i32,
-#     pub in_stock: bool,
-# }
-#
-# pub async fn list_available_products(
-#     pool: &Pool<Backend>,
-# ) -> Result<Vec<Product>, fabrique::Error> {
-#     Product::query()
-#         .r#where(Product::IN_STOCK, "=", true)
-#         .get(pool)
-#         .await
-# }
-#
-// Example test using fabrique::test
-#[fabrique::test]
-async fn test_list_available_products_excludes_out_of_stock(
-    pool: Pool<Backend>,
-) {
-    // Arrange
-    Product::factory().in_stock(true).create(&pool).await.unwrap();
-    Product::factory().in_stock(true).create(&pool).await.unwrap();
-    Product::factory().in_stock(false).create(&pool).await.unwrap();
-
-    // Act
-    let available = list_available_products(&pool).await.unwrap();
-
-    // Assert
-    assert_eq!(available.len(), 2);
-}
-```
-
-Factories let you set only the fields that matter for each test. Other fields
-use sensible defaults.
+Now that the service functions work, you'll want to test them.
+The [Testing with Fabrique](testing-with-fabrique.md) tutorial
+shows how to write database-backed tests with isolated
+databases and generated test data.
 
 ## Summary
 
@@ -475,13 +413,15 @@ You've learned how to integrate Fabrique into an existing application:
 3. **Use the query builder** with `r#where` for filtered queries
 4. **Use `create` and `save`** for persistence
 5. **Use `destroy`** for deletion
-6. **Derive `Factory`** for test data generation
 
 ## Next Steps
 
 - Learn about [Relations](../concepts/relations.md) to model users, orders, and
   products together
-- Explore [Advanced Querying](../guides/advanced-querying.md) for complex
-  queries
-- Read about [Working with Transactions](../guides/working-with-transactions.md)
-  for atomic operations
+- Explore the [Query Builder](../concepts/query-builder.md)
+  for complex queries
+- Read about
+  [Transactions](../concepts/database.md#connections) for
+  atomic operations
+- Learn how to [test your code](testing-with-fabrique.md)
+  with factories and isolated databases

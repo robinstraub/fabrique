@@ -729,53 +729,6 @@ assert_eq!(products.len(), 2);
 # }
 ```
 
-## Testing with Factories
-
-Factories understand relations and can create related records automatically:
-
-```rust
-# extern crate fabrique;
-# extern crate sqlx;
-# extern crate tokio;
-# extern crate uuid;
-use fabrique::prelude::*;
-use uuid::Uuid;
-
-#[derive(Clone, Debug, Factory, Model)]
-pub struct User {
-    pub id: Uuid,
-    pub name: String,
-    pub email: String,
-    pub orders: HasMany<Order>,
-}
-
-#[derive(Clone, Debug, Factory, Model)]
-pub struct Order {
-    pub id: Uuid,
-    #[fabrique(belongs_to = "User")]
-    pub user_id: Uuid,
-    pub status: String,
-}
-
-# #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-// has_orders creates related orders in a single call
-let user = User::factory()
-    .name("Test User".to_string())
-    .has_orders(Order::factory().status("pending".to_string()), 3)
-    .create(&pool)
-    .await?;
-
-// The 3 orders should be linked to the user
-let orders = user.orders().get(&pool).await?;
-assert_eq!(orders.len(), 3);
-# Ok(())
-# }
-```
-
-The `has_orders` method creates the user first, then creates 3 orders with the
-correct `user_id`.
-
 ## Summary
 
 You've learned how to model related data with Fabrique:
@@ -789,6 +742,10 @@ You've learned how to model related data with Fabrique:
 ## Next Steps
 
 - Read the [Relations](../concepts/relations.md) concept for more details
-- Learn about [Working with Transactions](../guides/working-with-transactions.md)
-  to make order creation atomic
-- Explore [Error Handling](../concepts/error-handling.md) for robust error management
+- Learn how to [test your code](testing-with-fabrique.md)
+  with factories and isolated databases
+- Read about
+  [Transactions](../concepts/database.md#connections) to make
+  order creation atomic
+- Explore [Error Handling](../concepts/database.md#error-handling)
+  for robust error management
