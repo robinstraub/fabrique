@@ -82,7 +82,7 @@ mod initial {
         let result = Product::query()
             .insert()
             .set(Product::ID, Uuid::new_v4())
-            .set(Product::NAME, "Test".to_string())
+            .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
             .set(Product::IN_STOCK, true)
             .execute(&pool)
@@ -95,7 +95,7 @@ mod initial {
         Product::factory().create(&pool).await.expect("setup");
 
         let result = Product::update()
-            .set(Product::NAME, "Updated".to_string())
+            .set(Product::NAME, "Updated")
             .execute(&pool)
             .await;
         assert!(result.is_ok());
@@ -222,7 +222,7 @@ mod joining {
     async fn where_implicit_select_transitions_to_filtered(pool: Pool<Backend>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
-            .r#where(User::EMAIL, "=", "test@example.com".to_string())
+            .r#where(User::EMAIL, "=", "test@example.com")
             .get(&pool)
             .await;
         assert!(result.is_ok());
@@ -429,7 +429,7 @@ mod joined_selected {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
             .select_as::<User, _>()
-            .r#where(Order::STATUS, "=", "pending".to_string())
+            .r#where(Order::STATUS, "=", "pending")
             .get(&pool)
             .await;
         assert!(result.is_ok());
@@ -744,7 +744,7 @@ mod updating {
         Product::factory().create(&pool).await.expect("setup");
 
         let result = Product::update()
-            .set(Product::NAME, "Updated".to_string())
+            .set(Product::NAME, "Updated")
             .execute(&pool)
             .await;
         assert!(result.is_ok());
@@ -763,7 +763,7 @@ mod updated {
         Product::factory().create(&pool).await.expect("setup");
 
         let result = Product::update()
-            .set(Product::NAME, "Updated".to_string())
+            .set(Product::NAME, "Updated")
             .set(Product::PRICE_CENTS, 999)
             .execute(&pool)
             .await;
@@ -775,7 +775,7 @@ mod updated {
         let product = Product::factory().create(&pool).await.expect("setup");
 
         let result = Product::update()
-            .set(Product::NAME, "Updated".to_string())
+            .set(Product::NAME, "Updated")
             .r#where(Product::ID, "=", product.id)
             .execute(&pool)
             .await;
@@ -788,7 +788,7 @@ mod updated {
         Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Vec<Product>, _> = Product::update()
-            .set(Product::NAME, "Updated".to_string())
+            .set(Product::NAME, "Updated")
             .returning()
             .get(&pool)
             .await;
@@ -815,7 +815,7 @@ mod filtered_updated {
             .expect("setup");
 
         let result = Product::update()
-            .set(Product::NAME, "Updated".to_string())
+            .set(Product::NAME, "Updated")
             .r#where(Product::ID, "=", product.id)
             .r#where(Product::IN_STOCK, "=", true)
             .execute(&pool)
@@ -829,7 +829,7 @@ mod filtered_updated {
         let product = Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Vec<Product>, _> = Product::update()
-            .set(Product::NAME, "Updated".to_string())
+            .set(Product::NAME, "Updated")
             .r#where(Product::ID, "=", product.id)
             .returning()
             .get(&pool)
@@ -845,7 +845,7 @@ mod filtered_updated {
         let product = Product::factory().create(&pool).await.expect("setup");
 
         let result = Product::update()
-            .set(Product::NAME, "Updated".to_string())
+            .set(Product::NAME, "Updated")
             .r#where(Product::ID, "=", product.id)
             .execute(&pool)
             .await;
@@ -871,7 +871,7 @@ mod inserting {
         let result = Product::query()
             .insert()
             .set(Product::ID, Uuid::new_v4())
-            .set(Product::NAME, "Test".to_string())
+            .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
             .set(Product::IN_STOCK, true)
             .execute(&pool)
@@ -892,7 +892,7 @@ mod inserted {
         let result = Product::query()
             .insert()
             .set(Product::ID, Uuid::new_v4())
-            .set(Product::NAME, "Test".to_string())
+            .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
             .set(Product::IN_STOCK, true)
             .execute(&pool)
@@ -915,7 +915,7 @@ mod inserted {
         let result = Product::query()
             .insert()
             .set(Product::ID, id)
-            .set(Product::NAME, "Conflict".to_string())
+            .set(Product::NAME, "Conflict")
             .set(Product::PRICE_CENTS, 200)
             .set(Product::IN_STOCK, false)
             .on_conflict()
@@ -931,7 +931,7 @@ mod inserted {
         let result: Result<Option<Product>, _> = Product::query()
             .insert()
             .set(Product::ID, Uuid::new_v4())
-            .set(Product::NAME, "Test".to_string())
+            .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
             .set(Product::IN_STOCK, true)
             .returning()
@@ -946,7 +946,7 @@ mod inserted {
         let result = Product::query()
             .insert()
             .set(Product::ID, Uuid::new_v4())
-            .set(Product::NAME, "Original".to_string())
+            .set(Product::NAME, "Original")
             .set(Product::PRICE_CENTS, 100)
             .set(Product::IN_STOCK, true)
             .execute(&pool)
@@ -978,7 +978,7 @@ mod conflicted {
         let result: Result<Vec<Product>, _> = Product::query()
             .insert()
             .set(Product::ID, id)
-            .set(Product::NAME, "Updated".to_string())
+            .set(Product::NAME, "Updated")
             .set(Product::PRICE_CENTS, 200)
             .set(Product::IN_STOCK, false)
             .on_conflict()
@@ -1007,7 +1007,7 @@ mod conflicted {
         let result = Product::query()
             .insert()
             .set(Product::ID, id)
-            .set(Product::NAME, "Ignored".to_string())
+            .set(Product::NAME, "Ignored")
             .set(Product::PRICE_CENTS, 200)
             .set(Product::IN_STOCK, false)
             .on_conflict()
@@ -1041,7 +1041,7 @@ mod upserted {
         let result: Result<Vec<Product>, _> = Product::query()
             .insert()
             .set(Product::ID, id)
-            .set(Product::NAME, "Updated".to_string())
+            .set(Product::NAME, "Updated")
             .set(Product::PRICE_CENTS, 200)
             .set(Product::IN_STOCK, false)
             .on_conflict()
@@ -1068,7 +1068,7 @@ mod upserted {
         let result = Product::query()
             .insert()
             .set(Product::ID, id)
-            .set(Product::NAME, "Updated".to_string())
+            .set(Product::NAME, "Updated")
             .set(Product::PRICE_CENTS, 200)
             .set(Product::IN_STOCK, false)
             .on_conflict()
@@ -1098,7 +1098,7 @@ mod returned {
         let result: Result<Vec<Product>, _> = Product::query()
             .insert()
             .set(Product::ID, Uuid::new_v4())
-            .set(Product::NAME, "Test".to_string())
+            .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
             .set(Product::IN_STOCK, true)
             .returning()
@@ -1113,7 +1113,7 @@ mod returned {
         let result: Result<Option<Product>, _> = Product::query()
             .insert()
             .set(Product::ID, Uuid::new_v4())
-            .set(Product::NAME, "Test".to_string())
+            .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
             .set(Product::IN_STOCK, true)
             .returning()
@@ -1128,7 +1128,7 @@ mod returned {
         let result: Result<Product, _> = Product::query()
             .insert()
             .set(Product::ID, Uuid::new_v4())
-            .set(Product::NAME, "Test".to_string())
+            .set(Product::NAME, "Test")
             .set(Product::PRICE_CENTS, 100)
             .set(Product::IN_STOCK, true)
             .returning()

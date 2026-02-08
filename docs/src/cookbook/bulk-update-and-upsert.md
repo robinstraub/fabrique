@@ -78,11 +78,11 @@ Chain multiple `.set()` calls to update several columns at once:
 Product::update()
     .set(Product::PRICE_CENTS, 4999)
     .set(Product::IN_STOCK, true)
-    .r#where(Product::NAME, "=", "Anvil 3000".to_string())
+    .r#where(Product::NAME, "=", "Anvil 3000")
     .execute(&pool)
     .await?;
 # let product = Product::query()
-#     .r#where(Product::NAME, "=", "Anvil 3000".to_string())
+#     .r#where(Product::NAME, "=", "Anvil 3000")
 #     .first_or_fail(&pool)
 #     .await?;
 # assert_eq!(product.price_cents, 4999);
@@ -172,7 +172,7 @@ statement:
 let saved: Product = Product::query()
     .insert()
     .set(Product::ID, id)
-    .set(Product::NAME, "Anvil 3000".to_string())
+    .set(Product::NAME, "Anvil 3000")
     .set(Product::PRICE_CENTS, 5000)
     .set(Product::IN_STOCK, true)
     .on_conflict()
@@ -216,7 +216,7 @@ If you only want to skip duplicates without updating, use
 Product::query()
     .insert()
     .set(Product::ID, id)
-    .set(Product::NAME, "Anvil 3000".to_string())
+    .set(Product::NAME, "Anvil 3000")
     .set(Product::PRICE_CENTS, 4999)
     .set(Product::IN_STOCK, true)
     .on_conflict()

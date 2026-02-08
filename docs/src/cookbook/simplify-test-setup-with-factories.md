@@ -175,7 +175,7 @@ Order::factory()
 
 // Act
 let pending: Vec<Order> = Order::query()
-    .r#where(Order::STATUS, "=", "pending".to_string())
+    .r#where(Order::STATUS, "=", "pending")
     .get(&pool)
     .await?;
 

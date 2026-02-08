@@ -21,7 +21,7 @@ async fn test_save(connection: Pool<Backend>) {
 async fn test_update(connection: Pool<Backend>) {
     let product = Product::factory().create(&connection).await.unwrap();
     let result = Product::update()
-        .set(Product::NAME, "Anvil 3000".to_string())
+        .set(Product::NAME, "Anvil 3000")
         .r#where(Product::ID, "=", product.id)
         .execute(&connection)
         .await;

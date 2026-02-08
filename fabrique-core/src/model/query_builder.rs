@@ -115,7 +115,7 @@ macro_rules! impl_where {
                 self,
                 column: Column,
                 operator: Operator,
-                value: Column::Type,
+                value: impl Into<Column::Type>,
             ) -> QueryBuilder<Building<Joins::Database, $output>, Joins, Output>
             where
                 Column: database::Column<JoinedModel>,
@@ -126,10 +126,11 @@ macro_rules! impl_where {
             {
                 QueryBuilder {
                     state: Building {
-                        inner: self
-                            .state
-                            .inner
-                            .r#where(column.qualified_name(), operator, value),
+                        inner: self.state.inner.r#where(
+                            column.qualified_name(),
+                            operator,
+                            value.into(),
+                        ),
                     },
                     _marker: PhantomData,
                 }
@@ -504,7 +505,7 @@ where
         self,
         column: Column,
         operator: Operator,
-        value: Column::Type,
+        value: impl Into<Column::Type>,
     ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
     where
         Column: database::Column<JoinedModel>,
@@ -741,7 +742,7 @@ where
         self,
         column: Column,
         operator: Operator,
-        value: Column::Type,
+        value: impl Into<Column::Type>,
     ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
     where
         Column: database::Column<JoinedModel>,
@@ -1053,7 +1054,7 @@ where
     pub fn set<'a, C>(
         self,
         column: C,
-        value: C::Type,
+        value: impl Into<C::Type>,
     ) -> QueryBuilder<Building<Joins::Database, Updated>, Joins>
     where
         C: Column<Joins::Root>,
@@ -1061,7 +1062,7 @@ where
     {
         QueryBuilder {
             state: Building {
-                inner: self.state.inner.set(column.name(), value),
+                inner: self.state.inner.set(column.name(), value.into()),
             },
             _marker: PhantomData,
         }
@@ -1083,7 +1084,7 @@ where
     pub fn set<'a, C>(
         self,
         column: C,
-        value: C::Type,
+        value: impl Into<C::Type>,
     ) -> QueryBuilder<Building<Joins::Database, Updated>, Joins>
     where
         C: Column<Joins::Root>,
@@ -1091,7 +1092,7 @@ where
     {
         QueryBuilder {
             state: Building {
-                inner: self.state.inner.set(column.name(), value),
+                inner: self.state.inner.set(column.name(), value.into()),
             },
             _marker: PhantomData,
         }
@@ -1138,7 +1139,7 @@ where
     pub fn set<'a, C>(
         self,
         column: C,
-        value: C::Type,
+        value: impl Into<C::Type>,
     ) -> QueryBuilder<Building<Joins::Database, Inserted<Joins::Database>>, Joins>
     where
         C: Column<Joins::Root>,
@@ -1147,7 +1148,7 @@ where
     {
         QueryBuilder {
             state: Building {
-                inner: self.state.inner.set(column.name(), value),
+                inner: self.state.inner.set(column.name(), value.into()),
             },
             _marker: PhantomData,
         }
@@ -1170,7 +1171,7 @@ where
     pub fn set<'a, C>(
         self,
         column: C,
-        value: C::Type,
+        value: impl Into<C::Type>,
     ) -> QueryBuilder<Building<Joins::Database, Inserted<Joins::Database>>, Joins>
     where
         C: Column<Joins::Root>,
@@ -1179,7 +1180,7 @@ where
     {
         QueryBuilder {
             state: Building {
-                inner: self.state.inner.set(column.name(), value),
+                inner: self.state.inner.set(column.name(), value.into()),
             },
             _marker: PhantomData,
         }
