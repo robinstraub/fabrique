@@ -1,25 +1,19 @@
 # Relations
 
-Fabrique supports two types of relationships between models:
+At its core, SQL has a single relationship mechanism: the
+**foreign key**. Fabrique models this directly — a `belongs_to`
+attribute on a foreign key column connects two models, and the
+compiler handles the rest (bidirectional joins, type validation).
 
-- **Belongs to**: A model references another model via a foreign key (e.g., an
-  order belongs to a user)
-- **Has many**: A model has multiple related records in another table (e.g., a
-  user has many orders)
+On top of this foundation, a few annotations provide the ergonomics
+you'd expect from a traditional ORM — inverse declarations,
+many-to-many through tables — without multiplying relationship
+types.
 
-These relationships enable:
+## Declaring a Relationship
 
-- Lazy loading of related records
-- Automatic foreign key handling in [factories](factories.md)
-- Bidirectional [joins](queries.md#joins) between related models
-
-## Belongs To
-
-A belongs-to relationship indicates that a model holds a foreign key to another
-model. When you mark a field with `belongs_to`, Fabrique learns which model is
-being referenced. Combined with the referenced model's primary key (defined via
-the [Model](models.md) derive), Fabrique can establish the link between the two
-tables.
+A relationship starts with a foreign key. Annotate the field with
+`belongs_to` to tell Fabrique which model it references:
 
 ```rust
 # extern crate fabrique;
@@ -39,22 +33,25 @@ pub struct Order {
 # fn main() {}
 ```
 
-Here, `Order` holds the foreign key (`customer_id`) that references `User`'s
-primary key (`id`). Fabrique generates:
+Here, `Order` holds the foreign key (`customer_id`) that references
+`User`'s primary key (`id`). From this single declaration, Fabrique
+generates:
 
-- `BelongsTo<User>` for `Order` — exposes the foreign key column for queries and
-  factories
-- `Joinable<User>` for `Order` — enables `Order::query().join::<User>()`
-- `Joinable<Order>` for `User` — enables `User::query().join::<Order>()`
+- `BelongsTo<User>` for `Order` — exposes the foreign key column
+  for queries and factories
+- `Joinable<User>` for `Order` — enables
+  `Order::query().join::<User>()`
+- `Joinable<Order>` for `User` — enables
+  `User::query().join::<Order>()`
 
-This bidirectional join support means you can join in either direction
-regardless of which model holds the foreign key.
+Joins work in both directions regardless of which model holds the
+foreign key.
 
-## Has Many
+### The Inverse
 
-A has-many relationship is declared on the parent side to indicate it has
-multiple related records. The `HasMany<T>` field is not stored in the database;
-it's a marker that tells Fabrique to generate a lazy loading method.
+The parent side can declare a `HasMany<T>` field to get a
+convenience method for loading related records. This field is not
+stored in the database — it's a marker:
 
 ```rust
 # extern crate fabrique;
@@ -79,15 +76,15 @@ pub struct User {
 ```
 
 This generates an `orders()` method on `User` that returns a
-[query builder](queries.md) filtering orders by the user's primary key. Fabrique
-resolves the foreign key column by looking at the `BelongsTo<User>` trait on
-`Order`.
+[query builder](query-builder.md) filtering orders by the user's
+primary key. Fabrique resolves the foreign key column by looking
+at the `BelongsTo<User>` trait on `Order`.
 
-## Many-to-Many Relationships
+## Through Tables
 
-For many-to-many relationships, use the `through` attribute to specify a join
-model. The join model must have `belongs_to` relationships to both sides of the
-many-to-many relationship:
+When two models are related through an intermediate table, use the
+`through` attribute on `HasMany`. The join model must have
+`belongs_to` relationships to both sides:
 
 ```rust
 # extern crate fabrique;
@@ -118,76 +115,81 @@ pub struct OrderLine {
 pub struct Order {
     id: Uuid,
 
-    /// Use `through` to specify the join model
     #[fabrique(through = "OrderLine")]
     anvils: HasMany<Anvil>,
 }
 # fn main() {}
 ```
 
-This generates an `anvils()` method on `Order` that performs the necessary joins
-to fetch related `Anvil` records through the `OrderLine` join table.
+This generates an `anvils()` method on `Order` that joins through
+`OrderLine` to fetch related `Anvil` records.
 
-## Multiple Relationships to the Same Model
+## Aliases
 
-When a model has multiple foreign keys pointing to the same parent type,
-Fabrique requires explicit disambiguation using the `foreign_key` attribute.
+When a model has multiple foreign keys to the same parent, there
+is an ambiguity: Fabrique cannot determine which foreign key to
+use for joins or `HasMany` resolution. The `alias` attribute
+disambiguates by generating a pseudo-Model for each reference:
 
-Consider a `Message` model with two references to `User`:
+> **Note:** Aliases are being implemented in
+> [#75](https://github.com/robinstraub/fabrique/issues/75).
+> <!-- TODO: remove this note once #75 is merged -->
 
-```rust
-# extern crate fabrique;
-# extern crate sqlx;
-# extern crate uuid;
-# use fabrique::prelude::*;
-# use uuid::Uuid;
-# #[derive(Model)]
-# pub struct User { id: Uuid }
+```rust,ignore
 #[derive(Model)]
-pub struct Message {
+pub struct Order {
     id: Uuid,
 
-    #[fabrique(belongs_to = "User")]
-    sender_id: Uuid,
+    #[fabrique(belongs_to = User, alias = Seller)]
+    seller_id: Uuid,
 
-    #[fabrique(belongs_to = "User")]
-    recipient_id: Uuid,
+    #[fabrique(belongs_to = User, alias = Buyer)]
+    buyer_id: Uuid,
+
+    amount: i32,
 }
-# fn main() {}
 ```
 
-Since both fields reference `User`, Fabrique cannot determine which foreign key
-to use for a `HasMany<Message>` relationship. On the parent model, you must
-specify which foreign key each has-many relationship uses:
+`alias = Seller` generates a `Seller` pseudo-Model that implements
+`Model` with `table_name() = "users AS seller"`. On the parent
+side, `HasMany` references the alias directly:
 
-```rust
-# extern crate fabrique;
-# extern crate sqlx;
-# extern crate uuid;
-# use fabrique::prelude::*;
-# use uuid::Uuid;
-# #[derive(Model)]
-# pub struct Message { id: Uuid, sender_id: Uuid, recipient_id: Uuid }
+```rust,ignore
 #[derive(Model)]
 pub struct User {
     id: Uuid,
     name: String,
 
-    #[fabrique(foreign_key = "sender_id")]
-    sent_messages: HasMany<Message>,
-
-    #[fabrique(foreign_key = "recipient_id")]
-    received_messages: HasMany<Message>,
+    sold_orders: HasMany<Seller>,
+    bought_orders: HasMany<Buyer>,
 }
-# fn main() {}
 ```
 
-This pattern is common for models like:
+In queries, aliases work like any other model — join them, filter
+on them, select from them. The `where_on` method qualifies a
+column through an alias:
 
-| Model      | Foreign Keys                                  | Parent    |
-| ---------- | --------------------------------------------- | --------- |
-| `Message`  | `sender_id`, `recipient_id`                   | `User`    |
-| `Transfer` | `from_account_id`, `to_account_id`            | `Account` |
-| `Flight`   | `departure_airport_id`, `arrival_airport_id`  | `Airport` |
+```rust,ignore
+let orders = Order::query()
+    .join::<Seller>()
+    .join::<Buyer>()
+    .where_on::<Seller>(User::NAME, "=", "Wile E.".to_string())
+    .where_on::<Buyer>(User::NAME, "=", "Road Runner".to_string())
+    .get(&pool)
+    .await?;
+```
 
-For a step-by-step guide, see [Handling Multiple belongs_to Relationships](../guides/multiple-belongs-to-same-model.md).
+This generates:
+
+```sql
+SELECT orders.*
+FROM orders
+JOIN users AS seller ON seller.id = orders.seller_id
+JOIN users AS buyer ON buyer.id = orders.buyer_id
+WHERE seller.name = $1 AND buyer.name = $2
+```
+
+---
+
+Next: [Query Builder](query-builder.md) — building and executing
+queries.
