@@ -189,9 +189,9 @@ query for one. No noise from IDs, names, or emails.
 ## Handle Ambiguous Relations
 
 When a model has multiple foreign keys to the same parent
-(e.g. `Message` with `sender_id` and `recipient_id`),
-Fabrique cannot generate a `for_user()` method — it would be
-ambiguous. Use the field setters directly instead.
+(e.g. `Message` with `sender_id` and `recipient_id`), use
+aliases to disambiguate. Fabrique then generates a dedicated
+`for_<alias>()` method for each relationship.
 
 Here, Alice and Bob each send 100 messages to each other —
 200 messages total, seeded in a loop:
@@ -214,9 +214,9 @@ Here, Alice and Bob each send 100 messages to each other —
 # pub struct Message {
 #     pub id: Uuid,
 #     pub content: String,
-#     #[fabrique(belongs_to = "User")]
+#     #[fabrique(belongs_to = "User", alias = "Sender")]
 #     pub sender_id: Uuid,
-#     #[fabrique(belongs_to = "User")]
+#     #[fabrique(belongs_to = "User", alias = "Recipient")]
 #     pub recipient_id: Uuid,
 # }
 #
@@ -234,8 +234,8 @@ let bob = User::factory()
 // Alice sends 100 messages to Bob
 for _ in 0..100 {
     Message::factory()
-        .sender_id(alice.id)
-        .recipient_id(bob.id)
+        .for_sender(alice.clone())
+        .for_recipient(bob.clone())
         .create(&pool)
         .await?;
 }
@@ -243,8 +243,8 @@ for _ in 0..100 {
 // Bob sends 100 messages to Alice
 for _ in 0..100 {
     Message::factory()
-        .sender_id(bob.id)
-        .recipient_id(alice.id)
+        .for_sender(bob.clone())
+        .for_recipient(alice.clone())
         .create(&pool)
         .await?;
 }
@@ -252,6 +252,5 @@ for _ in 0..100 {
 # }
 ```
 
-For more details on why `for_user()` is not generated in this
-case, see
+For more details on aliases, see
 [Handle Ambiguous Relations](handle-ambiguous-relations.md).
