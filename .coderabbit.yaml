@@ -2,8 +2,12 @@
 
 reviews:
   profile: assertive
+  auto_review:
+    ignore_title_keywords:
+      - "release-plz"
   path_filters:
     - "!**/*.js"
+    - "!CHANGELOG.md"
 
 knowledge_base:
   code_guidelines:

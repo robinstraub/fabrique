@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.0](https://github.com/robinstraub/fabrique/compare/fabrique-derive-v0.1.1...fabrique-derive-v0.2.0) - 2026-01-04
+## [0.2.0](https://github.com/robinstraub/fabrique/compare/fabrique-v0.1.1...fabrique-v0.2.0) - 2026-01-04
 
 ### Added
 
@@ -29,8 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Other
 
 - derive root model from joins list ([#77](https://github.com/robinstraub/fabrique/pull/77))
+- reorganize and document the 2-layer query builder ([#70](https://github.com/robinstraub/fabrique/pull/70))
 - improve documentation coverage ([#60](https://github.com/robinstraub/fabrique/pull/60))
+- add cargo-husky ([#53](https://github.com/robinstraub/fabrique/pull/53))
 - sanitize demonstration sql schema ([#51](https://github.com/robinstraub/fabrique/pull/51))
 - [**breaking**] rename belongs-to relationship ([#47](https://github.com/robinstraub/fabrique/pull/47))
+- migrate user documentation to mdbooks following diataxis framework ([#43](https://github.com/robinstraub/fabrique/pull/43))
 - add query builder documentation ([#29](https://github.com/robinstraub/fabrique/pull/29))
 - add span to errors ([#27](https://github.com/robinstraub/fabrique/pull/27))
