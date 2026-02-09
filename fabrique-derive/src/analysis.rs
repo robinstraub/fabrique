@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::analysis::ast::{ColumnField, HasManyField, Model, Relation};
 use crate::analysis::steps::Input;
 use crate::error::Error;
@@ -39,31 +37,6 @@ impl<'a> Analysis<'a> {
             let relation = field.relation.as_ref()?;
 
             Some((field, relation))
-        })
-    }
-
-    /// Returns non-ambiguous belongs_to relations (one per parent type).
-    ///
-    /// When a model has multiple belongs_to to the same parent type
-    /// (e.g., Message with sender_id and recipient_id both referencing User),
-    /// those fields are filtered out to avoid ambiguity.
-    pub fn belongs_to_non_ambiguous(&self) -> impl Iterator<Item = (&ColumnField, &Relation)> {
-        // Group by parent type to detect duplicates
-        let mut by_parent: HashMap<String, Vec<(&ColumnField, &Relation)>> = HashMap::new();
-        for (field, relation) in self.belongs_to() {
-            let parent_name = relation.referenced_type.to_string();
-            by_parent
-                .entry(parent_name)
-                .or_default()
-                .push((field, relation));
-        }
-
-        self.belongs_to().filter(move |(_, relation)| {
-            let parent_name = relation.referenced_type.to_string();
-            by_parent
-                .get(&parent_name)
-                .map(|fields| fields.len() == 1)
-                .unwrap_or(true)
         })
     }
 

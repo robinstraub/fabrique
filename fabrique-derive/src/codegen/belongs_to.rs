@@ -13,33 +13,30 @@ impl<'a> BelongsToCodegen<'a> {
         Self { analysis }
     }
 
-    /// Generates `impl BelongsTo<Parent>` for each unique belongs_to relation.
-    ///
-    /// Only generates the trait implementation when there is exactly ONE field
-    /// referencing a given parent type. When multiple fields reference the same
-    /// parent (e.g., `sender_id` and `recipient_id` both referencing `User`),
-    /// no trait is generated to avoid duplicate implementations.
+    /// Generates `impl BelongsTo<T>` for each belongs_to relation.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
 
-        let impls = self
-            .analysis
-            .belongs_to_non_ambiguous()
-            .map(|(field, relation)| {
-                let parent_type = &relation.referenced_type;
-                let column_type = &field.column_type;
-                let const_column_name = &field.const_column_name;
+        let impls = self.analysis.belongs_to().map(|(field, relation)| {
+            let parent = &relation.referenced_type;
+            let column_type = &field.column_type;
+            let const_column_name = &field.const_column_name;
 
-                quote! {
-                    impl ::fabrique::BelongsTo<#parent_type> for #base_struct_ident {
-                        type ForeignKeyColumn = #column_type;
+            let trait_params = match &relation.alias {
+                Some(alias) => quote! { #parent, #alias },
+                None => quote! { #parent },
+            };
 
-                        fn foreign_key_column() -> Self::ForeignKeyColumn {
-                            Self::#const_column_name
-                        }
+            quote! {
+                impl ::fabrique::BelongsTo<#trait_params> for #base_struct_ident {
+                    type ForeignKeyColumn = #column_type;
+
+                    fn foreign_key_column() -> Self::ForeignKeyColumn {
+                        Self::#const_column_name
                     }
                 }
-            });
+            }
+        });
 
         quote! {
             #(#impls)*
@@ -115,14 +112,15 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_belongs_to_same_parent_generates_nothing() {
-        // Arrange - Message has two belongs_to to the same parent (User)
+    fn test_aliased_belongs_to_generates_belongs_to_alias() {
+        // Arrange - Message has two belongs_to to the same parent, disambiguated with
+        // aliases
         let input = parse_quote! {
             struct Message {
                 id: String,
-                #[fabrique(belongs_to = "User")]
+                #[fabrique(belongs_to = "User", alias = "Sender")]
                 sender_id: String,
-                #[fabrique(belongs_to = "User")]
+                #[fabrique(belongs_to = "User", alias = "Recipient")]
                 recipient_id: String,
                 content: String
             }
@@ -131,13 +129,16 @@ mod tests {
         let codegen = BelongsToCodegen::new(&analysis);
 
         // Act
-        let result = codegen.generate();
+        let result = codegen.generate().to_string();
 
-        // Assert - no BelongsTo impl should be generated for ambiguous relationships
-        assert_eq!(
-            result.to_string(),
-            quote! {}.to_string(),
-            "Should not generate BelongsTo trait when multiple fields reference same parent"
+        // Assert - BelongsTo<Parent, Alias> for each aliased relation
+        assert!(
+            result.contains("impl :: fabrique :: BelongsTo < User , Sender > for Message"),
+            "Should generate BelongsTo<User, Sender>"
+        );
+        assert!(
+            result.contains("impl :: fabrique :: BelongsTo < User , Recipient > for Message"),
+            "Should generate BelongsTo<User, Recipient>"
         );
     }
 

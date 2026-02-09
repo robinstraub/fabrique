@@ -15,6 +15,9 @@ use crate::model::Model;
 /// the foreign key column, enabling automatic relationship inference
 /// for `HasMany<T>` fields.
 ///
+/// The optional `Alias` parameter disambiguates multiple relationships
+/// to the same parent type (see `alias` attribute).
+///
 /// # Example
 ///
 /// ```rust
@@ -33,7 +36,7 @@ use crate::model::Model;
 ///     orders: HasMany<Order>,  // Infers FK via <Order as BelongsTo<User>>
 /// }
 /// ```
-pub trait BelongsTo<Parent: Model>: Model {
+pub trait BelongsTo<Parent: Model, Alias = ()>: Model {
     /// The type-safe column type for the foreign key.
     type ForeignKeyColumn: Column<Self>;
 
@@ -46,7 +49,10 @@ pub trait BelongsTo<Parent: Model>: Model {
 /// Enables bidirectional joins between related models. When a `belongs_to`
 /// relationship is defined, the derive macro generates `Joinable`
 /// implementations in both directions.
-pub trait Joinable<J: Model>: Model {
+///
+/// The optional `Alias` parameter disambiguates multiple joins
+/// to the same model type (see `alias` attribute).
+pub trait Joinable<J: Model, Alias = ()>: Model {
     /// The column type from `Self` used in the join.
     type LeftColumn: Column<Self>;
 
@@ -58,6 +64,22 @@ pub trait Joinable<J: Model>: Model {
 
     /// Returns the column from `J` for the join ON clause.
     fn right_column() -> Self::RightColumn;
+}
+
+/// Trait for alias pseudo-models that reference a real model.
+///
+/// When a `belongs_to` field has an `alias` attribute, the derive macro
+/// generates a pseudo-model (e.g., `Seller`) that implements this trait to link
+/// back to the real model (e.g., `User`).
+///
+/// This enables factories to create the correct record type while using
+/// the alias for type-safe disambiguation.
+pub trait Alias {
+    /// The real model that this alias represents.
+    type Target: Model;
+
+    /// The SQL alias name (e.g., "sender").
+    const NAME: &'static str;
 }
 
 /// Marker type for one-to-many relationships.

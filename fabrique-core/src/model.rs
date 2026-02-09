@@ -51,21 +51,23 @@ where
     for<'r> Self: sqlx::FromRow<'r, <Self::Database as sqlx::Database>::Row>,
 {
     /// Creates a new SELECT query builder for this model.
-    fn query() -> QueryBuilder<Initial, Joined<Self, ()>> {
+    fn query() -> QueryBuilder<Initial, Joined<(Self, ()), ()>> {
         QueryBuilder::new()
     }
 
     /// Creates a new INSERT query builder for this model.
     ///
     /// Returns a builder in the `Inserting` state, ready for `.set()` calls.
-    fn insert() -> QueryBuilder<Building<Self::Database, Inserting>, Joined<Self, ()>> {
+    #[allow(clippy::type_complexity)]
+    fn insert() -> QueryBuilder<Building<Self::Database, Inserting>, Joined<(Self, ()), ()>> {
         Self::query().insert()
     }
 
     /// Creates a new UPDATE query builder for this model.
     ///
     /// Returns a builder in the `Updating` state, ready for `.set()` calls.
-    fn update() -> QueryBuilder<Building<Self::Database, Updating>, Joined<Self, ()>> {
+    #[allow(clippy::type_complexity)]
+    fn update() -> QueryBuilder<Building<Self::Database, Updating>, Joined<(Self, ()), ()>> {
         Self::query().update()
     }
 

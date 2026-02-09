@@ -86,26 +86,24 @@ impl<'a> FactoryCodegen<'a> {
         }
     }
 
-    /// Returns belongs_to fields, filtering out ambiguous relations.
+    /// Returns belongs_to fields for factory generation.
     ///
-    /// Only returns relations where there is exactly one belongs_to per parent
-    /// type. When a model has multiple belongs_to to the same parent type
-    /// (e.g., Message with sender_id and recipient_id both referencing User),
-    /// those fields are filtered out to avoid generating duplicate trait impls,
-    /// relation enums, and `for_[relation]` methods.
+    /// Uses alias_snake as the relation name when present, otherwise uses the
+    /// parent type name. Ambiguous relations (multiple non-aliased belongs_to
+    /// to the same parent) are rejected at parse time, so we don't need to
+    /// filter here.
     fn belongs_to_fields(&self) -> impl Iterator<Item = FactoryRelation<'a>> {
-        self.analysis
-            .belongs_to_non_ambiguous()
-            .map(|(field, relation)| {
-                let factory_field = Ident::new(&format!("{}_relation", &relation.name), field.span);
+        self.analysis.belongs_to().map(|(field, relation)| {
+            let name = relation.alias_snake.as_ref().unwrap_or(&relation.name);
+            let factory_field = Ident::new(&format!("{}_relation", name), field.span);
 
-                FactoryRelation {
-                    base_ident: &field.ident,
-                    factory_field,
-                    name: &relation.name,
-                    referenced_type: &relation.referenced_type,
-                }
-            })
+            FactoryRelation {
+                base_ident: &field.ident,
+                factory_field,
+                name,
+                referenced_type: &relation.referenced_type,
+            }
+        })
     }
 
     /// Generates pending HasMany fields for the factory struct.
@@ -333,8 +331,8 @@ impl<'a> FactoryCodegen<'a> {
         let struct_fields = column_fields.chain(has_many_init);
 
         // Step 4a: Create one-to-many children
-        // Uses explicit FK setter when foreign_key attribute is specified,
-        // otherwise falls back to SetForeignKey trait (only works for unique relations)
+        // Uses SetForeignKey<Parent, Alias> when alias is specified,
+        // otherwise uses SetForeignKey<Parent> (only works for unique relations)
         let one_to_many_create = self.analysis.one_to_many_fields().map(|field| {
             let pending_field = Ident::new(&format!("pending_{}", field.ident), field.ident.span());
             let target_factory = Ident::new(
@@ -342,21 +340,15 @@ impl<'a> FactoryCodegen<'a> {
                 field.target_type.span(),
             );
 
-            let set_fk_call = match &field.foreign_key {
-                // Explicit FK: use direct setter method
-                Some(fk_column) => quote! {
-                    let child_factory = factory.clone().#fk_column(pk.clone());
-                },
-                // Implicit FK: use SetForeignKey trait (only works for unique relations)
-                None => quote! {
-                    let child_factory = <#target_factory as fabrique::SetForeignKey<#struct_ident>>::set_foreign_key(factory.clone(), pk.clone());
-                },
+            let trait_params = match &field.alias {
+                Some(alias) => quote! { #struct_ident, #alias },
+                None => quote! { #struct_ident },
             };
 
             quote! {
                 for (factory, count) in self.#pending_field {
                     for _ in 0..count {
-                        #set_fk_call
+                        let child_factory = <#target_factory as fabrique::SetForeignKey<#trait_params>>::set_foreign_key(factory.clone(), pk.clone());
                         fabrique::Factory::create(child_factory, &mut *conn).await?;
                     }
                 }
@@ -510,19 +502,26 @@ impl<'a> FactoryCodegen<'a> {
         }
     }
 
-    /// Generates `impl SetForeignKey<Parent>` for each belongs_to relation.
+    /// Generates `impl SetForeignKey<Parent, Alias>` for each belongs_to
+    /// relation.
     ///
     /// This allows parent factories to set the FK on child factories when
-    /// creating HasMany relationships.
+    /// creating HasMany relationships. Uses the alias when present for
+    /// disambiguation.
     fn generate_set_foreign_key_impls(&self) -> impl Iterator<Item = TokenStream> + '_ {
         let factory_ident = &self.ident;
 
-        self.belongs_to_fields().map(move |relation| {
-            let parent_type = relation.referenced_type;
-            let fk_field = relation.base_ident;
+        self.analysis.belongs_to().map(move |(field, relation)| {
+            let parent_type = &relation.referenced_type;
+            let fk_field = &field.ident;
+
+            let trait_params = match &relation.alias {
+                Some(alias) => quote! { #parent_type, #alias },
+                None => quote! { #parent_type },
+            };
 
             quote! {
-                impl fabrique::SetForeignKey<#parent_type> for #factory_ident {
+                impl fabrique::SetForeignKey<#trait_params> for #factory_ident {
                     fn set_foreign_key(self, parent_key: <#parent_type as fabrique::Model>::PrimaryKey) -> Self {
                         self.#fk_field(parent_key)
                     }
@@ -1087,84 +1086,106 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_belongs_to_same_parent_generates_no_set_foreign_key() {
-        // Arrange - Message has two belongs_to to the same parent (User)
+    fn test_aliased_belongs_to_generates_set_foreign_key_with_alias() {
         let input = parse_quote! {
             struct Message {
                 id: u32,
-                #[fabrique(belongs_to = "User")]
+                #[fabrique(belongs_to = "User", alias = "Sender")]
                 sender_id: u32,
-                #[fabrique(belongs_to = "User")]
+                #[fabrique(belongs_to = "User", alias = "Recipient")]
                 recipient_id: u32,
-                content: String
             }
         };
         let analysis = Analysis::from(&input).unwrap();
         let codegen = FactoryCodegen::new(&analysis);
 
-        // Act
         let generated: Vec<TokenStream> = codegen.generate_set_foreign_key_impls().collect();
 
-        // Assert - no SetForeignKey should be generated for ambiguous relationships
-        assert!(
-            generated.is_empty(),
-            "Should not generate SetForeignKey when multiple fields reference same parent"
+        assert_eq!(generated.len(), 2);
+        assert_eq!(
+            generated[0].to_string(),
+            quote! {
+                impl fabrique::SetForeignKey<User, Sender> for MessageFactory {
+                    fn set_foreign_key(self, parent_key: <User as fabrique::Model>::PrimaryKey) -> Self {
+                        self.sender_id(parent_key)
+                    }
+                }
+            }
+            .to_string()
+        );
+        assert_eq!(
+            generated[1].to_string(),
+            quote! {
+                impl fabrique::SetForeignKey<User, Recipient> for MessageFactory {
+                    fn set_foreign_key(self, parent_key: <User as fabrique::Model>::PrimaryKey) -> Self {
+                        self.recipient_id(parent_key)
+                    }
+                }
+            }
+            .to_string()
         );
     }
 
     #[test]
-    fn test_has_many_with_explicit_foreign_key_uses_direct_setter() {
-        // Arrange - User has sent_messages with explicit foreign_key
+    fn test_has_many_with_alias_uses_set_foreign_key_with_alias() {
         let input = parse_quote! {
             struct User {
                 id: u32,
-                #[fabrique(foreign_key = "sender_id")]
+                #[fabrique(alias = "Sender")]
                 sent_messages: HasMany<Message>
             }
         };
         let analysis = Analysis::from(&input).unwrap();
         let codegen = FactoryCodegen::new(&analysis);
 
-        // Act
         let generated = codegen.generate_factory_method_create().to_string();
 
-        // Assert - should use direct setter instead of SetForeignKey trait
         assert!(
-            generated.contains("factory . clone () . sender_id (pk . clone ())"),
-            "Should use direct setter method for explicit FK. Generated: {}",
-            generated
-        );
-        assert!(
-            !generated.contains("SetForeignKey"),
-            "Should not use SetForeignKey trait for explicit FK. Generated: {}",
-            generated
+            generated.contains(
+                &quote! {
+                    <MessageFactory as fabrique::SetForeignKey<User, Sender>>::set_foreign_key(factory.clone(), pk.clone())
+                }
+                .to_string()
+            )
         );
     }
 
     #[test]
-    fn test_multiple_belongs_to_same_parent_generates_no_for_relation() {
-        // Arrange - Message has two belongs_to to the same parent (User)
+    fn test_aliased_belongs_to_generates_for_alias_methods() {
         let input = parse_quote! {
             struct Message {
                 id: u32,
-                #[fabrique(belongs_to = "User")]
+                #[fabrique(belongs_to = "User", alias = "Sender")]
                 sender_id: u32,
-                #[fabrique(belongs_to = "User")]
+                #[fabrique(belongs_to = "User", alias = "Recipient")]
                 recipient_id: u32,
-                content: String
             }
         };
         let analysis = Analysis::from(&input).unwrap();
         let codegen = FactoryCodegen::new(&analysis);
 
-        // Act
         let generated: Vec<TokenStream> = codegen.generate_factory_methods_for_relation().collect();
 
-        // Assert - no for_[relation] methods should be generated for ambiguous
-        // relationships
-        assert!(
-            generated.is_empty(),
-            "Should not generate for_[relation] methods when multiple fields reference same parent"
+        assert_eq!(generated.len(), 2);
+        assert_eq!(
+            generated[0].to_string(),
+            quote! {
+                pub fn for_sender(mut self, input: impl Into<MessageSenderRelation>) -> Self {
+                    self.sender_relation = Some(input.into());
+                    self
+                }
+            }
+            .to_string()
+        );
+        assert_eq!(
+            generated[1].to_string(),
+            quote! {
+                pub fn for_recipient(mut self, input: impl Into<MessageRecipientRelation>) -> Self {
+                    self.recipient_relation = Some(input.into());
+                    self
+                }
+            }
+            .to_string()
         );
     }
 

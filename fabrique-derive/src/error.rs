@@ -48,6 +48,12 @@ pub enum ErrorKind {
 
     #[error("Invalid faker expression: {0}")]
     InvalidFakerExpression(String),
+
+    #[error("`alias` can only be used on `belongs_to` or `HasMany` fields")]
+    AliasWithoutRelation,
+
+    #[error("Duplicate alias `{0}`: each alias name must be unique within a model")]
+    DuplicateAlias(String),
 }
 
 impl From<Error> for syn::Error {

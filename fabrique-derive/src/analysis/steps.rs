@@ -10,6 +10,8 @@
 //!     ParsedFields -->|build| Analysis
 //! ```
 
+use std::collections::HashSet;
+
 use darling::{FromDeriveInput, FromField};
 use syn::{Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, spanned::Spanned};
 
@@ -115,6 +117,19 @@ impl<'a> ParsedStruct<'a> {
                 ParsedField::HasMany(hm) => has_many_fields.push(hm),
             }
         }
+
+        // Ensure alias names are unique
+        column_fields
+            .iter()
+            .filter_map(|f| f.relation.as_ref()?.alias.as_ref().map(|a| (f.span, a)))
+            .try_fold(HashSet::new(), |mut seen, (span, alias)| {
+                let name = alias.to_string();
+                if !seen.insert(name.clone()) {
+                    Err(Error::new(span, ErrorKind::DuplicateAlias(name)))
+                } else {
+                    Ok(seen)
+                }
+            })?;
 
         // Ensure manual primary keys are defined or attempt to infer auto primary keys
         if !column_fields.iter().any(|field| field.primary_key) {
@@ -263,6 +278,25 @@ mod tests {
         let analysis = Analysis::from(&input);
 
         assert!(analysis.is_err());
+    }
+
+    #[test]
+    fn test_duplicate_alias_fails() {
+        let input = parse_quote! {
+            struct Order {
+                id: u32,
+                #[fabrique(belongs_to = "User", alias = "Buyer")]
+                buyer_id: u32,
+                #[fabrique(belongs_to = "User", alias = "Buyer")]
+                seller_id: u32,
+            }
+        };
+
+        let result = Analysis::from(&input);
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(matches!(error.kind, ErrorKind::DuplicateAlias(ref name) if name == "Buyer"));
     }
 
     #[test]

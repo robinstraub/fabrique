@@ -77,7 +77,7 @@ macro_rules! impl_column_set {
         where
             $(
                 $C: Column<$M>,
-                Joins: Contains<$M, $I>,
+                Joins: Contains<$M, (), $I>,
             )+
         {
             type Output = ($($C::Type,)+);
@@ -131,29 +131,23 @@ mod tests {
 
     #[test]
     fn single_column_returns_its_qualified_name() {
-        // Arrange a single-column tuple for a model in the Joins list
-        type Joins = Joined<MockModel, ()>;
+        type Joins = Joined<(MockModel, ()), ()>;
 
-        // Act the retrieval of qualified names
         let names = <(MockIdColumn,) as ColumnSet<Joins, (MockModel,), (Here,)>>::qualified_names();
 
-        // Assert the single qualified name is returned
         assert_eq!(names, &["mocks.id"]);
     }
 
     #[test]
     fn two_columns_return_both_qualified_names_in_order() {
-        // Arrange a two-column tuple for a model in the Joins list
-        type Joins = Joined<MockModel, ()>;
+        type Joins = Joined<(MockModel, ()), ()>;
 
-        // Act the retrieval of qualified names
         let names = <(MockIdColumn, MockNameColumn) as ColumnSet<
             Joins,
             (MockModel, MockModel),
             (Here, Here),
         >>::qualified_names();
 
-        // Assert both qualified names are returned in declaration order
         assert_eq!(names, &["mocks.id", "mocks.name"]);
     }
 }

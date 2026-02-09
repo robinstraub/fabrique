@@ -26,27 +26,33 @@ pub struct Here;
 /// See [`Here`], [`Contains`].
 pub struct There<I>(PhantomData<I>);
 
-/// Trait proving that `M` exists within a type-level list at position `Index`.
+/// Trait proving that `(M, Alias)` exists within a type-level list at position
+/// `Index`.
 ///
 /// This is a marker trait with no methods. The compiler uses it to verify
 /// that `M` has been joined before allowing its columns in queries.
 ///
-/// The `Index` parameter encodes the path to `M` using [`Here`] and [`There`].
+/// The `Alias` parameter disambiguates multiple joins to the same model.
+/// Use `()` for unnamed joins.
 ///
 /// See [`Joined`], [`Here`], [`There`].
 #[diagnostic::on_unimplemented(
-    message = "model `{M}` is not joined in this query",
+    message = "model `{M}` (as `{Alias}`) is not joined in this query",
     label = "this column requires its model to be joined",
-    note = "add `.join::<{M}>()` before using columns from `{M}`"
+    note = "add `.join::<{M}, {Alias}>()` before using columns from this join"
 )]
-pub trait Contains<M, Index> {}
+pub trait Contains<M, Alias, Index> {}
 
-// Base case: `M` is at the head of the list, so the index is [`Here`].
-impl<M, Tail> Contains<M, Here> for Joined<M, Tail> {}
+// Base case: `(M, Alias)` is at the head of the list.
+impl<M, Alias, Tail> Contains<M, Alias, Here> for Joined<(M, Alias), Tail> {}
 
-// Recursive case: `M` is somewhere in `Tail` at index `I`, so the full index is
-// [`There<I>`].
-impl<M, I, Head, Tail> Contains<M, There<I>> for Joined<Head, Tail> where Tail: Contains<M, I> {}
+// Recursive case: search in tail.
+impl<M, Alias, I, OtherModel, OtherAlias, Tail> Contains<M, Alias, There<I>>
+    for Joined<(OtherModel, OtherAlias), Tail>
+where
+    Tail: Contains<M, Alias, I>,
+{
+}
 
 /// Extracts the root model (innermost) from a [`Joined`] HList.
 ///
@@ -69,7 +75,7 @@ pub trait RootModel {
 }
 
 // Base case: single element list - M is the root.
-impl<M: Model> RootModel for Joined<M, ()>
+impl<M: Model, Alias> RootModel for Joined<(M, Alias), ()>
 where
     <M as DatabaseAware>::Database: sqlx::Database,
     <M as DatabaseAware>::Error: From<sqlx::Error>,
@@ -80,7 +86,7 @@ where
 }
 
 // Recursive case: dig into tail to find the root.
-impl<Head, Tail> RootModel for Joined<Head, Tail>
+impl<M, Alias, Tail> RootModel for Joined<(M, Alias), Tail>
 where
     Tail: RootModel,
 {

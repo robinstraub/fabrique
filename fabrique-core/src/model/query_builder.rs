@@ -80,7 +80,7 @@ pub struct Initial;
 /// State accumulating joins before SELECT.
 /// Stores pending joins that will be flushed when calling select().
 pub struct Joining {
-    pub joins: Vec<(&'static str, &'static str, &'static str)>,
+    pub joins: Vec<(String, String, String)>,
 }
 
 /// Wrapper state containing the SQL QueryBuilder.
@@ -108,9 +108,6 @@ macro_rules! impl_where {
             Joins::Database: Database,
         {
             /// Adds a WHERE clause to the query.
-            ///
-            /// Requires a type-safe column from the model to ensure compile-time
-            /// safety. Transitions to [`Filtered`] state.
             pub fn r#where<Column, Operator, JoinedModel, Index>(
                 self,
                 column: Column,
@@ -119,7 +116,7 @@ macro_rules! impl_where {
             ) -> QueryBuilder<Building<Joins::Database, $output>, Joins, Output>
             where
                 Column: database::Column<JoinedModel>,
-                Joins: Contains<JoinedModel, Index>,
+                Joins: Contains<JoinedModel, (), Index>,
                 for<'q> Column::Type:
                     sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
                 Operator: Into<operators::Operator>,
@@ -136,16 +133,39 @@ macro_rules! impl_where {
                 }
             }
 
+            /// Adds a WHERE clause on a named join.
+            pub fn where_on<Alias, Column, Operator, JoinedModel, Index>(
+                self,
+                column: Column,
+                operator: Operator,
+                value: impl Into<Column::Type>,
+            ) -> QueryBuilder<Building<Joins::Database, $output>, Joins, Output>
+            where
+                Alias: crate::Alias<Target = JoinedModel>,
+                Column: database::Column<JoinedModel>,
+                Joins: Contains<JoinedModel, Alias, Index>,
+                for<'q> Column::Type:
+                    sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+                Operator: Into<operators::Operator>,
+            {
+                let qualified = format!("{}.{}", Alias::NAME, column.name());
+                let value: Column::Type = value.into();
+                QueryBuilder {
+                    state: Building {
+                        inner: self.state.inner.r#where(&qualified, operator, value),
+                    },
+                    _marker: PhantomData,
+                }
+            }
+
             /// Adds a WHERE IS NULL clause to the query.
-            ///
-            /// Transitions to [`Filtered`] state.
             pub fn where_null<Column, JoinedModel, Index>(
                 self,
                 column: Column,
             ) -> QueryBuilder<Building<Joins::Database, $output>, Joins, Output>
             where
                 Column: database::Column<JoinedModel>,
-                Joins: Contains<JoinedModel, Index>,
+                Joins: Contains<JoinedModel, (), Index>,
                 for<'q> Column::Type:
                     sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
             {
@@ -157,16 +177,35 @@ macro_rules! impl_where {
                 }
             }
 
+            /// Adds a WHERE IS NULL clause on a named join.
+            pub fn where_null_on<Alias, Column, JoinedModel, Index>(
+                self,
+                column: Column,
+            ) -> QueryBuilder<Building<Joins::Database, $output>, Joins, Output>
+            where
+                Alias: crate::Alias<Target = JoinedModel>,
+                Column: database::Column<JoinedModel>,
+                Joins: Contains<JoinedModel, Alias, Index>,
+                for<'q> Column::Type:
+                    sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+            {
+                let qualified = format!("{}.{}", Alias::NAME, column.name());
+                QueryBuilder {
+                    state: Building {
+                        inner: self.state.inner.where_null(&qualified),
+                    },
+                    _marker: PhantomData,
+                }
+            }
+
             /// Adds a WHERE IS NOT NULL clause to the query.
-            ///
-            /// Transitions to [`Filtered`] state.
             pub fn where_not_null<Column, JoinedModel, Index>(
                 self,
                 column: Column,
             ) -> QueryBuilder<Building<Joins::Database, $output>, Joins, Output>
             where
                 Column: database::Column<JoinedModel>,
-                Joins: Contains<JoinedModel, Index>,
+                Joins: Contains<JoinedModel, (), Index>,
                 for<'q> Column::Type:
                     sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
             {
@@ -177,13 +216,32 @@ macro_rules! impl_where {
                     _marker: PhantomData,
                 }
             }
+
+            /// Adds a WHERE IS NOT NULL clause on a named join.
+            pub fn where_not_null_on<Alias, Column, JoinedModel, Index>(
+                self,
+                column: Column,
+            ) -> QueryBuilder<Building<Joins::Database, $output>, Joins, Output>
+            where
+                Alias: crate::Alias<Target = JoinedModel>,
+                Column: database::Column<JoinedModel>,
+                Joins: Contains<JoinedModel, Alias, Index>,
+                for<'q> Column::Type:
+                    sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+            {
+                let qualified = format!("{}.{}", Alias::NAME, column.name());
+                QueryBuilder {
+                    state: Building {
+                        inner: self.state.inner.where_not_null(&qualified),
+                    },
+                    _marker: PhantomData,
+                }
+            }
         }
     };
 }
 
 /// Implements the `order_by` method for Building states.
-///
-/// Syntax: `impl_order_by!(SqlState)` - transitions to [`Building<Ordered>`]
 macro_rules! impl_order_by {
     ($state:ty) => {
         impl<Joins, Output> QueryBuilder<Building<Joins::Database, $state>, Joins, Output>
@@ -192,10 +250,6 @@ macro_rules! impl_order_by {
             Joins::Database: Database,
         {
             /// Adds an `ORDER BY` clause to the query.
-            ///
-            /// The column must belong to a model that is joined in this query.
-            ///
-            /// Transitions to [`Ordered`] state.
             pub fn order_by<Column, JoinedModel, Index>(
                 self,
                 column: Column,
@@ -203,7 +257,7 @@ macro_rules! impl_order_by {
             ) -> QueryBuilder<Building<Joins::Database, Ordered>, Joins, Output>
             where
                 Column: database::Column<JoinedModel>,
-                Joins: Contains<JoinedModel, Index>,
+                Joins: Contains<JoinedModel, (), Index>,
             {
                 QueryBuilder {
                     state: Building {
@@ -211,6 +265,26 @@ macro_rules! impl_order_by {
                             .state
                             .inner
                             .order_by(column.qualified_name(), direction),
+                    },
+                    _marker: PhantomData,
+                }
+            }
+
+            /// Adds an `ORDER BY` clause on a named join.
+            pub fn order_by_on<Alias, Column, JoinedModel, Index>(
+                self,
+                column: Column,
+                direction: impl Into<Direction>,
+            ) -> QueryBuilder<Building<Joins::Database, Ordered>, Joins, Output>
+            where
+                Alias: crate::Alias<Target = JoinedModel>,
+                Column: database::Column<JoinedModel>,
+                Joins: Contains<JoinedModel, Alias, Index>,
+            {
+                let qualified = format!("{}.{}", Alias::NAME, column.name());
+                QueryBuilder {
+                    state: Building {
+                        inner: self.state.inner.order_by(&qualified, direction),
                     },
                     _marker: PhantomData,
                 }
@@ -427,13 +501,13 @@ pub struct QueryBuilder<S = Initial, Joins = (), Output = ()> {
 // Initial
 // ============================================================================
 
-impl<M: Model> Default for QueryBuilder<Initial, Joined<M, ()>> {
+impl<M: Model> Default for QueryBuilder<Initial, Joined<(M, ()), ()>> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<M: Model> QueryBuilder<Initial, Joined<M, ()>> {
+impl<M: Model> QueryBuilder<Initial, Joined<(M, ()), ()>> {
     /// Creates a new query builder for the given model.
     pub fn new() -> Self {
         Self {
@@ -492,7 +566,7 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Selected>, Joins, Output>
     where
         Output: Model,
-        Joins: Contains<Output, Index>,
+        Joins: Contains<Output, (), Index>,
     {
         self.select_impl::<Output>()
     }
@@ -509,7 +583,7 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
     where
         Column: database::Column<JoinedModel>,
-        Joins: Contains<JoinedModel, Index>,
+        Joins: Contains<JoinedModel, (), Index>,
         for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
         Operator: Into<operators::Operator>,
     {
@@ -527,7 +601,7 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
     where
         Column: database::Column<JoinedModel>,
-        Joins: Contains<JoinedModel, Index>,
+        Joins: Contains<JoinedModel, (), Index>,
         for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
     {
         self.select_impl::<Joins::Root>().where_null(column)
@@ -543,7 +617,7 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
     where
         Column: database::Column<JoinedModel>,
-        Joins: Contains<JoinedModel, Index>,
+        Joins: Contains<JoinedModel, (), Index>,
         for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
     {
         self.select_impl::<Joins::Root>().where_not_null(column)
@@ -560,7 +634,7 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Ordered>, Joins, Joins::Root>
     where
         Column: database::Column<JoinedModel>,
-        Joins: Contains<JoinedModel, Index>,
+        Joins: Contains<JoinedModel, (), Index>,
     {
         self.select_impl::<Joins::Root>()
             .order_by(column, direction)
@@ -630,16 +704,47 @@ where
     /// Adds a JOIN before SELECT.
     ///
     /// Transitions to [`Joining`] state to accumulate joins.
-    pub fn join<J>(self) -> QueryBuilder<Joining, Joined<J, Joins>>
+    pub fn join<J>(self) -> QueryBuilder<Joining, Joined<(J, ()), Joins>>
     where
         J: Model<Database = Joins::Database> + Joinable<Joins::Root>,
     {
         QueryBuilder {
             state: Joining {
                 joins: vec![(
-                    J::table_name(),
-                    J::left_column().qualified_name(),
-                    J::right_column().qualified_name(),
+                    J::table_name().to_string(),
+                    <J as Joinable<Joins::Root>>::left_column()
+                        .qualified_name()
+                        .to_string(),
+                    <J as Joinable<Joins::Root>>::right_column()
+                        .qualified_name()
+                        .to_string(),
+                )],
+            },
+            _marker: PhantomData,
+        }
+    }
+
+    /// Adds a named JOIN before SELECT.
+    ///
+    /// Use this for disambiguation when joining the same model multiple times.
+    /// Transitions to [`Joining`] state to accumulate joins.
+    pub fn join_as<J, Alias>(self) -> QueryBuilder<Joining, Joined<(J, Alias), Joins>>
+    where
+        J: Model<Database = Joins::Database> + Joinable<Joins::Root, Alias>,
+        Alias: crate::Alias<Target = J>,
+    {
+        QueryBuilder {
+            state: Joining {
+                joins: vec![(
+                    format!("{} AS {}", J::table_name(), Alias::NAME),
+                    format!(
+                        "{}.{}",
+                        Alias::NAME,
+                        <J as Joinable<Joins::Root, Alias>>::left_column().name(),
+                    ),
+                    <J as Joinable<Joins::Root, Alias>>::right_column()
+                        .qualified_name()
+                        .to_string(),
                 )],
             },
             _marker: PhantomData,
@@ -692,14 +797,45 @@ where
     /// Adds another JOIN before SELECT.
     ///
     /// Chains multiple joins in [`Joining`] state.
-    pub fn join<J>(mut self) -> QueryBuilder<Joining, Joined<J, Joins>>
+    pub fn join<J>(mut self) -> QueryBuilder<Joining, Joined<(J, ()), Joins>>
     where
         J: Model<Database = Joins::Database> + Joinable<Joins::Root>,
     {
         self.state.joins.push((
-            J::table_name(),
-            J::left_column().qualified_name(),
-            J::right_column().qualified_name(),
+            J::table_name().to_string(),
+            <J as Joinable<Joins::Root>>::left_column()
+                .qualified_name()
+                .to_string(),
+            <J as Joinable<Joins::Root>>::right_column()
+                .qualified_name()
+                .to_string(),
+        ));
+
+        QueryBuilder {
+            state: self.state,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Adds another named JOIN before SELECT.
+    ///
+    /// Use this for disambiguation when joining the same model multiple times.
+    /// Chains multiple joins in [`Joining`] state.
+    pub fn join_as<J, Alias>(mut self) -> QueryBuilder<Joining, Joined<(J, Alias), Joins>>
+    where
+        J: Model<Database = Joins::Database> + Joinable<Joins::Root, Alias>,
+        Alias: crate::Alias<Target = J>,
+    {
+        self.state.joins.push((
+            format!("{} AS {}", J::table_name(), Alias::NAME),
+            format!(
+                "{}.{}",
+                Alias::NAME,
+                <J as Joinable<Joins::Root, Alias>>::left_column().name(),
+            ),
+            <J as Joinable<Joins::Root, Alias>>::right_column()
+                .qualified_name()
+                .to_string(),
         ));
 
         QueryBuilder {
@@ -716,16 +852,20 @@ where
     /// Chains multiple joins in [`Joining`] state.
     pub fn join_through<JoinModel, PivotModel, Index>(
         mut self,
-    ) -> QueryBuilder<Joining, Joined<JoinModel, Joins>>
+    ) -> QueryBuilder<Joining, Joined<(JoinModel, ()), Joins>>
     where
         PivotModel: Model<Database = Joins::Database>,
         JoinModel: Model<Database = Joins::Database> + Joinable<PivotModel>,
-        Joins: Contains<PivotModel, Index>,
+        Joins: Contains<PivotModel, (), Index>,
     {
         self.state.joins.push((
-            JoinModel::table_name(),
-            JoinModel::left_column().qualified_name(),
-            JoinModel::right_column().qualified_name(),
+            JoinModel::table_name().to_string(),
+            <JoinModel as Joinable<PivotModel>>::left_column()
+                .qualified_name()
+                .to_string(),
+            <JoinModel as Joinable<PivotModel>>::right_column()
+                .qualified_name()
+                .to_string(),
         ));
 
         QueryBuilder {
@@ -746,7 +886,7 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
     where
         Column: database::Column<JoinedModel>,
-        Joins: Contains<JoinedModel, Index>,
+        Joins: Contains<JoinedModel, (), Index>,
         for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
         Operator: Into<operators::Operator>,
     {
@@ -764,7 +904,7 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
     where
         Column: database::Column<JoinedModel>,
-        Joins: Contains<JoinedModel, Index>,
+        Joins: Contains<JoinedModel, (), Index>,
         for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
     {
         self.select_impl::<Joins::Root>().where_null(column)
@@ -780,7 +920,7 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
     where
         Column: database::Column<JoinedModel>,
-        Joins: Contains<JoinedModel, Index>,
+        Joins: Contains<JoinedModel, (), Index>,
         for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
     {
         self.select_impl::<Joins::Root>().where_not_null(column)
@@ -797,10 +937,77 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Ordered>, Joins, Joins::Root>
     where
         Column: database::Column<JoinedModel>,
-        Joins: Contains<JoinedModel, Index>,
+        Joins: Contains<JoinedModel, (), Index>,
     {
         self.select_impl::<Joins::Root>()
             .order_by(column, direction)
+    }
+
+    /// Adds a WHERE clause on a named join, implicitly selecting all columns
+    /// from the root model and flushing accumulated joins.
+    pub fn where_on<Alias, Column, Operator, JoinedModel, Index>(
+        self,
+        column: Column,
+        operator: Operator,
+        value: Column::Type,
+    ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
+    where
+        Alias: crate::Alias<Target = JoinedModel>,
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Alias, Index>,
+        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        Operator: Into<operators::Operator>,
+    {
+        self.select_impl::<Joins::Root>()
+            .where_on::<Alias, Column, Operator, JoinedModel, Index>(column, operator, value)
+    }
+
+    /// Adds a WHERE IS NULL clause on a named join, implicitly selecting all
+    /// columns from the root model and flushing accumulated joins.
+    pub fn where_null_on<Alias, Column, JoinedModel, Index>(
+        self,
+        column: Column,
+    ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
+    where
+        Alias: crate::Alias<Target = JoinedModel>,
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Alias, Index>,
+        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>()
+            .where_null_on::<Alias, Column, JoinedModel, Index>(column)
+    }
+
+    /// Adds a WHERE IS NOT NULL clause on a named join, implicitly selecting
+    /// all columns from the root model and flushing accumulated joins.
+    pub fn where_not_null_on<Alias, Column, JoinedModel, Index>(
+        self,
+        column: Column,
+    ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
+    where
+        Alias: crate::Alias<Target = JoinedModel>,
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Alias, Index>,
+        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>()
+            .where_not_null_on::<Alias, Column, JoinedModel, Index>(column)
+    }
+
+    /// Adds an ORDER BY clause on a named join, implicitly selecting all
+    /// columns from the root model and flushing accumulated joins.
+    pub fn order_by_on<Alias, Column, JoinedModel, Index>(
+        self,
+        column: Column,
+        direction: impl Into<Direction>,
+    ) -> QueryBuilder<Building<Joins::Database, Ordered>, Joins, Joins::Root>
+    where
+        Alias: crate::Alias<Target = JoinedModel>,
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Alias, Index>,
+    {
+        self.select_impl::<Joins::Root>()
+            .order_by_on::<Alias, Column, JoinedModel, Index>(column, direction)
     }
 
     /// Adds a LIMIT clause, implicitly selecting all columns from the root
@@ -877,10 +1084,10 @@ where
         let (table, left, right) = joins_iter
             .next()
             .expect("Joining state guarantees at least one join");
-        let mut qb = qb.join(table, left, right);
+        let mut qb = qb.join(&table, &left, &right);
 
         for (table, left, right) in joins_iter {
-            qb = qb.join(table, left, right);
+            qb = qb.join(&table, &left, &right);
         }
 
         QueryBuilder {
@@ -912,10 +1119,10 @@ where
         let (table, left, right) = joins_iter
             .next()
             .expect("Joining state guarantees at least one join");
-        let mut qb = qb.join(table, left, right);
+        let mut qb = qb.join(&table, &left, &right);
 
         for (table, left, right) in joins_iter {
-            qb = qb.join(table, left, right);
+            qb = qb.join(&table, &left, &right);
         }
 
         QueryBuilder {
@@ -933,7 +1140,7 @@ where
     ) -> QueryBuilder<Building<Joins::Database, SqlJoined<Selected>>, Joins, JoinedModel>
     where
         JoinedModel: Model,
-        Joins: Contains<JoinedModel, Index>,
+        Joins: Contains<JoinedModel, (), Index>,
     {
         self.select_impl::<JoinedModel>()
     }

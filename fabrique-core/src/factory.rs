@@ -29,6 +29,9 @@ pub trait Factory: Clone + Sized {
 /// parent factories to set the foreign key on child factories when creating
 /// `HasMany` relationships.
 ///
+/// The optional `Alias` parameter disambiguates multiple relationships
+/// to the same parent type (see `alias` attribute).
+///
 /// # Example
 ///
 /// ```rust
@@ -38,9 +41,9 @@ pub trait Factory: Clone + Sized {
 /// //
 /// // <OrderFactory as SetForeignKey<Customer>>::set_foreign_key(factory, customer_pk)
 /// ```
-pub trait SetForeignKey<Parent: Model>: Factory
+pub trait SetForeignKey<Parent: Model, Alias = ()>: Factory
 where
-    Self::Model: BelongsTo<Parent>,
+    Self::Model: BelongsTo<Parent, Alias>,
 {
     /// Sets the foreign key field that references the parent model.
     fn set_foreign_key(self, parent_key: Parent::PrimaryKey) -> Self;
