@@ -117,7 +117,7 @@ pub mod prelude;
 pub mod relation;
 pub mod sql;
 
-#[cfg(feature = "sqlite")]
+#[cfg(feature = "doctests")]
 #[doc(hidden)]
 pub use fabrique_core::__private;
 

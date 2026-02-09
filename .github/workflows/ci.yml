@@ -202,7 +202,7 @@ jobs:
           tool: mdbook,mdbook-mermaid
 
       - name: Build dependencies for doctests
-        run: cargo build --features sqlite
+        run: cargo build --features doctests
 
       - name: Build mdBook
         run: mdbook build docs
