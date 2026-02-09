@@ -926,6 +926,73 @@ where
             .order_by(column, direction)
     }
 
+    /// Adds a WHERE clause on a named join, implicitly selecting all columns
+    /// from the root model and flushing accumulated joins.
+    pub fn where_on<Alias, Column, Operator, JoinedModel, Index>(
+        self,
+        column: Column,
+        operator: Operator,
+        value: Column::Type,
+    ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
+    where
+        Alias: crate::Alias<Target = JoinedModel>,
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Alias, Index>,
+        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        Operator: Into<operators::Operator>,
+    {
+        self.select_impl::<Joins::Root>()
+            .where_on::<Alias, Column, Operator, JoinedModel, Index>(column, operator, value)
+    }
+
+    /// Adds a WHERE IS NULL clause on a named join, implicitly selecting all
+    /// columns from the root model and flushing accumulated joins.
+    pub fn where_null_on<Alias, Column, JoinedModel, Index>(
+        self,
+        column: Column,
+    ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
+    where
+        Alias: crate::Alias<Target = JoinedModel>,
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Alias, Index>,
+        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>()
+            .where_null_on::<Alias, Column, JoinedModel, Index>(column)
+    }
+
+    /// Adds a WHERE IS NOT NULL clause on a named join, implicitly selecting
+    /// all columns from the root model and flushing accumulated joins.
+    pub fn where_not_null_on<Alias, Column, JoinedModel, Index>(
+        self,
+        column: Column,
+    ) -> QueryBuilder<Building<Joins::Database, Filtered<Selected>>, Joins, Joins::Root>
+    where
+        Alias: crate::Alias<Target = JoinedModel>,
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Alias, Index>,
+        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+    {
+        self.select_impl::<Joins::Root>()
+            .where_not_null_on::<Alias, Column, JoinedModel, Index>(column)
+    }
+
+    /// Adds an ORDER BY clause on a named join, implicitly selecting all
+    /// columns from the root model and flushing accumulated joins.
+    pub fn order_by_on<Alias, Column, JoinedModel, Index>(
+        self,
+        column: Column,
+        direction: impl Into<Direction>,
+    ) -> QueryBuilder<Building<Joins::Database, Ordered>, Joins, Joins::Root>
+    where
+        Alias: crate::Alias<Target = JoinedModel>,
+        Column: database::Column<JoinedModel>,
+        Joins: Contains<JoinedModel, Alias, Index>,
+    {
+        self.select_impl::<Joins::Root>()
+            .order_by_on::<Alias, Column, JoinedModel, Index>(column, direction)
+    }
+
     /// Adds a LIMIT clause, implicitly selecting all columns from the root
     /// model and flushing accumulated joins.
     ///

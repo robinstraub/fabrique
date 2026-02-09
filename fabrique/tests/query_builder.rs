@@ -306,6 +306,46 @@ mod joining {
         let result: Result<Vec<User>, _> = User::query().join::<Order>().get(&pool).await;
         assert!(result.is_ok());
     }
+
+    #[fabrique_derive::test]
+    async fn where_on_implicit_select_transitions_to_filtered(pool: Pool<Backend>) {
+        let result: Result<Vec<Message>, _> = Message::query()
+            .join_as::<User, Sender>()
+            .where_on::<Sender, _, _, _, _>(User::NAME, "=", "Alice".to_string())
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn where_null_on_implicit_select_transitions_to_filtered(pool: Pool<Backend>) {
+        let result: Result<Vec<Message>, _> = Message::query()
+            .join_as::<User, Sender>()
+            .where_null_on::<Sender, _, _, _>(User::NAME)
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn where_not_null_on_implicit_select_transitions_to_filtered(pool: Pool<Backend>) {
+        let result: Result<Vec<Message>, _> = Message::query()
+            .join_as::<User, Sender>()
+            .where_not_null_on::<Sender, _, _, _>(User::NAME)
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn order_by_on_implicit_select_transitions_to_ordered(pool: Pool<Backend>) {
+        let result: Result<Vec<Message>, _> = Message::query()
+            .join_as::<User, Sender>()
+            .order_by_on::<Sender, _, _, _>(User::NAME, "ASC")
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
 }
 
 // ============================================================================
@@ -461,6 +501,28 @@ mod joined_selected {
             .join_as::<User, Sender>()
             .select_as::<Message, _>()
             .where_on::<Sender, _, _, _, _>(User::NAME, "=", "Alice".to_string())
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn where_null_on_named_join(pool: Pool<Backend>) {
+        let result: Result<Vec<Message>, _> = Message::query()
+            .join_as::<User, Sender>()
+            .select_as::<Message, _>()
+            .where_null_on::<Sender, _, _, _>(User::NAME)
+            .get(&pool)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[fabrique_derive::test]
+    async fn where_not_null_on_named_join(pool: Pool<Backend>) {
+        let result: Result<Vec<Message>, _> = Message::query()
+            .join_as::<User, Sender>()
+            .select_as::<Message, _>()
+            .where_not_null_on::<Sender, _, _, _>(User::NAME)
             .get(&pool)
             .await;
         assert!(result.is_ok());
