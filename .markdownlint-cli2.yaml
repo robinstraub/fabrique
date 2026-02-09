@@ -2,7 +2,7 @@ globs:
   - "**/*.md"
 
 ignores:
-  - "**/CHANGELOG.md"
+  - "CHANGELOG.md"
   - "target/**"
 
 # Most markdown files are mdBook documentation which uses multiple h1 headings

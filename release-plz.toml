@@ -1,0 +1,16 @@
+[workspace]
+changelog_update = false
+changelog_path = "./CHANGELOG.md"
+
+[[package]]
+name = "fabrique"
+changelog_update = true
+version_group = "fabrique"
+
+[[package]]
+name = "fabrique-core"
+version_group = "fabrique"
+
+[[package]]
+name = "fabrique-derive"
+version_group = "fabrique"
