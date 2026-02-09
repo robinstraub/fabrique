@@ -80,7 +80,7 @@ pub struct Initial;
 /// State accumulating joins before SELECT.
 /// Stores pending joins that will be flushed when calling select().
 pub struct Joining {
-    pub joins: Vec<(&'static str, &'static str, &'static str)>,
+    pub joins: Vec<(String, String, String)>,
 }
 
 /// Wrapper state containing the SQL QueryBuilder.
@@ -710,9 +710,13 @@ where
         QueryBuilder {
             state: Joining {
                 joins: vec![(
-                    J::table_name(),
-                    <J as Joinable<Joins::Root>>::left_column().qualified_name(),
-                    <J as Joinable<Joins::Root>>::right_column().qualified_name(),
+                    J::table_name().to_string(),
+                    <J as Joinable<Joins::Root>>::left_column()
+                        .qualified_name()
+                        .to_string(),
+                    <J as Joinable<Joins::Root>>::right_column()
+                        .qualified_name()
+                        .to_string(),
                 )],
             },
             _marker: PhantomData,
@@ -728,16 +732,19 @@ where
         J: Model<Database = Joins::Database> + Joinable<Joins::Root, Alias>,
         Alias: crate::Alias<Target = J>,
     {
-        let table_as_alias = format!("{} AS {}", J::table_name(), Alias::NAME);
-        let left = format!(
-            "{}.{}",
-            Alias::NAME,
-            <J as Joinable<Joins::Root, Alias>>::left_column().name()
-        );
-        let right = <J as Joinable<Joins::Root, Alias>>::right_column().qualified_name();
         QueryBuilder {
             state: Joining {
-                joins: vec![(table_as_alias.leak(), left.leak(), right)],
+                joins: vec![(
+                    format!("{} AS {}", J::table_name(), Alias::NAME),
+                    format!(
+                        "{}.{}",
+                        Alias::NAME,
+                        <J as Joinable<Joins::Root, Alias>>::left_column().name(),
+                    ),
+                    <J as Joinable<Joins::Root, Alias>>::right_column()
+                        .qualified_name()
+                        .to_string(),
+                )],
             },
             _marker: PhantomData,
         }
@@ -794,9 +801,13 @@ where
         J: Model<Database = Joins::Database> + Joinable<Joins::Root>,
     {
         self.state.joins.push((
-            J::table_name(),
-            <J as Joinable<Joins::Root>>::left_column().qualified_name(),
-            <J as Joinable<Joins::Root>>::right_column().qualified_name(),
+            J::table_name().to_string(),
+            <J as Joinable<Joins::Root>>::left_column()
+                .qualified_name()
+                .to_string(),
+            <J as Joinable<Joins::Root>>::right_column()
+                .qualified_name()
+                .to_string(),
         ));
 
         QueryBuilder {
@@ -814,16 +825,17 @@ where
         J: Model<Database = Joins::Database> + Joinable<Joins::Root, Alias>,
         Alias: crate::Alias<Target = J>,
     {
-        let table_as_alias = format!("{} AS {}", J::table_name(), Alias::NAME);
-        let left = format!(
-            "{}.{}",
-            Alias::NAME,
-            <J as Joinable<Joins::Root, Alias>>::left_column().name()
-        );
-        let right = <J as Joinable<Joins::Root, Alias>>::right_column().qualified_name();
-        self.state
-            .joins
-            .push((table_as_alias.leak(), left.leak(), right));
+        self.state.joins.push((
+            format!("{} AS {}", J::table_name(), Alias::NAME),
+            format!(
+                "{}.{}",
+                Alias::NAME,
+                <J as Joinable<Joins::Root, Alias>>::left_column().name(),
+            ),
+            <J as Joinable<Joins::Root, Alias>>::right_column()
+                .qualified_name()
+                .to_string(),
+        ));
 
         QueryBuilder {
             state: self.state,
@@ -846,9 +858,13 @@ where
         Joins: Contains<PivotModel, (), Index>,
     {
         self.state.joins.push((
-            JoinModel::table_name(),
-            <JoinModel as Joinable<PivotModel>>::left_column().qualified_name(),
-            <JoinModel as Joinable<PivotModel>>::right_column().qualified_name(),
+            JoinModel::table_name().to_string(),
+            <JoinModel as Joinable<PivotModel>>::left_column()
+                .qualified_name()
+                .to_string(),
+            <JoinModel as Joinable<PivotModel>>::right_column()
+                .qualified_name()
+                .to_string(),
         ));
 
         QueryBuilder {
@@ -1067,10 +1083,10 @@ where
         let (table, left, right) = joins_iter
             .next()
             .expect("Joining state guarantees at least one join");
-        let mut qb = qb.join(table, left, right);
+        let mut qb = qb.join(&table, &left, &right);
 
         for (table, left, right) in joins_iter {
-            qb = qb.join(table, left, right);
+            qb = qb.join(&table, &left, &right);
         }
 
         QueryBuilder {
@@ -1102,10 +1118,10 @@ where
         let (table, left, right) = joins_iter
             .next()
             .expect("Joining state guarantees at least one join");
-        let mut qb = qb.join(table, left, right);
+        let mut qb = qb.join(&table, &left, &right);
 
         for (table, left, right) in joins_iter {
-            qb = qb.join(table, left, right);
+            qb = qb.join(&table, &left, &right);
         }
 
         QueryBuilder {

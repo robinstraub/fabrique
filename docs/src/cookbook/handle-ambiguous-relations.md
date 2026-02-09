@@ -83,7 +83,12 @@ With aliases, you can join the same model multiple times using `join_as`:
 # use fabrique::prelude::*;
 # use uuid::Uuid;
 # #[derive(Clone, Factory, Model)]
-# pub struct User { id: Uuid, name: String, email: String }
+# pub struct User {
+#     id: Uuid,
+#     name: String,
+#     email: String
+# }
+#
 # #[derive(Factory, Model)]
 # pub struct Message {
 #     id: Uuid,

@@ -78,7 +78,7 @@ pub trait Alias {
     /// The real model that this alias represents.
     type Target: Model;
 
-    /// The SQL alias name (e.g., "seller").
+    /// The SQL alias name (e.g., "sender").
     const NAME: &'static str;
 }
 
