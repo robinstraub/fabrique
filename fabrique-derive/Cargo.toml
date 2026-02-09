@@ -1,6 +1,6 @@
 [package]
 name = "fabrique-derive"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Derive macros for Fabrique"
 license = "MIT"
@@ -18,7 +18,7 @@ proc-macro = true
 
 [dependencies]
 darling = "0.21"
-fabrique-core = { path = "../fabrique-core", version = "0.2.0" }
+fabrique-core = { path = "../fabrique-core", version = "0.2.1" }
 heck = "0.5"
 pluralizer = "0.4"
 proc-macro2 = "1.0"
