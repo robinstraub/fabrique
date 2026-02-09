@@ -23,6 +23,7 @@ pub use database::Backend;
 pub use database::Nil;
 pub use error::Error;
 pub use factory::SetForeignKey;
+pub use relation::Alias;
 pub use relation::BelongsTo;
 pub use relation::HasMany;
 pub use relation::Joinable;

@@ -14,66 +14,53 @@ impl<'a> JoinableCodegen<'a> {
         Self { analysis }
     }
 
-    /// Generates bidirectional `impl Joinable` for each unique belongs_to
-    /// relation.
-    ///
-    /// For each `belongs_to` relationship, generates two implementations:
-    /// - Child → Parent: `impl Joinable<Parent> for Child`
-    /// - Parent → Child: `impl Joinable<Child> for Parent`
+    /// Generates bidirectional `impl Joinable` for each belongs_to relation.
     pub fn generate(self) -> TokenStream {
         let child_struct = &self.analysis.ident;
 
-        let impls = self
-            .analysis
-            .belongs_to_non_ambiguous()
-            .map(|(field, relation)| {
-                let parent_type = &relation.referenced_type;
-                let fk_column_type = &field.column_type;
-                let fk_const = &field.const_column_name;
+        let impls = self.analysis.belongs_to().map(|(field, relation)| {
+            let parent_type = &relation.referenced_type;
+            let fk_column_type = &field.column_type;
+            let fk_const = &field.const_column_name;
+            let parent_pk_column_type =
+                Ident::new(&format!("{}IdColumn", parent_type), parent_type.span());
 
-                // Construct parent's PK column type (assumes `id` field convention)
-                let parent_pk_column_type =
-                    Ident::new(&format!("{}IdColumn", parent_type), parent_type.span());
+            let (trait_params, reverse_trait_params) = match &relation.alias {
+                Some(name) => (
+                    quote! { #parent_type, #name },
+                    quote! { #child_struct, #name },
+                ),
+                None => (quote! { #parent_type }, quote! { #child_struct }),
+            };
 
-                // Child → Parent: Order: Joinable<User>
-                // Left = FK column (orders.user_id), Right = PK column (users.id)
-                let child_to_parent = quote! {
-                    impl ::fabrique::Joinable<#parent_type> for #child_struct {
-                        type LeftColumn = #fk_column_type;
-                        type RightColumn = #parent_pk_column_type;
+            quote! {
+                impl ::fabrique::Joinable<#trait_params> for #child_struct {
+                    type LeftColumn = #fk_column_type;
+                    type RightColumn = #parent_pk_column_type;
 
-                        fn left_column() -> Self::LeftColumn {
-                            Self::#fk_const
-                        }
-
-                        fn right_column() -> Self::RightColumn {
-                            #parent_type::ID
-                        }
+                    fn left_column() -> Self::LeftColumn {
+                        Self::#fk_const
                     }
-                };
 
-                // Parent → Child: User: Joinable<Order>
-                // Left = PK column (users.id), Right = FK column (orders.user_id)
-                let parent_to_child = quote! {
-                    impl ::fabrique::Joinable<#child_struct> for #parent_type {
-                        type LeftColumn = #parent_pk_column_type;
-                        type RightColumn = #fk_column_type;
-
-                        fn left_column() -> Self::LeftColumn {
-                            Self::ID
-                        }
-
-                        fn right_column() -> Self::RightColumn {
-                            #child_struct::#fk_const
-                        }
+                    fn right_column() -> Self::RightColumn {
+                        #parent_type::ID
                     }
-                };
-
-                quote! {
-                    #child_to_parent
-                    #parent_to_child
                 }
-            });
+
+                impl ::fabrique::Joinable<#reverse_trait_params> for #parent_type {
+                    type LeftColumn = #parent_pk_column_type;
+                    type RightColumn = #fk_column_type;
+
+                    fn left_column() -> Self::LeftColumn {
+                        Self::ID
+                    }
+
+                    fn right_column() -> Self::RightColumn {
+                        #child_struct::#fk_const
+                    }
+                }
+            }
+        });
 
         quote! {
             #(#impls)*
@@ -92,8 +79,11 @@ mod tests {
         let input = parse_quote! {
             struct Order {
                 id: String,
-                #[fabrique(belongs_to = "User")]
-                user_id: String
+                #[fabrique(belongs_to = "User", alias = "Buyer")]
+                buyer_id: String,
+
+                #[fabrique(belongs_to = "User", alias = "Seller")]
+                seller_id: String,
             }
         };
         let analysis = Analysis::from(&input).unwrap();
@@ -102,84 +92,60 @@ mod tests {
         // Act
         let result = codegen.generate();
 
-        // Assert
         assert_eq!(
             result.to_string(),
             quote! {
-                impl ::fabrique::Joinable<User> for Order {
-                    type LeftColumn = OrderUserIdColumn;
+                impl ::fabrique::Joinable<User, Buyer> for Order {
+                    type LeftColumn = OrderBuyerIdColumn;
                     type RightColumn = UserIdColumn;
 
                     fn left_column() -> Self::LeftColumn {
-                        Self::USER_ID
+                        Self::BUYER_ID
                     }
 
                     fn right_column() -> Self::RightColumn {
                         User::ID
                     }
                 }
-                impl ::fabrique::Joinable<Order> for User {
+                impl ::fabrique::Joinable<Order, Buyer> for User {
                     type LeftColumn = UserIdColumn;
-                    type RightColumn = OrderUserIdColumn;
+                    type RightColumn = OrderBuyerIdColumn;
 
                     fn left_column() -> Self::LeftColumn {
                         Self::ID
                     }
 
                     fn right_column() -> Self::RightColumn {
-                        Order::USER_ID
+                        Order::BUYER_ID
+                    }
+                }
+                impl ::fabrique::Joinable<User, Seller> for Order {
+                    type LeftColumn = OrderSellerIdColumn;
+                    type RightColumn = UserIdColumn;
+
+                    fn left_column() -> Self::LeftColumn {
+                        Self::SELLER_ID
+                    }
+
+                    fn right_column() -> Self::RightColumn {
+                        User::ID
+                    }
+                }
+                impl ::fabrique::Joinable<Order, Seller> for User {
+                    type LeftColumn = UserIdColumn;
+                    type RightColumn = OrderSellerIdColumn;
+
+                    fn left_column() -> Self::LeftColumn {
+                        Self::ID
+                    }
+
+                    fn right_column() -> Self::RightColumn {
+                        Order::SELLER_ID
                     }
                 }
             }
             .to_string()
         );
-    }
-
-    #[test]
-    fn test_multiple_belongs_to_different_parents() {
-        // Arrange - OrderLine belongs to both Order and Product
-        let input = parse_quote! {
-            struct OrderLine {
-                id: String,
-                #[fabrique(belongs_to = "Order")]
-                order_id: String,
-                #[fabrique(belongs_to = "Product")]
-                product_id: String
-            }
-        };
-        let analysis = Analysis::from(&input).unwrap();
-        let codegen = JoinableCodegen::new(&analysis);
-
-        // Act
-        let result = codegen.generate().to_string();
-
-        // Assert - both directions for both relationships
-        assert!(result.contains("impl :: fabrique :: Joinable < Order > for OrderLine"));
-        assert!(result.contains("impl :: fabrique :: Joinable < OrderLine > for Order"));
-        assert!(result.contains("impl :: fabrique :: Joinable < Product > for OrderLine"));
-        assert!(result.contains("impl :: fabrique :: Joinable < OrderLine > for Product"));
-    }
-
-    #[test]
-    fn test_ambiguous_belongs_to_generates_nothing() {
-        // Arrange - Message has two belongs_to to the same parent (User)
-        let input = parse_quote! {
-            struct Message {
-                id: String,
-                #[fabrique(belongs_to = "User")]
-                sender_id: String,
-                #[fabrique(belongs_to = "User")]
-                recipient_id: String
-            }
-        };
-        let analysis = Analysis::from(&input).unwrap();
-        let codegen = JoinableCodegen::new(&analysis);
-
-        // Act
-        let result = codegen.generate();
-
-        // Assert - no Joinable impl for ambiguous relationships
-        assert_eq!(result.to_string(), quote! {}.to_string());
     }
 
     #[test]

@@ -199,11 +199,11 @@ impl<'a> ModelCodegen<'a> {
             let method_name = &field.ident;
             let target_type = &field.target_type;
 
-            // When explicit foreign_key is provided, use the column constant directly.
-            // Otherwise, rely on the BelongsTo trait for foreign key resolution.
-            let fk_expr = match &field.foreign_key_const {
-                Some(fk_const) => {
-                    quote! { #target_type::#fk_const }
+            // Use BelongsTo<Self, Alias> when alias is specified for disambiguation,
+            // otherwise use BelongsTo<Self> (only valid for unique relations).
+            let fk_expr = match &field.alias {
+                Some(alias) => {
+                    quote! { <#target_type as ::fabrique::BelongsTo<Self, #alias>>::foreign_key_column() }
                 }
                 None => {
                     quote! { <#target_type as ::fabrique::BelongsTo<Self>>::foreign_key_column() }
@@ -216,7 +216,7 @@ impl<'a> ModelCodegen<'a> {
                         <#target_type as ::fabrique::database::DatabaseAware>::Database,
                         ::fabrique::sql::Filtered<::fabrique::sql::Selected>
                     >,
-                    ::fabrique::model::join::Joined<#target_type, ()>,
+                    ::fabrique::model::join::Joined<(#target_type, ()), ()>,
                     #target_type
                 > {
                     let pk = <Self as ::fabrique::Model>::primary_key(self);
@@ -258,7 +258,7 @@ impl<'a> ModelCodegen<'a> {
                         <#target_type as ::fabrique::database::DatabaseAware>::Database,
                         ::fabrique::sql::Filtered<::fabrique::sql::Selected>
                     >,
-                    ::fabrique::model::join::Joined<#base_struct_ident, ::fabrique::model::join::Joined<#join_type, ::fabrique::model::join::Joined<#target_type, ()>>>,
+                    ::fabrique::model::join::Joined<(#base_struct_ident, ()), ::fabrique::model::join::Joined<(#join_type, ()), ::fabrique::model::join::Joined<(#target_type, ()), ()>>>,
                     #target_type
                 > {
                     <#target_type as ::fabrique::Query>::query()
@@ -435,7 +435,7 @@ mod tests {
                             <Order as ::fabrique::database::DatabaseAware>::Database,
                             ::fabrique::sql::Filtered<::fabrique::sql::Selected>
                         >,
-                        ::fabrique::model::join::Joined<Order, ()>,
+                        ::fabrique::model::join::Joined<(Order, ()), ()>,
                         Order
                     > {
                         let pk = <Self as ::fabrique::Model>::primary_key(self);
@@ -451,12 +451,12 @@ mod tests {
     }
 
     #[test]
-    fn test_lazy_loading_with_explicit_foreign_key() {
-        // Arrange - HasMany with explicit foreign_key for disambiguation
+    fn test_lazy_loading_with_alias() {
+        // Arrange - HasMany with alias for disambiguation
         let input = parse_quote! {
             struct User {
                 id: String,
-                #[fabrique(foreign_key = "sender_id")]
+                #[fabrique(alias = "Sender")]
                 sent_messages: HasMany<Message>
             }
         };
@@ -466,14 +466,16 @@ mod tests {
         // Act
         let result = codegen.generate().to_string();
 
-        // Assert - verify the lazy loading method uses explicit column constant
+        // Assert - verify the lazy loading method uses BelongsTo<Self, Alias>
         assert!(
-            result.contains("let fk = Message :: SENDER_ID"),
-            "Should use explicit column constant instead of BelongsTo trait"
-        );
-        assert!(
-            !result.contains("BelongsTo"),
-            "Should NOT use BelongsTo trait when foreign_key is explicit"
+            result.contains(
+                &quote::quote! {
+                    <Message as ::fabrique::BelongsTo<Self, Sender>>::foreign_key_column()
+                }
+                .to_string()
+            ),
+            "Should use BelongsTo with alias. Generated: {}",
+            result
         );
     }
 
@@ -528,7 +530,7 @@ mod tests {
                             <Product as ::fabrique::database::DatabaseAware>::Database,
                             ::fabrique::sql::Filtered<::fabrique::sql::Selected>
                         >,
-                        ::fabrique::model::join::Joined<Order, ::fabrique::model::join::Joined<OrderLine, ::fabrique::model::join::Joined<Product, ()>>>,
+                        ::fabrique::model::join::Joined<(Order, ()), ::fabrique::model::join::Joined<(OrderLine, ()), ::fabrique::model::join::Joined<(Product, ()), ()>>>,
                         Product
                     > {
                         <Product as ::fabrique::Query>::query()

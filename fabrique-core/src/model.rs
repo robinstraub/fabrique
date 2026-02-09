@@ -51,7 +51,7 @@ where
     for<'r> Self: sqlx::FromRow<'r, <Self::Database as sqlx::Database>::Row>,
 {
     /// Creates a new SELECT query builder for this model.
-    fn query() -> QueryBuilder<Initial, Joined<Self, ()>> {
+    fn query() -> QueryBuilder<Initial, Joined<(Self, ()), ()>> {
         QueryBuilder::new()
     }
 
@@ -65,7 +65,8 @@ where
     /// Creates a new UPDATE query builder for this model.
     ///
     /// Returns a builder in the `Updating` state, ready for `.set()` calls.
-    fn update() -> QueryBuilder<Building<Self::Database, Updating>, Joined<Self, ()>> {
+    #[allow(clippy::type_complexity)]
+    fn update() -> QueryBuilder<Building<Self::Database, Updating>, Joined<(Self, ()), ()>> {
         Self::query().update()
     }
 

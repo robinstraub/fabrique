@@ -25,8 +25,8 @@ help: the trait `BelongsTo<Parent>` is not implemented for `Child`
 note: required by a bound in `set_foreign_key`
   --> $WORKSPACE/fabrique-core/src/factory.rs
    |
-   |     Self::Model: BelongsTo<Parent>,
-   |                  ^^^^^^^^^^^^^^^^^ required by this bound in `SetForeignKey::set_foreign_key`
+   |     Self::Model: BelongsTo<Parent, Alias>,
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `SetForeignKey::set_foreign_key`
 ...
    |     fn set_foreign_key(self, parent_key: Parent::PrimaryKey) -> Self;
    |        --------------- required by a bound in this associated function

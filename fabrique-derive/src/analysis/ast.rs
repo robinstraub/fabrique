@@ -1,5 +1,5 @@
 use darling::{FromDeriveInput, FromField};
-use heck::{ToPascalCase, ToShoutySnakeCase, ToSnakeCase};
+use heck::{ToPascalCase, ToSnakeCase};
 use proc_macro2::Span;
 use syn::{Expr, Ident, Type};
 
@@ -64,22 +64,27 @@ pub struct ModelFieldAttrs {
     #[darling(default)]
     through: Option<Ident>,
 
-    /// The explicit foreign key column on the child model for HasMany
-    /// disambiguation. Required when the child has multiple belongs_to to the
-    /// same parent type.
-    #[darling(default)]
-    foreign_key: Option<Ident>,
-
     /// Custom faker expression for generating random values.
     /// If not specified, `Faker.fake::<FieldType>()` is used by default.
     #[darling(default)]
     faker: Option<String>,
+
+    /// Alias name for disambiguation.
+    /// - On belongs_to: generates a pseudo-Model for named joins
+    /// - On HasMany: references the alias on the child's belongs_to field
+    #[darling(default)]
+    alias: Option<Ident>,
 }
 
 #[derive(Debug)]
 pub struct Relation {
     pub name: String,
     pub referenced_type: Ident,
+    /// Optional alias for named joins. When set, generates a pseudo-Model
+    /// with this name for SQL table aliasing and type-safe column access.
+    pub alias: Option<Ident>,
+    /// Snake_case alias name (e.g., "seller"). Computed when alias is present.
+    pub alias_snake: Option<String>,
 }
 
 /// A database column field.
@@ -132,13 +137,10 @@ pub struct HasManyField {
     /// When set, this is a many-to-many relationship through the join model.
     pub through: Option<Ident>,
 
-    /// The explicit foreign key column on the child model for disambiguation.
-    /// Required when the child has multiple belongs_to to the same parent type.
-    pub foreign_key: Option<Ident>,
-
-    /// The const column name for the foreign key (e.g., `SENDER_ID`).
-    /// Computed from `foreign_key` if present.
-    pub foreign_key_const: Option<Ident>,
+    /// The alias for disambiguation when the child has multiple belongs_to
+    /// to this parent type. Must match an alias declared on the child's
+    /// belongs_to field. Used for SetForeignKey trait and lazy loading.
+    pub alias: Option<Ident>,
 }
 
 /// Result of parsing a field - either a column or a HasMany relation.
@@ -158,17 +160,11 @@ impl ParsedField {
         if let Some((outer, target)) = Self::parse_parameterized_type(&attrs.ty)
             && outer == "HasMany"
         {
-            let foreign_key_const = attrs
-                .foreign_key
-                .as_ref()
-                .map(|fk| Ident::new(&fk.to_string().to_shouty_snake_case(), fk.span()));
-
             return Ok(ParsedField::HasMany(HasManyField {
                 ident,
                 target_type: target.clone(),
                 through: attrs.through,
-                foreign_key: attrs.foreign_key,
-                foreign_key_const,
+                alias: attrs.alias,
             }));
         }
 
@@ -179,9 +175,13 @@ impl ParsedField {
         let type_name = format!("{}{}Column", struct_name, pascal_case_field);
         let column_type = syn::Ident::new(&type_name, ident.span());
 
+        let alias = attrs.alias;
+        let alias_snake = alias.as_ref().map(|a| a.to_string().to_snake_case());
         let relation = attrs.belongs_to.map(|referenced_type| Relation {
             name: referenced_type.to_string().to_snake_case(),
             referenced_type,
+            alias,
+            alias_snake,
         });
 
         // Parse faker expression if provided
@@ -245,8 +245,8 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
-            foreign_key: None,
             faker: None,
+            alias: None,
         };
 
         // Act
@@ -273,8 +273,8 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
-            foreign_key: None,
             faker: None,
+            alias: None,
         };
 
         // Act
@@ -287,7 +287,7 @@ mod tests {
             ParsedField::HasMany(ref f)
                 if f.target_type == "Order"
                 && f.through.is_none()
-                && f.foreign_key_const.is_none()
+                && f.alias.is_none()
         ));
     }
 
@@ -303,8 +303,8 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: Some(parse_quote!(OrderLine)),
-            foreign_key: None,
             faker: None,
+            alias: None,
         };
 
         // Act
@@ -329,8 +329,8 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
-            foreign_key: None,
             faker: None,
+            alias: None,
         };
 
         // Act
@@ -353,8 +353,8 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
-            foreign_key: None,
             faker: None,
+            alias: None,
         };
 
         // Act
@@ -377,8 +377,8 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
-            foreign_key: None,
             faker: None,
+            alias: None,
         };
 
         // Act
@@ -390,8 +390,8 @@ mod tests {
     }
 
     #[test]
-    fn test_has_many_field_with_foreign_key_succeeds() {
-        // Arrange a HasMany field with explicit foreign_key for disambiguation
+    fn test_has_many_field_with_alias_succeeds() {
+        // Arrange a HasMany field with alias for disambiguation
         let attrs = ModelFieldAttrs {
             ident: Some(parse_quote!(sent_messages)),
             ty: parse_quote!(HasMany<Message>),
@@ -401,8 +401,8 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
-            foreign_key: Some(parse_quote!(sender_id)),
             faker: None,
+            alias: Some(parse_quote!(Sender)),
         };
 
         // Act
@@ -414,8 +414,7 @@ mod tests {
             parsed,
             ParsedField::HasMany(ref f)
                 if f.target_type == "Message"
-                && f.foreign_key.as_ref().unwrap() == "sender_id"
-                && f.foreign_key_const.as_ref().unwrap() == "SENDER_ID"
+                && f.alias.as_ref().unwrap() == "Sender"
         ));
     }
 
@@ -431,8 +430,8 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
-            foreign_key: None,
             faker: Some("Name()".to_string()),
+            alias: None,
         };
 
         // Act
@@ -455,8 +454,8 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
-            foreign_key: None,
             faker: Some("0..99".to_string()),
+            alias: None,
         };
 
         // Act
@@ -479,8 +478,8 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
-            foreign_key: None,
             faker: None,
+            alias: None,
         };
 
         // Act
@@ -503,8 +502,8 @@ mod tests {
             soft_delete: false,
             belongs_to: None,
             through: None,
-            foreign_key: None,
             faker: Some("invalid { expression".to_string()),
+            alias: None,
         };
 
         // Act

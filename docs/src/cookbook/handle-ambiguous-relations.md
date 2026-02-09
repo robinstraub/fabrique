@@ -1,13 +1,12 @@
 # Handling Multiple belongs_to Relationships
 
-When a model references the same parent model multiple times, you need to tell
-Fabrique which foreign key to use for each relationship. This guide shows how to
-set this up correctly.
+When a model references the same parent model multiple times, you need to
+disambiguate the relationships using aliases. This guide shows how to set this
+up correctly.
 
-## Define the Child Model
+## Define the Child Model with Aliases
 
-Start with the model that has multiple references to the same parent. Each
-foreign key gets its own `belongs_to` attribute:
+Use the `alias` attribute to give each relationship a unique name:
 
 ```rust
 # extern crate fabrique;
@@ -22,19 +21,27 @@ pub struct Message {
     id: Uuid,
     content: String,
 
-    #[fabrique(belongs_to = "User")]
+    #[fabrique(belongs_to = "User", alias = "Sender")]
     sender_id: Uuid,
 
-    #[fabrique(belongs_to = "User")]
+    #[fabrique(belongs_to = "User", alias = "Recipient")]
     recipient_id: Uuid,
 }
 # fn main() {}
 ```
 
-## Define the Parent Model with Explicit Foreign Keys
+This generates:
 
-On the parent model, each `HasMany` relationship must specify which foreign key
-it uses:
+- `struct Sender` and `struct Recipient` as alias marker types
+- `impl BelongsTo<User, Sender> for Message`
+- `impl BelongsTo<User, Recipient> for Message`
+- `impl Joinable<User, Sender> for Message` (and reverse)
+- `impl Joinable<User, Recipient> for Message` (and reverse)
+
+## Define the Parent Model with Aliases
+
+On the parent model, each `HasMany` relationship must specify which alias it
+references:
 
 ```rust
 # extern crate fabrique;
@@ -45,9 +52,9 @@ it uses:
 # #[derive(Factory, Model)]
 # pub struct Message {
 #     id: Uuid,
-#     #[fabrique(belongs_to = "User")]
+#     #[fabrique(belongs_to = "User", alias = "Sender")]
 #     sender_id: Uuid,
-#     #[fabrique(belongs_to = "User")]
+#     #[fabrique(belongs_to = "User", alias = "Recipient")]
 #     recipient_id: Uuid,
 # }
 #[derive(Clone, Factory, Model)]
@@ -55,60 +62,18 @@ pub struct User {
     id: Uuid,
     name: String,
 
-    #[fabrique(foreign_key = "sender_id")]
+    #[fabrique(alias = "Sender")]
     sent_messages: HasMany<Message>,
 
-    #[fabrique(foreign_key = "recipient_id")]
+    #[fabrique(alias = "Recipient")]
     received_messages: HasMany<Message>,
 }
 # fn main() {}
 ```
 
-## Using Lazy Loading
+## Named Joins
 
-With explicit foreign keys, lazy loading methods work as expected:
-
-```rust
-# extern crate fabrique;
-# extern crate sqlx;
-# extern crate tokio;
-# extern crate uuid;
-# use fabrique::prelude::*;
-# use uuid::Uuid;
-# #[derive(Factory, Model)]
-# pub struct Message {
-#     id: Uuid,
-#     content: String,
-#     #[fabrique(belongs_to = "User")]
-#     sender_id: Uuid,
-#     #[fabrique(belongs_to = "User")]
-#     recipient_id: Uuid,
-# }
-# #[derive(Clone, Factory, Model)]
-# pub struct User {
-#     id: Uuid,
-#     name: String,
-#     email: String,
-#     #[fabrique(foreign_key = "sender_id")]
-#     sent_messages: HasMany<Message>,
-#     #[fabrique(foreign_key = "recipient_id")]
-#     received_messages: HasMany<Message>,
-# }
-# #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
-# let user = User::factory().create(&pool).await?;
-// Get messages sent by this user
-let sent = user.sent_messages().get(&pool).await?;
-
-// Get messages received by this user
-let received = user.received_messages().get(&pool).await?;
-# Ok(())
-# }
-```
-
-## Using Factories
-
-Use the field setter methods directly on the child factory:
+With aliases, you can join the same model multiple times using `join_as`:
 
 ```rust
 # extern crate fabrique;
@@ -123,9 +88,119 @@ Use the field setter methods directly on the child factory:
 # pub struct Message {
 #     id: Uuid,
 #     content: String,
-#     #[fabrique(belongs_to = "User")]
+#     #[fabrique(belongs_to = "User", alias = "Sender")]
 #     sender_id: Uuid,
-#     #[fabrique(belongs_to = "User")]
+#     #[fabrique(belongs_to = "User", alias = "Recipient")]
+#     recipient_id: Uuid,
+# }
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+let messages = Message::query()
+    .join_as::<User, Sender>()
+    .join_as::<User, Recipient>()
+    .get(&pool)
+    .await?;
+# Ok(())
+# }
+```
+
+This generates:
+
+```sql
+SELECT messages.*
+FROM messages
+JOIN users AS sender ON sender.id = messages.sender_id
+JOIN users AS recipient ON recipient.id = messages.recipient_id
+```
+
+### Filtering on Named Joins
+
+Use `where_on` to filter on a specific alias:
+
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+# #[derive(Clone, Factory, Model)]
+# pub struct User { id: Uuid, name: String, email: String }
+# #[derive(Factory, Model)]
+# pub struct Message {
+#     id: Uuid,
+#     content: String,
+#     #[fabrique(belongs_to = "User", alias = "Sender")]
+#     sender_id: Uuid,
+#     #[fabrique(belongs_to = "User", alias = "Recipient")]
+#     recipient_id: Uuid,
+# }
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+// Find messages sent by Alice
+let messages = Message::query()
+    .join_as::<User, Sender>()
+    .where_on::<Sender, _, _, _, _>(User::NAME, "=", "Alice".to_string())
+    .get(&pool)
+    .await?;
+# Ok(())
+# }
+```
+
+### Ordering by Named Joins
+
+Use `order_by_on` to sort by a column from a specific alias:
+
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+# #[derive(Clone, Factory, Model)]
+# pub struct User { id: Uuid, name: String, email: String }
+# #[derive(Factory, Model)]
+# pub struct Message {
+#     id: Uuid,
+#     content: String,
+#     #[fabrique(belongs_to = "User", alias = "Sender")]
+#     sender_id: Uuid,
+#     #[fabrique(belongs_to = "User", alias = "Recipient")]
+#     recipient_id: Uuid,
+# }
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+// Order messages by sender name
+let messages = Message::query()
+    .join_as::<User, Sender>()
+    .order_by_on::<Sender, _, _, _>(User::NAME, "ASC")
+    .get(&pool)
+    .await?;
+# Ok(())
+# }
+```
+
+## Using Factories
+
+Aliases generate `for_<alias>` methods on the factory:
+
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+# #[derive(Clone, Factory, Model)]
+# pub struct User { id: Uuid, name: String, email: String }
+# #[derive(Factory, Model)]
+# pub struct Message {
+#     id: Uuid,
+#     content: String,
+#     #[fabrique(belongs_to = "User", alias = "Sender")]
+#     sender_id: Uuid,
+#     #[fabrique(belongs_to = "User", alias = "Recipient")]
 #     recipient_id: Uuid,
 # }
 # #[fabrique::doctest]
@@ -140,26 +215,54 @@ let bob = User::factory()
     .create(&pool)
     .await?;
 
-// Set both foreign keys explicitly
 let message = Message::factory()
-    .content("Hello!".to_string())
-    .sender_id(alice.id)
-    .recipient_id(bob.id)
+    .content("Hello Bob!".to_string())
+    .for_sender(&alice)
+    .for_recipient(&bob)
     .create(&pool)
     .await?;
-
-// The message references both users
-assert_eq!(message.sender_id, alice.id);
-assert_eq!(message.recipient_id, bob.id);
 # Ok(())
 # }
 ```
 
-## Why No for_user Method?
+## Using Lazy Loading
 
-When a model has a single `belongs_to` to `User`, Fabrique generates a
-`for_user()` method on the factory. With multiple references to `User`, this
-method is not generated because it would be ambiguous.
+With aliases, lazy loading methods work as expected:
 
-Instead, use the direct setter methods (`sender_id()`, `recipient_id()`) as
-shown above.
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+# #[derive(Factory, Model)]
+# pub struct Message {
+#     id: Uuid,
+#     content: String,
+#     #[fabrique(belongs_to = "User", alias = "Sender")]
+#     sender_id: Uuid,
+#     #[fabrique(belongs_to = "User", alias = "Recipient")]
+#     recipient_id: Uuid,
+# }
+# #[derive(Clone, Factory, Model)]
+# pub struct User {
+#     id: Uuid,
+#     name: String,
+#     email: String,
+#     #[fabrique(alias = "Sender")]
+#     sent_messages: HasMany<Message>,
+#     #[fabrique(alias = "Recipient")]
+#     received_messages: HasMany<Message>,
+# }
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# let user = User::factory().create(&pool).await?;
+// Get messages sent by this user
+let sent = user.sent_messages().get(&pool).await?;
+
+// Get messages received by this user
+let received = user.received_messages().get(&pool).await?;
+# Ok(())
+# }
+```
