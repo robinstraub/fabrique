@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/robinstraub/fabrique/compare/fabrique-v0.2.0...fabrique-v0.2.1) - 2026-02-09
+
+### Added
+
+- add named join support ([#113](https://github.com/robinstraub/fabrique/pull/113))
+- auto-create belongs-to relations with factories ([#111](https://github.com/robinstraub/fabrique/pull/111))
+- add insert entrypoint to model ([#110](https://github.com/robinstraub/fabrique/pull/110))
+- add type-safe column selection support ([#89](https://github.com/robinstraub/fabrique/pull/89))
+- add support for multiple backends ([#79](https://github.com/robinstraub/fabrique/pull/79))
+
+### Other
+
+- centralize changelog ([#116](https://github.com/robinstraub/fabrique/pull/116))
+- allow Into types to be passed to reduce noise ([#109](https://github.com/robinstraub/fabrique/pull/109))
+- clarify fabrique positionning ([#108](https://github.com/robinstraub/fabrique/pull/108))
+- make select implicit on base model ([#90](https://github.com/robinstraub/fabrique/pull/90))
+- add markdown codestyle check ([#83](https://github.com/robinstraub/fabrique/pull/83))
+
 ## [0.2.0](https://github.com/robinstraub/fabrique/compare/fabrique-v0.1.1...fabrique-v0.2.0) - 2026-01-04
 
 ### Added
