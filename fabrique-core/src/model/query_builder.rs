@@ -138,7 +138,7 @@ macro_rules! impl_where {
                 self,
                 column: Column,
                 operator: Operator,
-                value: Column::Type,
+                value: impl Into<Column::Type>,
             ) -> QueryBuilder<Building<Joins::Database, $output>, Joins, Output>
             where
                 Alias: crate::Alias<Target = JoinedModel>,
@@ -149,6 +149,7 @@ macro_rules! impl_where {
                 Operator: Into<operators::Operator>,
             {
                 let qualified = format!("{}.{}", Alias::NAME, column.name());
+                let value: Column::Type = value.into();
                 QueryBuilder {
                     state: Building {
                         inner: self.state.inner.r#where(&qualified, operator, value),

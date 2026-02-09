@@ -176,6 +176,9 @@ impl ParsedField {
         let column_type = syn::Ident::new(&type_name, ident.span());
 
         let alias = attrs.alias;
+        if alias.is_some() && attrs.belongs_to.is_none() {
+            return Err(Error::new(attrs.span, ErrorKind::AliasWithoutRelation));
+        }
         let alias_snake = alias.as_ref().map(|a| a.to_string().to_snake_case());
         let relation = attrs.belongs_to.map(|referenced_type| Relation {
             name: referenced_type.to_string().to_snake_case(),
@@ -416,6 +419,28 @@ mod tests {
                 if f.target_type == "Message"
                 && f.alias.as_ref().unwrap() == "Sender"
         ));
+    }
+
+    #[test]
+    fn test_alias_without_belongs_to_fails() {
+        let attrs = ModelFieldAttrs {
+            ident: Some(parse_quote!(name)),
+            ty: parse_quote!(String),
+            span: Span::call_site(),
+            r#as: None,
+            primary_key: false,
+            soft_delete: false,
+            belongs_to: None,
+            through: None,
+            faker: None,
+            alias: Some(parse_quote!(Sender)),
+        };
+
+        let result = ParsedField::try_from(attrs, "User".to_owned());
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(matches!(error.kind, ErrorKind::AliasWithoutRelation));
     }
 
     #[test]
