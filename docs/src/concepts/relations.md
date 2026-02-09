@@ -129,65 +129,122 @@ This generates an `anvils()` method on `Order` that joins through
 When a model has multiple foreign keys to the same parent, there
 is an ambiguity: Fabrique cannot determine which foreign key to
 use for joins or `HasMany` resolution. The `alias` attribute
-disambiguates by generating a pseudo-Model for each reference:
+disambiguates each reference:
 
-> **Note:** Aliases are being implemented in
-> [#75](https://github.com/robinstraub/fabrique/issues/75).
-> <!-- TODO: remove this note once #75 is merged -->
-
-```rust,ignore
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+# #[derive(Model)]
+# pub struct User { id: Uuid, name: String }
 #[derive(Model)]
-pub struct Order {
+pub struct Message {
     id: Uuid,
+    content: String,
 
-    #[fabrique(belongs_to = User, alias = Seller)]
-    seller_id: Uuid,
+    #[fabrique(belongs_to = "User", alias = "Sender")]
+    sender_id: Uuid,
 
-    #[fabrique(belongs_to = User, alias = Buyer)]
-    buyer_id: Uuid,
-
-    amount: i32,
+    #[fabrique(belongs_to = "User", alias = "Recipient")]
+    recipient_id: Uuid,
 }
+# fn main() {}
 ```
 
-`alias = Seller` generates a `Seller` pseudo-Model that implements
-`Model` with `table_name() = "users AS seller"`. On the parent
-side, `HasMany` references the alias directly:
+Each `alias` generates a marker type (unit struct) implementing
+the `Alias` trait. From the example above, Fabrique generates:
 
-```rust,ignore
+- `struct Sender` and `struct Recipient`
+- `BelongsTo<User, Sender>` and `BelongsTo<User, Recipient>`
+  for `Message`
+- Bidirectional `Joinable` impls for each alias
+
+On the parent side, `HasMany` references the alias to resolve
+which foreign key to use:
+
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+# #[derive(Model)]
+# pub struct Message {
+#     id: Uuid,
+#     content: String,
+#     #[fabrique(belongs_to = "User", alias = "Sender")]
+#     sender_id: Uuid,
+#     #[fabrique(belongs_to = "User", alias = "Recipient")]
+#     recipient_id: Uuid,
+# }
 #[derive(Model)]
 pub struct User {
     id: Uuid,
     name: String,
 
-    sold_orders: HasMany<Seller>,
-    bought_orders: HasMany<Buyer>,
+    #[fabrique(alias = "Sender")]
+    sent_messages: HasMany<Message>,
+
+    #[fabrique(alias = "Recipient")]
+    received_messages: HasMany<Message>,
 }
+# fn main() {}
 ```
 
-In queries, aliases work like any other model — join them, filter
-on them, select from them. The `where_on` method qualifies a
-column through an alias:
+In queries, `join_as` joins the same model multiple times under
+different aliases. `where_on` and `order_by_on` qualify columns
+through a specific alias:
 
-```rust,ignore
-let orders = Order::query()
-    .join::<Seller>()
-    .join::<Buyer>()
-    .where_on::<Seller>(User::NAME, "=", "Wile E.".to_string())
-    .where_on::<Buyer>(User::NAME, "=", "Road Runner".to_string())
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+# #[derive(Clone, Factory, Model)]
+# pub struct User { id: Uuid, name: String }
+# #[derive(Factory, Model)]
+# pub struct Message {
+#     id: Uuid,
+#     content: String,
+#     #[fabrique(belongs_to = "User", alias = "Sender")]
+#     sender_id: Uuid,
+#     #[fabrique(belongs_to = "User", alias = "Recipient")]
+#     recipient_id: Uuid,
+# }
+# #[fabrique::doctest]
+# async fn main(
+#     pool: Pool<Backend>,
+# ) -> Result<(), fabrique::Error> {
+let messages = Message::query()
+    .join_as::<User, Sender>()
+    .join_as::<User, Recipient>()
+    .where_on::<Sender, _, _, _, _>(
+        User::NAME, "=", "Alice".to_string(),
+    )
     .get(&pool)
     .await?;
+# Ok(())
+# }
 ```
 
 This generates:
 
 ```sql
-SELECT orders.*
-FROM orders
-JOIN users AS seller ON seller.id = orders.seller_id
-JOIN users AS buyer ON buyer.id = orders.buyer_id
-WHERE seller.name = $1 AND buyer.name = $2
+SELECT messages.*
+FROM messages
+JOIN users AS sender ON sender.id = messages.sender_id
+JOIN users AS recipient
+  ON recipient.id = messages.recipient_id
+WHERE sender.name = $1
 ```
+
+See [Handling Multiple belongs_to Relationships](
+../cookbook/handle-ambiguous-relations.md) for a complete walkthrough
+covering factories, lazy loading, and ordering.
 
 ---
 

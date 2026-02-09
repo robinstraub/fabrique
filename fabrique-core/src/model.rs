@@ -58,7 +58,8 @@ where
     /// Creates a new INSERT query builder for this model.
     ///
     /// Returns a builder in the `Inserting` state, ready for `.set()` calls.
-    fn insert() -> QueryBuilder<Building<Self::Database, Inserting>, Joined<Self, ()>> {
+    #[allow(clippy::type_complexity)]
+    fn insert() -> QueryBuilder<Building<Self::Database, Inserting>, Joined<(Self, ()), ()>> {
         Self::query().insert()
     }
 
