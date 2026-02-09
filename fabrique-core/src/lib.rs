@@ -14,7 +14,7 @@ pub mod model;
 pub mod relation;
 pub mod sql;
 
-#[cfg(feature = "sqlite")]
+#[cfg(feature = "doctests")]
 #[doc(hidden)]
 pub mod __private;
 
