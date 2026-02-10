@@ -34,28 +34,7 @@ impl<'a> PersistCodegen<'a> {
         let set_calls = self.analysis.column_fields.iter().map(|field| {
             let const_name = &field.const_column_name;
             let ident = &field.ident;
-            let field_name = ident.to_string();
-            match &field.r#as {
-                Some(db_ty) => {
-                    let rust_ty = &field.ty;
-                    quote! {
-                        .set(Self::#const_name, {
-                            let value_str = format!("{:?}", &self.#ident);
-                            <#db_ty>::try_from(self.#ident).map_err(|e| {
-                                ::fabrique::Error::Conversion {
-                                    field: #field_name.to_string(),
-                                    from: stringify!(#rust_ty),
-                                    to: stringify!(#db_ty),
-                                    value: value_str,
-                                    reason: e.to_string(),
-                                    direction: ::fabrique::error::ConversionDirection::ToDb,
-                                }
-                            })?
-                        })
-                    }
-                }
-                None => quote! { .set(Self::#const_name, self.#ident) },
-            }
+            quote! { .set(Self::#const_name, self.#ident) }
         });
 
         #[cfg(any(feature = "postgres", feature = "sqlite"))]
@@ -103,28 +82,7 @@ impl<'a> PersistCodegen<'a> {
         let set_calls = self.analysis.column_fields.iter().map(|field| {
             let const_name = &field.const_column_name;
             let ident = &field.ident;
-            let field_name = ident.to_string();
-            match &field.r#as {
-                Some(db_ty) => {
-                    let rust_ty = &field.ty;
-                    quote! {
-                        .set(Self::#const_name, {
-                            let value_str = format!("{:?}", &self.#ident);
-                            <#db_ty>::try_from(self.#ident).map_err(|e| {
-                                ::fabrique::Error::Conversion {
-                                    field: #field_name.to_string(),
-                                    from: stringify!(#rust_ty),
-                                    to: stringify!(#db_ty),
-                                    value: value_str,
-                                    reason: e.to_string(),
-                                    direction: ::fabrique::error::ConversionDirection::ToDb,
-                                }
-                            })?
-                        })
-                    }
-                }
-                None => quote! { .set(Self::#const_name, self.#ident) },
-            }
+            quote! { .set(Self::#const_name, self.#ident) }
         });
 
         #[cfg(any(feature = "postgres", feature = "sqlite"))]
@@ -303,15 +261,16 @@ mod tests {
         // Act
         let result = codegen.generate();
 
-        // Assert - should generate TryFrom conversion code
+        // Assert - conversion is now handled by the query builder's .set(),
+        // so persist codegen should NOT contain try_from or Error::Conversion
         let result_str = result.to_string();
         assert!(
-            result_str.contains("try_from"),
-            "should use try_from for type conversion"
+            !result_str.contains("try_from"),
+            "should not contain try_from — conversion is handled by .set(). Got:\n{result_str}"
         );
         assert!(
-            result_str.contains("Error :: Conversion"),
-            "should handle conversion errors"
+            !result_str.contains("Conversion"),
+            "should not contain Conversion error handling. Got:\n{result_str}"
         );
     }
 }

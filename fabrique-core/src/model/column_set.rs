@@ -80,7 +80,7 @@ macro_rules! impl_column_set {
                 Joins: Contains<$M, (), $I>,
             )+
         {
-            type Output = ($($C::Type,)+);
+            type Output = ($($C::DbType,)+);
 
             fn qualified_names() -> &'static [&'static str] {
                 &[$($C::QUALIFIED_NAME),+]
@@ -119,14 +119,22 @@ mod tests {
 
     impl Column<MockModel> for MockIdColumn {
         type Type = i32;
+        type DbType = i32;
         const NAME: &'static str = "id";
         const QUALIFIED_NAME: &'static str = "mocks.id";
+        fn into_db(value: i32) -> i32 {
+            value
+        }
     }
 
     impl Column<MockModel> for MockNameColumn {
         type Type = String;
+        type DbType = String;
         const NAME: &'static str = "name";
         const QUALIFIED_NAME: &'static str = "mocks.name";
+        fn into_db(value: String) -> String {
+            value
+        }
     }
 
     #[test]

@@ -13,4 +13,4 @@ sqlx = { version = "0.9.0-alpha.1", features = [
 cargo-husky = { version = "1", default-features = false, features = [
   "user-hooks",
 ] }
-fake = { version = "4", features = ["uuid", "chrono"] }
+fake = { version = "4", features = ["chrono", "derive", "uuid"] }
