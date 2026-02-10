@@ -68,27 +68,31 @@
 //! ```toml
 //! [dependencies]
 //! fabrique = { version = "0.2", features = ["sqlite"] }
+//!
+//! [dev-dependencies]
+//! fabrique = { version = "0.2", features = ["testing"] }
 //! ```
 //!
 //! Then define your models and start querying. See the [`model`] module for a
 //! comprehensive guide on model conventions and usage
 pub use database::*;
 pub use error::*;
+#[cfg(feature = "testing")]
 pub use factory::*;
 pub use model::*;
 pub use relation::*;
 
-#[cfg(feature = "fake")]
+#[cfg(feature = "testing")]
 pub use fake;
 
 /// Generates a seeded value for factory fields.
 ///
-/// When the `fake` feature is enabled, this generates random test data using
-/// the `fake` crate. When disabled, it falls back to `Default::default()`.
+/// When the `testing` feature is enabled, this generates random test data
+/// using the `fake` crate.
 ///
 /// This function is used internally by the `#[derive(Factory)]` macro and
 /// should not typically be called directly.
-#[cfg(feature = "fake")]
+#[cfg(feature = "testing")]
 pub fn seeded_value<T>() -> T
 where
     T: fake::Dummy<fake::Faker>,
@@ -97,20 +101,9 @@ where
     fake::Faker.fake()
 }
 
-/// Generates a seeded value for factory fields.
-///
-/// When the `fake` feature is disabled, this falls back to
-/// `Default::default()`.
-#[cfg(not(feature = "fake"))]
-pub fn seeded_value<T>() -> T
-where
-    T: Default,
-{
-    T::default()
-}
-
 pub mod database;
 pub mod error;
+#[cfg(feature = "testing")]
 pub mod factory;
 pub mod model;
 pub mod prelude;
@@ -122,4 +115,5 @@ pub mod sql;
 pub use fabrique_core::__private;
 
 pub use fabrique_derive::doctest;
+#[cfg(feature = "testing")]
 pub use fabrique_derive::test;

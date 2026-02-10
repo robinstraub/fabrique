@@ -3,17 +3,17 @@
 set -e
 
 # Use nightly for fmt if available (for wrap_comments), otherwise stable
-if rustup run nightly rustc --version > /dev/null 2>&1; then
-    echo '+cargo +nightly fmt -- --check'
-    cargo +nightly fmt -- --check
+if rustup run nightly rustc --version >/dev/null 2>&1; then
+  echo '+cargo +nightly fmt -- --check'
+  cargo +nightly fmt -- --check
 else
-    echo '+cargo fmt -- --check (nightly not available, skipping wrap_comments check)'
-    cargo fmt -- --check
+  echo '+cargo fmt -- --check (nightly not available, skipping wrap_comments check)'
+  cargo fmt -- --check
 fi
-echo '+cargo clippy --features sqlite --workspace -- -D warnings'
-cargo clippy --features sqlite --workspace -- -D warnings
-echo '+cargo test --features sqlite --workspace --exclude ui-tests'
-cargo test --features sqlite --workspace --exclude ui-tests
+echo '+cargo clippy --features sqlite,testing --workspace -- -D warnings'
+cargo clippy --features sqlite,testing --workspace -- -D warnings
+echo '+cargo test --features sqlite,testing --workspace --exclude ui-tests'
+cargo test --features sqlite,testing --workspace --exclude ui-tests
 echo '+cargo test -p ui-tests'
 cargo test -p ui-tests
 echo '+npx markdownlint-cli2'

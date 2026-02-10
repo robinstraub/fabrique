@@ -9,10 +9,11 @@ homepage = "https://github.com/robinstraub/fabrique"
 documentation = "https://docs.rs/fabrique-core"
 
 [package.metadata.docs.rs]
-features = ["sqlite"]
+features = ["sqlite", "testing"]
 
 
 [features]
+testing = []
 postgres = ["sqlx/postgres"]
 mysql = ["sqlx/mysql"]
 sqlite = ["sqlx/sqlite"]

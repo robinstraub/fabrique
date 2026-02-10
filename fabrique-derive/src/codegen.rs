@@ -28,6 +28,7 @@ pub mod belongs_to;
 pub mod columns;
 pub mod database;
 pub mod delete;
+#[cfg(feature = "testing")]
 pub mod factory;
 pub mod find;
 pub mod from_row;
@@ -43,6 +44,7 @@ pub use belongs_to::BelongsToCodegen;
 pub use columns::ColumnsCodegen;
 pub use database::DatabaseAwareCodegen;
 pub use delete::DeleteCodegen;
+#[cfg(feature = "testing")]
 pub use factory::FactoryCodegen;
 pub use find::FindCodegen;
 pub use from_row::FromRowCodegen;

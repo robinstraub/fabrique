@@ -64,7 +64,7 @@ For tutorials and detailed documentation, see the **[User Guide](https://robinst
 **SQLite** (no external dependency):
 
 ```bash
-cargo test --features sqlite
+cargo test --features sqlite,testing
 ```
 
 **PostgreSQL** and **MySQL** require a running database. Start them with Docker,
@@ -74,10 +74,10 @@ then run the tests:
 docker compose up -d
 
 DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres" \
-  cargo test --features postgres
+  cargo test --features postgres,testing
 
 DATABASE_URL="mysql://root:mysql@localhost:3306/fabrique" \
-  cargo test --features mysql
+  cargo test --features mysql,testing
 ```
 
 ## Contributors

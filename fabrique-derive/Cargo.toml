@@ -9,9 +9,10 @@ homepage = "https://github.com/robinstraub/fabrique"
 documentation = "https://docs.rs/fabrique-derive"
 
 [package.metadata.docs.rs]
-features = ["sqlite"]
+features = ["sqlite", "testing"]
 
 [features]
+testing = ["fabrique-core/testing"]
 postgres = ["fabrique-core/postgres", "sqlx/postgres"]
 mysql = ["fabrique-core/mysql", "sqlx/mysql"]
 sqlite = ["fabrique-core/sqlite", "sqlx/sqlite"]
@@ -31,7 +32,9 @@ syn = { version = "2.0", features = ["extra-traits"] }
 thiserror = "2.0"
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(coverage,coverage_nightly)',
+] }
 
 [dev-dependencies]
 fabrique = { path = "../fabrique" }
