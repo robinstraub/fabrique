@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml/badge.svg)](https://github.com/robinstraub/fabrique/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/robinstraub/fabrique/graph/badge.svg?token=5zZr9fVZyz)](https://codecov.io/gh/robinstraub/fabrique)
+[![Crates.io](https://img.shields.io/crates/v/fabrique.svg)](https://crates.io/crates/fabrique)
+[![Downloads](https://img.shields.io/crates/d/fabrique.svg)](https://crates.io/crates/fabrique)
 [![docs.rs](https://docs.rs/fabrique/badge.svg)](https://docs.rs/fabrique)
 
 SQL-first, type-safe, ergonomic database toolkit for Rust.
@@ -16,6 +18,13 @@ SQL-first, type-safe, ergonomic database toolkit for Rust.
   builder, and factories for test data generation
 
 ## Quick Example
+
+Add fabrique to your `Cargo.toml` with the feature matching your database backend:
+
+```toml
+[dependencies]
+fabrique = { version = "0.2", features = ["postgres"] }
+```
 
 ```rust
 use fabrique::prelude::*;
@@ -41,30 +50,7 @@ let product = Product::factory()
     .await?;
 ```
 
-## Running Tests
-
-Requires Docker, [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov),
-and [lcov](https://github.com/linux-test-project/lcov). This runs unit tests and
-integration tests against all three backends (PostgreSQL, SQLite, MySQL), then
-merges the coverage reports.
-
-```bash
-docker compose up -d
-cargo llvm-cov --features sqlite \
-  -p fabrique-derive -p fabrique-core --lib \
-  --lcov --output-path lcov-unit.info
-DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres" \
-  cargo llvm-cov --features postgres -p fabrique \
-  --lcov --output-path lcov-postgres.info
-cargo llvm-cov --features sqlite -p fabrique \
-  --lcov --output-path lcov-sqlite.info
-DATABASE_URL="mysql://root:mysql@localhost:3306/fabrique" \
-  cargo llvm-cov --features mysql -p fabrique \
-  --lcov --output-path lcov-mysql.info
-lcov -a lcov-unit.info -a lcov-postgres.info \
-  -a lcov-sqlite.info -a lcov-mysql.info -o lcov-total.info
-lcov --list lcov-total.info
-```
+For tutorials and detailed documentation, see the **[User Guide](https://robinstraub.github.io/fabrique/)**.
 
 ## Documentation
 
@@ -72,6 +58,27 @@ lcov --list lcov-total.info
   concepts, and how-to guides
 - **[API Reference](https://docs.rs/fabrique)** — Technical documentation on
   docs.rs
+
+## Running Tests
+
+**SQLite** (no external dependency):
+
+```bash
+cargo test --features sqlite
+```
+
+**PostgreSQL** and **MySQL** require a running database. Start them with Docker,
+then run the tests:
+
+```bash
+docker compose up -d
+
+DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres" \
+  cargo test --features postgres
+
+DATABASE_URL="mysql://root:mysql@localhost:3306/fabrique" \
+  cargo test --features mysql
+```
 
 ## Contributors
 
