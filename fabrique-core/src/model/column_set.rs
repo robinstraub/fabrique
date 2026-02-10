@@ -147,6 +147,12 @@ mod tests {
     }
 
     #[test]
+    fn into_db_is_identity_for_plain_columns() {
+        assert_eq!(MockIdColumn::into_db(42), 42);
+        assert_eq!(MockNameColumn::into_db("hello".to_owned()), "hello");
+    }
+
+    #[test]
     fn two_columns_return_both_qualified_names_in_order() {
         type Joins = Joined<(MockModel, ()), ()>;
 

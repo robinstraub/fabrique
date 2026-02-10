@@ -156,4 +156,10 @@ mod tests {
         let buf_ref = unsafe { storage.assume_init_mut() };
         let _ = <Nil as Encode<Backend>>::encode_by_ref(&nil, buf_ref);
     }
+
+    #[test]
+    fn test_nil_into_db_returns_nil() {
+        let result = <Nil as Column<()>>::into_db(Nil);
+        assert!(matches!(result, Nil));
+    }
 }
