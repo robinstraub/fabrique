@@ -37,6 +37,12 @@ pub trait Column<M>: Sized {
     /// The Rust type of values stored in this column.
     type Type;
 
+    /// The database type used for SQL encoding.
+    ///
+    /// Equal to [`Type`](Self::Type) for plain fields, or the `as` type for
+    /// fields with `#[fabrique(as = "...")]` type conversion.
+    type DbType;
+
     /// The unqualified column name (e.g., "name").
     ///
     /// Use this for INSERT and UPDATE SET clauses.
@@ -47,6 +53,9 @@ pub trait Column<M>: Sized {
     /// Use this for SELECT, WHERE, and JOIN clauses where table qualification
     /// is needed to avoid ambiguity.
     const QUALIFIED_NAME: &'static str;
+
+    /// Converts a Rust value to its database representation.
+    fn into_db(value: Self::Type) -> Self::DbType;
 
     /// Returns the unqualified column name.
     fn name(&self) -> &'static str {
@@ -70,9 +79,14 @@ pub struct Nil;
 /// to use this column will panic.
 impl<M> Column<M> for Nil {
     type Type = Nil;
+    type DbType = Nil;
 
     const NAME: &'static str = panic!("Attempted to use Nil as a column");
     const QUALIFIED_NAME: &'static str = panic!("Attempted to use Nil as a column");
+
+    fn into_db(value: Nil) -> Nil {
+        value
+    }
 
     fn name(&self) -> &'static str {
         panic!("Attempted to use Nil as a column")
@@ -141,5 +155,11 @@ mod tests {
             MaybeUninit::uninit();
         let buf_ref = unsafe { storage.assume_init_mut() };
         let _ = <Nil as Encode<Backend>>::encode_by_ref(&nil, buf_ref);
+    }
+
+    #[test]
+    fn test_nil_into_db_returns_nil() {
+        let result = <Nil as Column<()>>::into_db(Nil);
+        assert!(matches!(result, Nil));
     }
 }

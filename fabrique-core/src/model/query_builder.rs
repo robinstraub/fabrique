@@ -117,7 +117,7 @@ macro_rules! impl_where {
             where
                 Column: database::Column<JoinedModel>,
                 Joins: Contains<JoinedModel, (), Index>,
-                for<'q> Column::Type:
+                for<'q> Column::DbType:
                     sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
                 Operator: Into<operators::Operator>,
             {
@@ -126,7 +126,7 @@ macro_rules! impl_where {
                         inner: self.state.inner.r#where(
                             column.qualified_name(),
                             operator,
-                            value.into(),
+                            Column::into_db(value.into()),
                         ),
                     },
                     _marker: PhantomData,
@@ -144,12 +144,12 @@ macro_rules! impl_where {
                 Alias: crate::Alias<Target = JoinedModel>,
                 Column: database::Column<JoinedModel>,
                 Joins: Contains<JoinedModel, Alias, Index>,
-                for<'q> Column::Type:
+                for<'q> Column::DbType:
                     sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
                 Operator: Into<operators::Operator>,
             {
                 let qualified = format!("{}.{}", Alias::NAME, column.name());
-                let value: Column::Type = value.into();
+                let value = Column::into_db(value.into());
                 QueryBuilder {
                     state: Building {
                         inner: self.state.inner.r#where(&qualified, operator, value),
@@ -166,7 +166,7 @@ macro_rules! impl_where {
             where
                 Column: database::Column<JoinedModel>,
                 Joins: Contains<JoinedModel, (), Index>,
-                for<'q> Column::Type:
+                for<'q> Column::DbType:
                     sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
             {
                 QueryBuilder {
@@ -186,7 +186,7 @@ macro_rules! impl_where {
                 Alias: crate::Alias<Target = JoinedModel>,
                 Column: database::Column<JoinedModel>,
                 Joins: Contains<JoinedModel, Alias, Index>,
-                for<'q> Column::Type:
+                for<'q> Column::DbType:
                     sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
             {
                 let qualified = format!("{}.{}", Alias::NAME, column.name());
@@ -206,7 +206,7 @@ macro_rules! impl_where {
             where
                 Column: database::Column<JoinedModel>,
                 Joins: Contains<JoinedModel, (), Index>,
-                for<'q> Column::Type:
+                for<'q> Column::DbType:
                     sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
             {
                 QueryBuilder {
@@ -226,7 +226,7 @@ macro_rules! impl_where {
                 Alias: crate::Alias<Target = JoinedModel>,
                 Column: database::Column<JoinedModel>,
                 Joins: Contains<JoinedModel, Alias, Index>,
-                for<'q> Column::Type:
+                for<'q> Column::DbType:
                     sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
             {
                 let qualified = format!("{}.{}", Alias::NAME, column.name());
@@ -584,7 +584,7 @@ where
     where
         Column: database::Column<JoinedModel>,
         Joins: Contains<JoinedModel, (), Index>,
-        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        for<'q> Column::DbType: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
         Operator: Into<operators::Operator>,
     {
         self.select_impl::<Joins::Root>()
@@ -602,7 +602,7 @@ where
     where
         Column: database::Column<JoinedModel>,
         Joins: Contains<JoinedModel, (), Index>,
-        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        for<'q> Column::DbType: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
     {
         self.select_impl::<Joins::Root>().where_null(column)
     }
@@ -618,7 +618,7 @@ where
     where
         Column: database::Column<JoinedModel>,
         Joins: Contains<JoinedModel, (), Index>,
-        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        for<'q> Column::DbType: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
     {
         self.select_impl::<Joins::Root>().where_not_null(column)
     }
@@ -887,7 +887,7 @@ where
     where
         Column: database::Column<JoinedModel>,
         Joins: Contains<JoinedModel, (), Index>,
-        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        for<'q> Column::DbType: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
         Operator: Into<operators::Operator>,
     {
         self.select_impl::<Joins::Root>()
@@ -905,7 +905,7 @@ where
     where
         Column: database::Column<JoinedModel>,
         Joins: Contains<JoinedModel, (), Index>,
-        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        for<'q> Column::DbType: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
     {
         self.select_impl::<Joins::Root>().where_null(column)
     }
@@ -921,7 +921,7 @@ where
     where
         Column: database::Column<JoinedModel>,
         Joins: Contains<JoinedModel, (), Index>,
-        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        for<'q> Column::DbType: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
     {
         self.select_impl::<Joins::Root>().where_not_null(column)
     }
@@ -955,7 +955,7 @@ where
         Alias: crate::Alias<Target = JoinedModel>,
         Column: database::Column<JoinedModel>,
         Joins: Contains<JoinedModel, Alias, Index>,
-        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        for<'q> Column::DbType: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
         Operator: Into<operators::Operator>,
     {
         self.select_impl::<Joins::Root>()
@@ -972,7 +972,7 @@ where
         Alias: crate::Alias<Target = JoinedModel>,
         Column: database::Column<JoinedModel>,
         Joins: Contains<JoinedModel, Alias, Index>,
-        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        for<'q> Column::DbType: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
     {
         self.select_impl::<Joins::Root>()
             .where_null_on::<Alias, Column, JoinedModel, Index>(column)
@@ -988,7 +988,7 @@ where
         Alias: crate::Alias<Target = JoinedModel>,
         Column: database::Column<JoinedModel>,
         Joins: Contains<JoinedModel, Alias, Index>,
-        for<'q> Column::Type: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
+        for<'q> Column::DbType: sqlx::Encode<'q, Joins::Database> + sqlx::Type<Joins::Database>,
     {
         self.select_impl::<Joins::Root>()
             .where_not_null_on::<Alias, Column, JoinedModel, Index>(column)
@@ -1265,11 +1265,14 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Updated>, Joins>
     where
         C: Column<Joins::Root>,
-        C::Type: 'a + sqlx::Encode<'a, Joins::Database> + sqlx::Type<Joins::Database>,
+        C::DbType: 'a + sqlx::Encode<'a, Joins::Database> + sqlx::Type<Joins::Database>,
     {
         QueryBuilder {
             state: Building {
-                inner: self.state.inner.set(column.name(), value.into()),
+                inner: self
+                    .state
+                    .inner
+                    .set(column.name(), C::into_db(value.into())),
             },
             _marker: PhantomData,
         }
@@ -1295,11 +1298,14 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Updated>, Joins>
     where
         C: Column<Joins::Root>,
-        C::Type: 'a + sqlx::Encode<'a, Joins::Database> + sqlx::Type<Joins::Database>,
+        C::DbType: 'a + sqlx::Encode<'a, Joins::Database> + sqlx::Type<Joins::Database>,
     {
         QueryBuilder {
             state: Building {
-                inner: self.state.inner.set(column.name(), value.into()),
+                inner: self
+                    .state
+                    .inner
+                    .set(column.name(), C::into_db(value.into())),
             },
             _marker: PhantomData,
         }
@@ -1350,12 +1356,15 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Inserted<Joins::Database>>, Joins>
     where
         C: Column<Joins::Root>,
-        C::Type:
+        C::DbType:
             'a + sqlx::Encode<'a, Joins::Database> + sqlx::Type<Joins::Database> + Send + 'static,
     {
         QueryBuilder {
             state: Building {
-                inner: self.state.inner.set(column.name(), value.into()),
+                inner: self
+                    .state
+                    .inner
+                    .set(column.name(), C::into_db(value.into())),
             },
             _marker: PhantomData,
         }
@@ -1382,12 +1391,15 @@ where
     ) -> QueryBuilder<Building<Joins::Database, Inserted<Joins::Database>>, Joins>
     where
         C: Column<Joins::Root>,
-        C::Type:
+        C::DbType:
             'a + sqlx::Encode<'a, Joins::Database> + sqlx::Type<Joins::Database> + Send + 'static,
     {
         QueryBuilder {
             state: Building {
-                inner: self.state.inner.set(column.name(), value.into()),
+                inner: self
+                    .state
+                    .inner
+                    .set(column.name(), C::into_db(value.into())),
             },
             _marker: PhantomData,
         }

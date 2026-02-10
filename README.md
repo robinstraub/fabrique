@@ -36,7 +36,7 @@ let products = Product::query()
 
 // Create test data
 let product = Product::factory()
-    .name("Anvil 3000".to_string())
+    .name("Anvil 3000")
     .create(&pool)
     .await?;
 ```

@@ -1,2 +1,3 @@
 [cargo]
+allFeatures = false
 features = ["sqlite", "fake"]

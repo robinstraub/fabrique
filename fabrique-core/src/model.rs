@@ -85,7 +85,7 @@ where
     fn all<'e, E>(executor: E) -> impl Future<Output = Result<Vec<Self>, Self::Error>> + Send + 'e
     where
         E: sqlx::Executor<'e, Database = Self::Database> + 'e,
-        for<'q> <Self::SoftDeleteColumn as Column<Self>>::Type:
+        for<'q> <Self::SoftDeleteColumn as Column<Self>>::DbType:
             sqlx::Encode<'q, Self::Database> + sqlx::Type<Self::Database>,
     {
         async move {

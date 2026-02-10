@@ -49,22 +49,26 @@ impl<'a> ColumnsCodegen<'a> {
         let table_name = &self.analysis.model.table_name;
         let impls = self.analysis.column_fields.iter().map(|field| {
             let type_name = &field.column_type;
-            let field_type = match &field.r#as {
-                Some(as_type) => quote! { #as_type },
-                None => {
-                    let ty = &field.ty;
-                    quote! { #ty }
-                }
-            };
+            let rust_type = &field.ty;
             let column_name = field.ident.to_string();
             let qualified_name = format!("{}.{}", table_name, field.ident);
 
+            let (db_type, into_db_body) = match &field.r#as {
+                Some(as_type) => (quote! { #as_type }, quote! { value.into() }),
+                None => (quote! { #rust_type }, quote! { value }),
+            };
+
             quote! {
                 impl ::fabrique::Column<#base_struct_ident> for #type_name {
-                    type Type = #field_type;
+                    type Type = #rust_type;
+                    type DbType = #db_type;
 
                     const NAME: &'static str = #column_name;
                     const QUALIFIED_NAME: &'static str = #qualified_name;
+
+                    fn into_db(value: Self::Type) -> Self::DbType {
+                        #into_db_body
+                    }
                 }
             }
         });
@@ -114,15 +118,25 @@ mod tests {
 
                 impl ::fabrique::Column<Anvil> for AnvilIdColumn {
                     type Type = String;
+                    type DbType = String;
 
                     const NAME: &'static str = "id";
                     const QUALIFIED_NAME: &'static str = "anvils.id";
+
+                    fn into_db(value: Self::Type) -> Self::DbType {
+                        value
+                    }
                 }
                 impl ::fabrique::Column<Anvil> for AnvilNameColumn {
                     type Type = String;
+                    type DbType = String;
 
                     const NAME: &'static str = "name";
                     const QUALIFIED_NAME: &'static str = "anvils.name";
+
+                    fn into_db(value: Self::Type) -> Self::DbType {
+                        value
+                    }
                 }
 
                 impl Anvil {
@@ -159,15 +173,25 @@ mod tests {
 
                 impl ::fabrique::Column<Account> for AccountIdColumn {
                     type Type = String;
+                    type DbType = String;
 
                     const NAME: &'static str = "id";
                     const QUALIFIED_NAME: &'static str = "accounts.id";
+
+                    fn into_db(value: Self::Type) -> Self::DbType {
+                        value
+                    }
                 }
                 impl ::fabrique::Column<Account> for AccountStatusColumn {
-                    type Type = String;
+                    type Type = Status;
+                    type DbType = String;
 
                     const NAME: &'static str = "status";
                     const QUALIFIED_NAME: &'static str = "accounts.status";
+
+                    fn into_db(value: Self::Type) -> Self::DbType {
+                        value.into()
+                    }
                 }
 
                 impl Account {

@@ -80,7 +80,7 @@ macro_rules! impl_column_set {
                 Joins: Contains<$M, (), $I>,
             )+
         {
-            type Output = ($($C::Type,)+);
+            type Output = ($($C::DbType,)+);
 
             fn qualified_names() -> &'static [&'static str] {
                 &[$($C::QUALIFIED_NAME),+]
@@ -119,14 +119,22 @@ mod tests {
 
     impl Column<MockModel> for MockIdColumn {
         type Type = i32;
+        type DbType = i32;
         const NAME: &'static str = "id";
         const QUALIFIED_NAME: &'static str = "mocks.id";
+        fn into_db(value: i32) -> i32 {
+            value
+        }
     }
 
     impl Column<MockModel> for MockNameColumn {
         type Type = String;
+        type DbType = String;
         const NAME: &'static str = "name";
         const QUALIFIED_NAME: &'static str = "mocks.name";
+        fn into_db(value: String) -> String {
+            value
+        }
     }
 
     #[test]
@@ -136,6 +144,12 @@ mod tests {
         let names = <(MockIdColumn,) as ColumnSet<Joins, (MockModel,), (Here,)>>::qualified_names();
 
         assert_eq!(names, &["mocks.id"]);
+    }
+
+    #[test]
+    fn into_db_is_identity_for_plain_columns() {
+        assert_eq!(MockIdColumn::into_db(42), 42);
+        assert_eq!(MockNameColumn::into_db("hello".to_owned()), "hello");
     }
 
     #[test]
