@@ -73,16 +73,21 @@ async fn test_where_accepts_a_rust_type(pool: Pool<Backend>) {
 #[fabrique::test]
 async fn test_set_accepts_a_rust_type(pool: Pool<Backend>) {
     // Arrange a fixture
-    Order::factory().create(&pool).await.unwrap();
+    let order = Order::factory().create(&pool).await.unwrap();
 
     // Act the call to the query
-    let result = Order::update()
+    Order::update()
         .set(Order::STATUS, Status::Paid)
-        .returning()
-        .first_or_fail(&pool)
-        .await;
+        .r#where(Order::ID, "=", order.id)
+        .execute(&pool)
+        .await
+        .unwrap();
 
     // Assert the result
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap().status, Status::Paid);
+    let updated = Order::query()
+        .r#where(Order::ID, "=", order.id)
+        .first_or_fail(&pool)
+        .await
+        .unwrap();
+    assert_eq!(updated.status, Status::Paid);
 }
