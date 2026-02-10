@@ -9,7 +9,7 @@ homepage = "https://github.com/robinstraub/fabrique"
 documentation = "https://docs.rs/fabrique"
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["fake", "sqlite"]
 
 [features]
 default = ["fake"]

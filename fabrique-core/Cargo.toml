@@ -8,6 +8,9 @@ repository = "https://github.com/robinstraub/fabrique"
 homepage = "https://github.com/robinstraub/fabrique"
 documentation = "https://docs.rs/fabrique-core"
 
+[package.metadata.docs.rs]
+features = ["sqlite"]
+
 
 [features]
 postgres = ["sqlx/postgres"]
