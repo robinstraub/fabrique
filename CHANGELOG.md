@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2](https://github.com/robinstraub/fabrique/compare/fabrique-v0.2.1...fabrique-v0.2.2) - 2026-02-10
+
+### Fixed
+
+- expose rust type instead of the database type ([#123](https://github.com/robinstraub/fabrique/pull/123))
+
+### Other
+
+- tag sqlite feature for publishing docs ([#121](https://github.com/robinstraub/fabrique/pull/121))
+
 ## [0.2.1](https://github.com/robinstraub/fabrique/compare/fabrique-v0.2.0...fabrique-v0.2.1) - 2026-02-09
 
 ### Added
