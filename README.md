@@ -86,4 +86,4 @@ DATABASE_URL="mysql://root:mysql@localhost:3306/fabrique" \
 
 ## License
 
-MIT License
+[MIT License](LICENSE)
