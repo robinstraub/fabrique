@@ -42,7 +42,9 @@ jobs:
 
       - name: Build with stable
         run: |
-          cargo check --workspace --features sqlite,testing
+          cargo check --workspace --features sqlite
+          cargo check --workspace --features sqlite,testing --package ui-tests
+          cargo check --workspace --features sqlite,testing --exclude ui-tests
           cargo check --workspace --features postgres,testing --exclude ui-tests
           cargo check --workspace --features mysql,testing --exclude ui-tests
 
