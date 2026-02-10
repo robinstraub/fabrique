@@ -74,7 +74,10 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 }
 
 /// Derives a factory struct for the annotated type.
+///
+/// Requires the `testing` feature to be enabled.
 // Tested via UI tests (trybuild) - coverage can't be measured for proc macros
+#[cfg(feature = "testing")]
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[proc_macro_derive(Factory, attributes(factory, fabrique))]
 pub fn derive_factory(input: TokenStream) -> TokenStream {
@@ -94,12 +97,15 @@ pub fn derive_factory(input: TokenStream) -> TokenStream {
 /// Test helper that wraps `#[sqlx::test]` with the correct migrations path
 /// for the active database backend.
 ///
+/// Requires the `testing` feature to be enabled.
+///
 /// ```rust,ignore
 /// #[fabrique::test]
 /// async fn test_create(pool: Pool<Backend>) {
 ///     let product = Product::factory().create(&pool).await.unwrap();
 /// }
 /// ```
+#[cfg(feature = "testing")]
 #[proc_macro_attribute]
 pub fn test(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);

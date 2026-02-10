@@ -27,9 +27,9 @@ jobs:
 
       - name: Run clippy
         run: |
-          cargo clippy --workspace --all-targets --features sqlite -- -D warnings
-          cargo clippy --workspace --all-targets --features postgres --exclude ui-tests -- -D warnings
-          cargo clippy --workspace --all-targets --features mysql --exclude ui-tests -- -D warnings
+          cargo clippy --workspace --all-targets --features sqlite,testing -- -D warnings
+          cargo clippy --workspace --all-targets --features postgres,testing --exclude ui-tests -- -D warnings
+          cargo clippy --workspace --all-targets --features mysql,testing --exclude ui-tests -- -D warnings
 
   build-stable:
     name: Build (Stable)
@@ -42,9 +42,9 @@ jobs:
 
       - name: Build with stable
         run: |
-          cargo check --workspace --features sqlite
-          cargo check --workspace --features postgres --exclude ui-tests
-          cargo check --workspace --features mysql --exclude ui-tests
+          cargo check --workspace --features sqlite,testing
+          cargo check --workspace --features postgres,testing --exclude ui-tests
+          cargo check --workspace --features mysql,testing --exclude ui-tests
 
   codestyle-markdown:
     name: Codestyle (Markdown)
@@ -86,7 +86,7 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run tests with coverage
-        run: cargo llvm-cov --features postgres --workspace --exclude ui-tests --lcov --output-path lcov-postgres.info
+        run: cargo llvm-cov --features postgres,testing --workspace --exclude ui-tests --lcov --output-path lcov-postgres.info
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -109,7 +109,7 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run tests with coverage
-        run: cargo llvm-cov --features sqlite --workspace --exclude ui-tests --lcov --output-path lcov-sqlite.info
+        run: cargo llvm-cov --features sqlite,testing --workspace --exclude ui-tests --lcov --output-path lcov-sqlite.info
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -147,7 +147,7 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run tests with coverage
-        run: cargo llvm-cov --features mysql --workspace --exclude ui-tests --lcov --output-path lcov-mysql.info
+        run: cargo llvm-cov --features mysql,testing --workspace --exclude ui-tests --lcov --output-path lcov-mysql.info
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -202,7 +202,7 @@ jobs:
           tool: mdbook,mdbook-mermaid
 
       - name: Build dependencies for doctests
-        run: cargo build --features doctests
+        run: cargo build --features doctests,testing
 
       - name: Build mdBook
         run: mdbook build docs

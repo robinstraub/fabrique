@@ -95,10 +95,13 @@ Add dependencies to `Cargo.toml`:
 
 ```toml
 [dependencies]
-fabrique = "0.1"
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid"] }
+fabrique = { version = "0.2", features = ["sqlite"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "uuid"] }
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+fabrique = { version = "0.2", features = ["testing"] }
 ```
 
 Now derive `Model` on the `Product` struct:

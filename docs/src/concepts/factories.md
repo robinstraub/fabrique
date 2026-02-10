@@ -4,9 +4,9 @@ Factories generate model instances for testing. Instead of manually
 specifying every attribute, factories provide sensible defaults and
 let you override only what matters for your specific test case.
 
-> **Note:** Factories will move behind a `testing` feature flag
-> ([#105](https://github.com/robinstraub/fabrique/issues/105)) to
-> prevent accidental use in production code.
+> **Note:** Factories require the `testing` feature flag.
+> Add `fabrique` with `features = ["testing"]` to your
+> `[dev-dependencies]` to use them.
 
 ## The Builder Pattern
 

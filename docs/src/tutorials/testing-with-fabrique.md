@@ -10,6 +10,19 @@ isolated databases, generated test data, and relations.
   [Building an E-commerce App](building-an-ecommerce-app.md)
 - The models and service functions from those tutorials
 
+## Setup
+
+Factories and `#[fabrique::test]` require the `testing` feature.
+Add it to your `[dev-dependencies]`:
+
+```toml
+[dev-dependencies]
+fabrique = { version = "0.2", features = ["testing"] }
+```
+
+Cargo unifies features during `cargo test`, so both your
+production and test features are available in test builds.
+
 ## Your First Database Test
 
 Each test needs a fresh database with tables ready. The
