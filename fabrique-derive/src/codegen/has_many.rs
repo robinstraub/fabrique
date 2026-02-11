@@ -105,7 +105,7 @@ mod tests {
     use syn::parse_quote;
 
     #[test]
-    fn test_generate_as_many_methods() {
+    fn test_generate_has_many_methods() {
         // Arrange a codegen
         let input = parse_quote! {
             struct Message {

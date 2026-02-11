@@ -2,7 +2,8 @@ use fabrique::prelude::*;
 use sqlx::Pool;
 use uuid::Uuid;
 
-// User WITHOUT HasMany — loading method written by hand below
+// The messages() method is auto-generated from Message's belongs_to
+// annotations.
 #[derive(Clone, Debug, Default, Factory, PartialEq, Model)]
 pub struct User {
     pub id: Uuid,
