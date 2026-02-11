@@ -30,8 +30,8 @@ async fn test_load_messages_by_alias(pool: Pool<Backend>) {
     let recipient = User::factory().create(&pool).await.unwrap();
 
     Message::factory()
-        .for_recipient(recipient.clone())
-        .for_sender(sender.clone())
+        .for_recipient(&recipient)
+        .for_sender(&sender)
         .create(&pool)
         .await
         .unwrap();
