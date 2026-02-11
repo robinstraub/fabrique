@@ -3,7 +3,7 @@ use sqlx::Pool;
 use uuid::Uuid;
 
 // User WITHOUT HasMany — loading method written by hand below
-#[derive(Debug, Default, Factory, PartialEq, Model)]
+#[derive(Clone, Debug, Default, Factory, PartialEq, Model)]
 pub struct User {
     pub id: Uuid,
     pub name: String,
@@ -29,8 +29,8 @@ async fn test_load_messages_by_alias(pool: Pool<Backend>) {
     let recipient = User::factory().create(&pool).await.unwrap();
 
     Message::factory()
-        .sender_id(sender.id)
-        .recipient_id(recipient.id)
+        .for_recipient(recipient.clone())
+        .for_sender(sender.clone())
         .create(&pool)
         .await
         .unwrap();

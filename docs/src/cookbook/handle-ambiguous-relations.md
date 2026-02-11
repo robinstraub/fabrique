@@ -38,38 +38,8 @@ This generates:
 - `impl Joinable<User, Sender> for Message` (and reverse)
 - `impl Joinable<User, Recipient> for Message` (and reverse)
 
-## Define the Parent Model with Aliases
-
-On the parent model, each `HasMany` relationship must specify which alias it
-references:
-
-```rust
-# extern crate fabrique;
-# extern crate sqlx;
-# extern crate uuid;
-# use fabrique::prelude::*;
-# use uuid::Uuid;
-# #[derive(Factory, Model)]
-# pub struct Message {
-#     id: Uuid,
-#     #[fabrique(belongs_to = "User", alias = "Sender")]
-#     sender_id: Uuid,
-#     #[fabrique(belongs_to = "User", alias = "Recipient")]
-#     recipient_id: Uuid,
-# }
-#[derive(Clone, Factory, Model)]
-pub struct User {
-    id: Uuid,
-    name: String,
-
-    #[fabrique(alias = "Sender")]
-    sent_messages: HasMany<Message>,
-
-    #[fabrique(alias = "Recipient")]
-    received_messages: HasMany<Message>,
-}
-# fn main() {}
-```
+No declaration is needed on the parent model — Fabrique infers
+everything from the child's `belongs_to` declarations.
 
 ## Named Joins
 
@@ -230,9 +200,10 @@ let message = Message::factory()
 # }
 ```
 
-## Using Lazy Loading
+## Loading Related Records
 
-With aliases, lazy loading methods work as expected:
+With aliases, the loading method is generic — pass the alias type
+to specify which foreign key to follow:
 
 ```rust
 # extern crate fabrique;
@@ -255,19 +226,15 @@ With aliases, lazy loading methods work as expected:
 #     id: Uuid,
 #     name: String,
 #     email: String,
-#     #[fabrique(alias = "Sender")]
-#     sent_messages: HasMany<Message>,
-#     #[fabrique(alias = "Recipient")]
-#     received_messages: HasMany<Message>,
 # }
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 # let user = User::factory().create(&pool).await?;
 // Get messages sent by this user
-let sent = user.sent_messages().get(&pool).await?;
+let sent = user.messages::<Sender>().get(&pool).await?;
 
 // Get messages received by this user
-let received = user.received_messages().get(&pool).await?;
+let received = user.messages::<Recipient>().get(&pool).await?;
 # Ok(())
 # }
 ```

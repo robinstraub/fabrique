@@ -100,7 +100,6 @@ creates the parent record if none is specified:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 #
 # #[derive(Clone, Model, Factory)]
@@ -147,7 +146,6 @@ existing one:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 #
 # #[derive(Clone, Model, Factory)]
@@ -193,7 +191,6 @@ an instance shares the **same** parent:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 #
 # #[derive(Clone, Model, Factory)]
@@ -243,7 +240,6 @@ children for a parent:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 #
 # #[derive(Clone, Model, Factory)]
@@ -299,9 +295,6 @@ Missing parents are auto-created at every level of the chain:
 #     pub status: String,
 #     #[fabrique(belongs_to = "User")]
 #     pub user_id: Uuid,
-#     #[fabrique(through = "OrderLine")]
-#     pub products: HasMany<Product>,
-#     pub order_lines: HasMany<OrderLine>,
 # }
 #
 # #[derive(Clone, Model, Factory)]
