@@ -1,5 +1,8 @@
 use crate::{database::DatabaseAware, model::Model, relation::BelongsTo};
 use std::future::Future;
+use std::pin::Pin;
+
+use crate::error::Error;
 
 /// Factory pattern for creating model instances with test data.
 ///
@@ -27,7 +30,7 @@ pub trait Factory: Clone + Sized {
 /// This trait is automatically implemented by the derive macro for factories
 /// whose model has a `#[fabrique(belongs_to = "Parent")]` field. It enables
 /// parent factories to set the foreign key on child factories when creating
-/// `HasMany` relationships.
+/// one-to-many relationships.
 ///
 /// The optional `Alias` parameter disambiguates multiple relationships
 /// to the same parent type (see `alias` attribute).
@@ -41,6 +44,21 @@ pub trait Factory: Clone + Sized {
 /// //
 /// // <OrderFactory as SetForeignKey<Customer>>::set_foreign_key(factory, customer_pk)
 /// ```
+/// A factory whose execution is deferred until a parent is created.
+///
+/// When a parent factory has `has_` methods (e.g., `has_orders`), each call
+/// pushes an `Arc<dyn DeferredFactory>` into the parent's children list.
+/// After the parent instance is persisted, each deferred factory is invoked
+/// with the parent's primary key to create the child instances.
+pub trait DeferredFactory<PK, DB: sqlx::Database>: Send + Sync {
+    /// Creates child instances using the given parent primary key.
+    fn create<'a>(
+        &'a self,
+        parent_pk: PK,
+        conn: &'a mut <DB as sqlx::Database>::Connection,
+    ) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + 'a>>;
+}
+
 pub trait SetForeignKey<Parent: Model, Alias = ()>: Factory
 where
     Self::Model: BelongsTo<Parent, Alias>,

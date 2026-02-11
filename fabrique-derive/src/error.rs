@@ -49,7 +49,7 @@ pub enum ErrorKind {
     #[error("Invalid faker expression: {0}")]
     InvalidFakerExpression(String),
 
-    #[error("`alias` can only be used on `belongs_to` or `HasMany` fields")]
+    #[error("`alias` can only be used on `belongs_to` fields")]
     AliasWithoutRelation,
 
     #[error("Duplicate alias `{0}`: each alias name must be unique within a model")]

@@ -161,7 +161,6 @@ Create a user first, then create orders that reference it:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 #
 # #[derive(Clone, Debug, Factory, Model)]
@@ -214,7 +213,6 @@ parents.
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 #
 # #[derive(Clone, Debug, Factory, Model)]
@@ -259,7 +257,6 @@ returns only pending orders:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 #
 # #[derive(Clone, Debug, Factory, Model)]

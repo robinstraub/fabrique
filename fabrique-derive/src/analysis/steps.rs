@@ -18,7 +18,7 @@ use syn::{Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, spanned::Sp
 use crate::{
     analysis::{
         Analysis,
-        ast::{ColumnField, HasManyField, Model, ModelAttrs, ModelFieldAttrs, ParsedField},
+        ast::{ColumnField, Model, ModelAttrs, ModelFieldAttrs},
     },
     error::{Error, ErrorKind},
 };
@@ -38,7 +38,6 @@ pub struct ParsedStruct<'a> {
 /// Validated and parsed fields.
 pub struct ParsedFields<'a> {
     column_fields: Vec<ColumnField>,
-    has_many_fields: Vec<HasManyField>,
     ident: &'a Ident,
     model: Model,
 }
@@ -103,19 +102,13 @@ impl<'a> ParsedStruct<'a> {
             }
         };
 
-        // Parse all fields and separate into columns and has_many
+        // Parse all fields into columns
         let mut column_fields = Vec::new();
-        let mut has_many_fields = Vec::new();
 
         for field in fields.iter() {
             let attrs = ModelFieldAttrs::from_field(field)
                 .map_err(|e| Error::from_darling(e, field.span()))?;
-            let parsed = ParsedField::try_from(attrs, self.ident.to_string())?;
-
-            match parsed {
-                ParsedField::Column(col) => column_fields.push(*col),
-                ParsedField::HasMany(hm) => has_many_fields.push(hm),
-            }
+            column_fields.push(ColumnField::try_from_attrs(attrs, self.ident.to_string())?);
         }
 
         // Ensure alias names are unique
@@ -139,20 +132,15 @@ impl<'a> ParsedStruct<'a> {
             }
         }
 
-        Ok(ParsedFields::new(self, column_fields, has_many_fields))
+        Ok(ParsedFields::new(self, column_fields))
     }
 }
 
 impl<'a> ParsedFields<'a> {
-    pub fn new(
-        previous_step: ParsedStruct<'a>,
-        column_fields: Vec<ColumnField>,
-        has_many_fields: Vec<HasManyField>,
-    ) -> Self {
+    pub fn new(previous_step: ParsedStruct<'a>, column_fields: Vec<ColumnField>) -> Self {
         Self {
             ident: previous_step.ident,
             column_fields,
-            has_many_fields,
             model: previous_step.model,
         }
     }
@@ -161,7 +149,6 @@ impl<'a> ParsedFields<'a> {
     pub fn build(self) -> Result<Analysis<'a>, Error> {
         Ok(Analysis {
             column_fields: self.column_fields,
-            has_many_fields: self.has_many_fields,
             ident: self.ident,
             model: self.model,
         })

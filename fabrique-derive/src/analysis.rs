@@ -1,4 +1,4 @@
-use crate::analysis::ast::{ColumnField, HasManyField, Model, Relation};
+use crate::analysis::ast::{ColumnField, Model, Relation};
 use crate::analysis::steps::Input;
 use crate::error::Error;
 use syn::{DeriveInput, Ident};
@@ -11,9 +11,6 @@ mod steps;
 pub struct Analysis<'a> {
     /// Database column fields.
     pub column_fields: Vec<ColumnField>,
-
-    /// HasMany relationship fields.
-    pub has_many_fields: Vec<HasManyField>,
 
     /// Identifier of the analyzed struct.
     #[allow(dead_code)]
@@ -38,15 +35,5 @@ impl<'a> Analysis<'a> {
 
             Some((field, relation))
         })
-    }
-
-    /// Returns one-to-many HasMany fields (without `through`).
-    pub fn one_to_many_fields(&self) -> impl Iterator<Item = &HasManyField> {
-        self.has_many_fields.iter().filter(|f| f.through.is_none())
-    }
-
-    /// Returns many-to-many HasMany fields (with `through`).
-    pub fn many_to_many_fields(&self) -> impl Iterator<Item = &HasManyField> {
-        self.has_many_fields.iter().filter(|f| f.through.is_some())
     }
 }

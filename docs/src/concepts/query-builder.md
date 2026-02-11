@@ -304,7 +304,6 @@ no relationship is declared between the models, it won't compile:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 # #[derive(Clone, Factory, Model)]
 # pub struct Order {
@@ -357,8 +356,6 @@ chain must be valid at each step:
 #     pub status: String,
 #     #[fabrique(belongs_to = "User")]
 #     pub user_id: Uuid,
-#     #[fabrique(through = "OrderLine")]
-#     pub products: HasMany<Product>,
 # }
 # #[derive(Clone, Factory, Model)]
 # pub struct Product {
@@ -537,7 +534,6 @@ model:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 # #[derive(Clone, Factory, Model)]
 # pub struct Order {
@@ -605,7 +601,6 @@ present:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 # #[derive(Clone, Factory, Model)]
 # pub struct Order {

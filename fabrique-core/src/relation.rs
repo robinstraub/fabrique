@@ -3,8 +3,6 @@
 //! This module provides marker types and traits for defining relationships
 //! between models.
 
-use std::marker::PhantomData;
-
 use crate::database::Column;
 use crate::model::Model;
 
@@ -12,8 +10,7 @@ use crate::model::Model;
 ///
 /// This trait is automatically implemented by the derive macro for fields
 /// annotated with `#[fabrique(belongs_to = "ParentModel")]`. It provides
-/// the foreign key column, enabling automatic relationship inference
-/// for `HasMany<T>` fields.
+/// the foreign key column for relationship inference.
 ///
 /// The optional `Alias` parameter disambiguates multiple relationships
 /// to the same parent type (see `alias` attribute).
@@ -33,7 +30,6 @@ use crate::model::Model;
 /// #[derive(Model)]
 /// struct User {
 ///     id: Uuid,
-///     orders: HasMany<Order>,  // Infers FK via <Order as BelongsTo<User>>
 /// }
 /// ```
 pub trait BelongsTo<Parent: Model, Alias = ()>: Model {
@@ -80,77 +76,4 @@ pub trait Alias {
 
     /// The SQL alias name (e.g., "sender").
     const NAME: &'static str;
-}
-
-/// Marker type for one-to-many relationships.
-///
-/// `HasMany<T>` is a zero-sized type (ZST) that represents a one-to-many
-/// relationship where the current model is the "parent" and `T` is the
-/// "child" model type.
-///
-/// This type is NOT stored in the database. It's purely a compile-time
-/// marker used by the derive macros to generate navigation methods and
-/// factory helpers.
-#[derive(Debug, PartialEq, Eq)]
-pub struct HasMany<T> {
-    _marker: PhantomData<T>,
-}
-
-// Manual implementations to avoid requiring T: Clone/Copy
-impl<T> Clone for HasMany<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T> Copy for HasMany<T> {}
-
-impl<T> Default for HasMany<T> {
-    fn default() -> Self {
-        Self {
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<T> HasMany<T> {
-    /// Creates a new HasMany marker.
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_has_many_default() {
-        let _: HasMany<String> = HasMany::default();
-    }
-
-    #[test]
-    fn test_has_many_new() {
-        let _: HasMany<String> = HasMany::new();
-    }
-
-    #[test]
-    fn test_has_many_is_zst() {
-        assert_eq!(std::mem::size_of::<HasMany<String>>(), 0);
-    }
-
-    #[test]
-    #[allow(clippy::clone_on_copy)]
-    fn test_has_many_clone() {
-        let original: HasMany<String> = HasMany::new();
-        let cloned = original.clone();
-        assert_eq!(original, cloned);
-    }
-
-    #[test]
-    fn test_has_many_copy() {
-        let original: HasMany<String> = HasMany::new();
-        let copied = original; // Copy semantics
-        assert_eq!(original, copied); // original still usable after copy
-    }
 }

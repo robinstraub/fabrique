@@ -132,16 +132,13 @@ pub struct User {
     pub id: Uuid,
     pub name: String,
     pub email: String,
-
-    /// A user has many orders
-    pub orders: HasMany<Order>,
 }
 # fn main() {}
 ```
 
-The `HasMany<Order>` field tells Fabrique that a user can have multiple orders.
-This field isn't stored in the database — it generates a method to fetch related
-orders.
+Because `Order` declares `belongs_to = "User"`, Fabrique automatically generates
+an `orders()` method on `User` to fetch related orders — no declaration needed on
+the parent side.
 
 ### The Order Model
 
@@ -184,19 +181,13 @@ pub struct Order {
     pub user_id: Uuid,
 
     pub status: String,
-
-    /// Products in this order, linked through OrderLine
-    #[fabrique(through = "OrderLine")]
-    pub products: HasMany<Product>,
 }
 # fn main() {}
 ```
 
-Key points:
-
-- `#[fabrique(belongs_to = "User")]` marks the foreign key relationship
-- `#[fabrique(through = "OrderLine")]` defines a many-to-many relationship via the
-  join table
+Key point: `#[fabrique(belongs_to = "User")]` marks the foreign key relationship.
+From this single declaration, Fabrique generates bidirectional joins and loading
+methods.
 
 ### The OrderLine Model (Join Table)
 
@@ -277,7 +268,6 @@ This join table has:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 
 // -----------------------------------------------------------------------------
@@ -337,7 +327,6 @@ You can add more conditions:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 
 // -----------------------------------------------------------------------------
@@ -401,8 +390,6 @@ assert!(pending.iter().all(|o| o.status == "pending"));
 #     #[fabrique(belongs_to = "User")]
 #     pub user_id: Uuid,
 #     pub status: String,
-#     #[fabrique(through = "OrderLine")]
-#     pub products: HasMany<Product>,
 # }
 # #[derive(Clone, Debug, Factory, Model)]
 # pub struct User {
@@ -445,7 +432,6 @@ pub async fn create_order(
         id: Uuid::new_v4(),
         user_id,
         status: "pending".to_string(),
-        products: HasMany::new(),
     };
     let order = order.create(pool).await?;
 
@@ -480,8 +466,8 @@ let order_items = vec![
 let order = create_order(&pool, user.id, order_items).await?;
 
 assert_eq!(order.status, "pending");
-let products = order.products().get(&pool).await?;
-assert_eq!(products.len(), 2);
+let order_lines = order.order_lines().get(&pool).await?;
+assert_eq!(order_lines.len(), 2);
 # Ok(())
 # }
 ```
@@ -524,8 +510,6 @@ assert_eq!(products.len(), 2);
 #     #[fabrique(belongs_to = "User")]
 #     pub user_id: Uuid,
 #     pub status: String,
-#     #[fabrique(through = "OrderLine")]
-#     pub products: HasMany<Product>,
 # }
 # #[derive(Clone, Debug, Factory, Model)]
 # pub struct User {
@@ -540,13 +524,16 @@ assert_eq!(products.len(), 2);
 
 // --snip--
 
-/// Returns all products in an order.
+/// Returns all products in an order via order lines.
 pub async fn get_order_products(
     pool: &Pool<Backend>,
     order_id: Uuid,
 ) -> Result<Vec<Product>, fabrique::Error> {
-    let order = Order::find(pool, order_id).await?;
-    order.products().get(pool).await
+    Product::query()
+        .join::<OrderLine>()
+        .r#where(OrderLine::ORDER_ID, "=", order_id)
+        .get(pool)
+        .await
 }
 
 // --snip--
@@ -561,7 +548,6 @@ let order = Order {
     id: Uuid::new_v4(),
     user_id: user.id,
     status: "pending".to_string(),
-    products: HasMany::new(),
 };
 let order = order.create(&pool).await?;
 
@@ -581,7 +567,7 @@ assert_eq!(products[0].id, product.id);
 # }
 ```
 
-The `products()` method automatically joins through the `order_lines` table.
+The query joins `Product` through `OrderLine` to find all products in the order.
 
 ## The Complete Implementation
 
@@ -603,7 +589,6 @@ pub struct User {
     pub id: Uuid,
     pub name: String,
     pub email: String,
-    pub orders: HasMany<Order>,
 }
 
 /// A product available for purchase.
@@ -622,8 +607,6 @@ pub struct Order {
     #[fabrique(belongs_to = "User")]
     pub user_id: Uuid,
     pub status: String,
-    #[fabrique(through = "OrderLine")]
-    pub products: HasMany<Product>,
 }
 
 /// A line item linking an order to a product.
@@ -662,7 +645,6 @@ pub async fn create_order(
         id: Uuid::new_v4(),
         user_id,
         status: "pending".to_string(),
-        products: HasMany::new(),
     };
     let order = order.create(pool).await?;
 
@@ -679,13 +661,16 @@ pub async fn create_order(
     Ok(order)
 }
 
-/// Returns all products in an order.
+/// Returns all products in an order via order lines.
 pub async fn get_order_products(
     pool: &Pool<Backend>,
     order_id: Uuid,
 ) -> Result<Vec<Product>, fabrique::Error> {
-    let order = Order::find(pool, order_id).await?;
-    order.products().get(pool).await
+    Product::query()
+        .join::<OrderLine>()
+        .r#where(OrderLine::ORDER_ID, "=", order_id)
+        .get(pool)
+        .await
 }
 
 # #[fabrique::doctest]
@@ -733,11 +718,11 @@ assert_eq!(products.len(), 2);
 
 You've learned how to model related data with Fabrique:
 
-1. **`belongs_to`** marks foreign key fields
-2. **`HasMany<T>`** declares one-to-many relationships
-3. **`through`** enables many-to-many relationships via join tables
-4. **Composite primary keys** work naturally with `#[fabrique(primary_key)]`
-5. **Relation methods** return query builders for lazy loading
+1. **`belongs_to`** marks foreign key fields and generates loading methods
+2. **Bidirectional joins** are inferred from `belongs_to` — no parent-side
+   declaration needed
+3. **Composite primary keys** work naturally with `#[fabrique(primary_key)]`
+4. **Relation methods** return query builders for lazy loading
 
 ## Next Steps
 

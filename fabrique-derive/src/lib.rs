@@ -49,6 +49,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     let columns = ColumnsCodegen::new(&analysis).generate();
     let belongs_to = BelongsToCodegen::new(&analysis).generate();
     let joinable = JoinableCodegen::new(&analysis).generate();
+    let has_many = HasManyCodegen::new(&analysis).generate();
     let alias = AliasCodegen::new(&analysis).generate();
     let query = QueryCodegen::new(&analysis).generate();
     let persist = PersistCodegen::new(&analysis).generate();
@@ -63,6 +64,7 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
         #columns
         #belongs_to
         #joinable
+        #has_many
         #alias
         #query
         #persist
@@ -91,7 +93,14 @@ pub fn derive_factory(input: TokenStream) -> TokenStream {
         }
     };
 
-    FactoryCodegen::new(&analysis).generate_factory().into()
+    let factory = FactoryCodegen::new(&analysis).generate_factory();
+    let has_many_factory = HasManyFactoryCodegen::new(&analysis).generate();
+
+    quote::quote! {
+        #factory
+        #has_many_factory
+    }
+    .into()
 }
 
 /// Test helper that wraps `#[sqlx::test]` with the correct migrations path

@@ -13,7 +13,7 @@ pub use query_builder::{Building, Initial, QueryBuilder};
 /// Model metadata and identity
 pub trait Model: DatabaseAware {
     /// Primary key type (single value or tuple for composite keys)
-    type PrimaryKey: Send;
+    type PrimaryKey: Clone + Send;
 
     /// Soft delete column type (unit type if soft deletes are not enabled).
     type SoftDeleteColumn: Column<Self> + Send;

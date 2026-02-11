@@ -30,7 +30,6 @@ them. With factories, the entire graph is built in one chain
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 # #[derive(Clone, Factory, Model)]
 # pub struct Product {
@@ -45,8 +44,6 @@ them. With factories, the entire graph is built in one chain
 #     #[fabrique(belongs_to = "User")]
 #     pub user_id: Uuid,
 #     pub status: String,
-#     #[fabrique(through = "OrderLine")]
-#     pub products: HasMany<Product>,
 # }
 # #[derive(Clone, Factory, Model)]
 # #[fabrique(table = "order_lines")]
@@ -62,15 +59,15 @@ them. With factories, the entire graph is built in one chain
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 let order = Order::factory()
-    .has_products(Product::factory(), 3)
+    .has_order_lines(OrderLine::factory(), 3)
     .create(&pool)
     .await?;
 # Ok(())
 # }
 ```
 
-This single chain creates 1 user, 1 order, 3 products, and
-3 order lines — 8 records total. The factory resolves the
+This single chain creates 1 user, 1 order, 3 order lines,
+and 3 products — 8 records total. The factory resolves the
 foreign keys automatically.
 
 ## Share a Parent Across Children
@@ -92,7 +89,6 @@ next ones reuse the same record:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 # #[derive(Clone, Factory, Model)]
 # pub struct Order {
@@ -147,7 +143,6 @@ generate everything else:
 #     pub id: Uuid,
 #     pub name: String,
 #     pub email: String,
-#     pub orders: HasMany<Order>,
 # }
 # #[derive(Clone, Factory, Model)]
 # pub struct Order {
