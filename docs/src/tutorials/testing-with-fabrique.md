@@ -176,11 +176,11 @@ Create a user first, then create orders that reference it:
 let user = User::factory().create(&pool).await?;
 
 Order::factory()
-    .for_user(user.clone())
+    .for_user(&user)
     .status("pending".to_string())
     .create(&pool).await?;
 Order::factory()
-    .for_user(user.clone())
+    .for_user(&user)
     .status("shipped".to_string())
     .create(&pool).await?;
 

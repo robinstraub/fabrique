@@ -192,7 +192,7 @@ let bob = User::factory()
 
 let message = Message::factory()
     .content("Hello Bob!".to_string())
-    .for_sender(alice.clone())
+    .for_sender(&alice)
     .for_recipient(bob)
     .create(&pool)
     .await?;

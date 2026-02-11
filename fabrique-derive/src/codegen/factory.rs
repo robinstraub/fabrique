@@ -178,6 +178,13 @@ impl<'a> FactoryCodegen<'a> {
                     }
                 },
                 quote! {
+                    impl From<&#referenced_type> for #enum_ident {
+                        fn from(model: &#referenced_type) -> Self {
+                            #enum_ident::PrimaryKey(fabrique::Model::primary_key(model))
+                        }
+                    }
+                },
+                quote! {
                     impl From<#factory_type> for #enum_ident {
                         fn from(factory: #factory_type) -> Self {
                             #enum_ident::Factory(factory)
@@ -483,6 +490,12 @@ mod tests {
                 impl From<Hammer> for AnvilHammerRelation {
                     fn from(model: Hammer) -> Self {
                         AnvilHammerRelation::PrimaryKey(fabrique::Model::primary_key(&model))
+                    }
+                }
+
+                impl From<&Hammer> for AnvilHammerRelation {
+                    fn from(model: &Hammer) -> Self {
+                        AnvilHammerRelation::PrimaryKey(fabrique::Model::primary_key(model))
                     }
                 }
 

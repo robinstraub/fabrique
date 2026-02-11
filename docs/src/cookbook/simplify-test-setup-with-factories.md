@@ -106,13 +106,13 @@ let user = User::factory()
     .await?;
 
 let pending = Order::factory()
-    .for_user(user.clone())
+    .for_user(&user)
     .status("pending".to_string())
     .create(&pool)
     .await?;
 
 let shipped = Order::factory()
-    .for_user(user.clone())
+    .for_user(&user)
     .status("shipped".to_string())
     .create(&pool)
     .await?;
@@ -229,8 +229,8 @@ let bob = User::factory()
 // Alice sends 100 messages to Bob
 for _ in 0..100 {
     Message::factory()
-        .for_sender(alice.clone())
-        .for_recipient(bob.clone())
+        .for_sender(&alice)
+        .for_recipient(&bob)
         .create(&pool)
         .await?;
 }
@@ -238,8 +238,8 @@ for _ in 0..100 {
 // Bob sends 100 messages to Alice
 for _ in 0..100 {
     Message::factory()
-        .for_sender(bob.clone())
-        .for_recipient(alice.clone())
+        .for_sender(&bob)
+        .for_recipient(&alice)
         .create(&pool)
         .await?;
 }
