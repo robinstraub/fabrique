@@ -33,6 +33,9 @@ pub mod factory;
 pub mod find;
 pub mod from_row;
 pub mod hard_delete;
+pub mod has_many;
+#[cfg(feature = "testing")]
+pub mod has_many_factory;
 pub mod joinable;
 pub mod model;
 pub mod persist;
@@ -49,6 +52,9 @@ pub use factory::FactoryCodegen;
 pub use find::FindCodegen;
 pub use from_row::FromRowCodegen;
 pub use hard_delete::HardDeleteCodegen;
+pub use has_many::HasManyCodegen;
+#[cfg(feature = "testing")]
+pub use has_many_factory::HasManyFactoryCodegen;
 pub use joinable::JoinableCodegen;
 pub use model::ModelCodegen;
 pub use persist::PersistCodegen;

@@ -24,8 +24,9 @@ pub use database::Backend;
 pub use database::Nil;
 pub use error::Error;
 #[cfg(feature = "testing")]
+pub use factory::DeferredFactory;
+#[cfg(feature = "testing")]
 pub use factory::SetForeignKey;
 pub use relation::Alias;
 pub use relation::BelongsTo;
-pub use relation::HasMany;
 pub use relation::Joinable;

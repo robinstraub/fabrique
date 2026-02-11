@@ -16,13 +16,12 @@ impl<'a> FromRowCodegen<'a> {
     /// Generates the `FromRow` trait implementation.
     ///
     /// This implementation handles automatic type conversions for fields with
-    /// the `as` attribute. HasMany fields are initialized with their default
-    /// value.
+    /// the `as` attribute.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
 
         // Generate column field assignments
-        let column_assignments = self.analysis.column_fields.iter().map(|field| {
+        let field_assignments = self.analysis.column_fields.iter().map(|field| {
             let field_ident = &field.ident;
             let column_name = field.ident.to_string();
 
@@ -55,16 +54,6 @@ impl<'a> FromRowCodegen<'a> {
                 }
             }
         });
-
-        // Generate HasMany field assignments (initialized with default)
-        let has_many_assignments = self.analysis.has_many_fields.iter().map(|field| {
-            let field_ident = &field.ident;
-            quote! {
-                #field_ident: ::fabrique::HasMany::default()
-            }
-        });
-
-        let field_assignments = column_assignments.chain(has_many_assignments);
 
         quote! {
             impl<'r> ::sqlx::FromRow<'r, <::fabrique::Backend as ::sqlx::Database>::Row> for #base_struct_ident {
@@ -108,29 +97,6 @@ mod tests {
                 }
             }
             .to_string()
-        );
-    }
-
-    #[test]
-    fn test_generate_from_row_with_has_many() {
-        // Arrange - HasMany no longer requires foreign_key attribute
-        let input = parse_quote! {
-            struct Customer {
-                id: String,
-                orders: HasMany<Order>
-            }
-        };
-        let analysis = Analysis::from(&input).unwrap();
-        let codegen = FromRowCodegen::new(&analysis);
-
-        // Act
-        let result = codegen.generate();
-
-        // Assert
-        assert!(
-            result
-                .to_string()
-                .contains("orders : :: fabrique :: HasMany :: default ()")
         );
     }
 

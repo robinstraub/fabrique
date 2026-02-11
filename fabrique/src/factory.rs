@@ -78,6 +78,8 @@
 //! ## Has Many Relationships
 //!
 //! Use `has_<relation>()` methods to create child models after the parent.
+//! These methods are automatically generated from the child's `belongs_to`
+//! declaration — no `HasMany<T>` field is needed on the parent.
 //! Specify a child factory and the number of instances to create:
 //!
 //!```rust,no_run
@@ -88,7 +90,6 @@
 //! #[derive(Factory, Model)]
 //! pub struct Customer {
 //!     id: Uuid,
-//!     orders: HasMany<Order>,
 //! }
 //!
 //! #[derive(Default, Factory, Model)]
@@ -110,8 +111,8 @@
 //!
 //! ## Many-to-Many Relationships
 //!
-//! Use the `through` attribute for many-to-many relationships via a join model.
-//! The join model must have `belongs_to` annotations for both related types:
+//! For many-to-many relationships, create instances through the join model
+//! using `has_<join_model>()`:
 //!
 //!```rust,no_run
 //! # use fabrique::prelude::*;
@@ -121,8 +122,6 @@
 //! #[derive(Factory, Model)]
 //! pub struct Order {
 //!     id: Uuid,
-//!     #[fabrique(through = "OrderLine")]
-//!     products: HasMany<Product>,
 //! }
 //!
 //! #[derive(Default, Factory, Model)]
@@ -140,9 +139,9 @@
 //! }
 //!
 //! # async fn example(connection: Pool<Backend>) -> Result<(), fabrique::Error> {
-//! // Creates an Order, 2 Products, and 2 OrderLines linking them
+//! // Creates an Order, then 2 OrderLines (each auto-creating a Product)
 //! Order::factory()
-//!     .has_products(Product::factory(), 2)
+//!     .has_order_lines(OrderLine::factory(), 2)
 //!     .create(&connection)
 //!     .await?;
 //! #     Ok(())

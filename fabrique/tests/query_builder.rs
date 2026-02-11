@@ -16,7 +16,6 @@ pub struct User {
     pub id: Uuid,
     pub name: String,
     pub email: String,
-    pub orders: HasMany<Order>,
 }
 
 #[derive(Debug, Default, Factory, PartialEq, Model)]
@@ -33,8 +32,6 @@ pub struct Order {
     #[fabrique(belongs_to = "User")]
     pub user_id: Uuid,
     pub status: String,
-    #[fabrique(through = "OrderLine")]
-    pub products: HasMany<Product>,
 }
 
 #[derive(Debug, Default, Factory, PartialEq, Model)]

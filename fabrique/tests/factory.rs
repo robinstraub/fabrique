@@ -7,8 +7,6 @@ pub struct User {
     pub id: Uuid,
     pub name: String,
     pub email: String,
-    pub addresses: HasMany<Address>,
-    pub orders: HasMany<Order>,
 }
 
 #[derive(Debug, Default, Factory, PartialEq, Model)]
@@ -36,9 +34,6 @@ pub struct Order {
     #[fabrique(belongs_to = "User")]
     pub user_id: Uuid,
     pub status: String,
-    pub order_lines: HasMany<OrderLine>,
-    #[fabrique(through = "OrderLine")]
-    pub products: HasMany<Product>,
 }
 
 #[derive(Debug, Default, Factory, PartialEq, Model)]
@@ -92,7 +87,8 @@ async fn test_factory_for_relations_accept_factories(connection: Pool<Backend>) 
 
 #[fabrique_derive::test]
 async fn test_has_many_creates_children(connection: Pool<Backend>) {
-    // Create a User with 1 Address
+    // Arrange a User with 1 Address via has_addresses (generated from Address's
+    // belongs_to)
     let user = User::factory()
         .name("Wile E. Coyote".to_string())
         .has_addresses(Address::factory().label("Desert Cliff #42".to_string()), 1)
@@ -100,7 +96,7 @@ async fn test_has_many_creates_children(connection: Pool<Backend>) {
         .await
         .unwrap();
 
-    // Verify the address was created for this user
+    // Assert the address was created for this user
     let count: (i64,) = QueryBuilder::table("addresses")
         .select(&["COUNT(*)"])
         .r#where("user_id", "=", user.id)
@@ -112,15 +108,16 @@ async fn test_has_many_creates_children(connection: Pool<Backend>) {
 }
 
 #[fabrique_derive::test]
-async fn test_many_to_many_through_creates_join_records(connection: Pool<Backend>) {
-    // Create an Order with 1 Product through OrderLine (many-to-many)
+async fn test_has_many_through_join_model(connection: Pool<Backend>) {
+    // Arrange an Order with 1 OrderLine (which auto-creates a Product via
+    // belongs_to)
     let order = Order::factory()
-        .has_products(Product::factory().name("Anvil 3000".to_string()), 1)
+        .has_order_lines(OrderLine::factory(), 1)
         .create(&connection)
         .await
         .unwrap();
 
-    // Verify the order line was created linking order to product
+    // Assert the order line was created for this order
     let count: (i64,) = QueryBuilder::table("order_lines")
         .select(&["COUNT(*)"])
         .r#where("order_id", "=", order.id)
@@ -130,7 +127,7 @@ async fn test_many_to_many_through_creates_join_records(connection: Pool<Backend
 
     assert_eq!(count.0, 1);
 
-    // Verify product was also created
+    // Assert a product was auto-created via OrderLine's belongs_to Product
     let product_count: (i64,) = QueryBuilder::table("products")
         .select(&["COUNT(*)"])
         .first_or_fail(&connection)
