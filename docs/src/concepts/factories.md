@@ -216,7 +216,7 @@ let runner = User::factory()
 // All orders share the same user — no duplication
 for _ in 0..5 {
     Order::factory()
-        .for_user(wile.clone())
+        .for_user(&wile)
         .create(&pool)
         .await?;
 }
