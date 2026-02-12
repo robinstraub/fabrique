@@ -40,23 +40,24 @@ impl<'a> HasManyCodegen<'a> {
             if has_alias {
                 quote! {
                     impl #parent_struct {
-                        pub fn #method_name<Alias>(
+                        pub fn #method_name<DB: ::fabrique::Dialect, Alias>(
                             &self,
                         ) -> ::fabrique::model::QueryBuilder<
+                            DB,
                             ::fabrique::model::Building<
-                                <#child_struct as ::fabrique::database::DatabaseAware>::Database,
+                                DB,
                                 ::fabrique::sql::Filtered<::fabrique::sql::Selected>,
                             >,
                             ::fabrique::model::join::Joined<(#child_struct, ()), ()>,
                             #child_struct,
                         >
                         where
-                            #child_struct: ::fabrique::BelongsTo<Self, Alias>,
+                            #child_struct: ::fabrique::Query<DB> + ::fabrique::BelongsTo<Self, Alias>,
                             <#child_struct as ::fabrique::BelongsTo<Self, Alias>>::ForeignKeyColumn: ::fabrique::database::Column<#child_struct>,
                             for<'q> <<#child_struct as ::fabrique::BelongsTo<Self, Alias>>::ForeignKeyColumn as ::fabrique::database::Column<
                                 #child_struct,
-                            >>::DbType: ::sqlx::Encode<'q, <#child_struct as ::fabrique::database::DatabaseAware>::Database>
-                                + ::sqlx::Type<<#child_struct as ::fabrique::database::DatabaseAware>::Database>,
+                            >>::DbType: ::sqlx::Encode<'q, DB>
+                                + ::sqlx::Type<DB>,
                             <Self as ::fabrique::Model>::PrimaryKey: Into<
                                 <<#child_struct as ::fabrique::BelongsTo<Self, Alias>>::ForeignKeyColumn as ::fabrique::database::Column<
                                     #child_struct,
@@ -65,7 +66,7 @@ impl<'a> HasManyCodegen<'a> {
                         {
                             let pk = <Self as ::fabrique::Model>::primary_key(self);
                             let fk = <#child_struct as ::fabrique::BelongsTo<Self, Alias>>::foreign_key_column();
-                            <#child_struct as ::fabrique::Query>::query()
+                            <#child_struct as ::fabrique::Query<DB>>::query()
                                 .select_as::<#child_struct, _>()
                                 .r#where(fk, "=", pk)
                         }
@@ -74,17 +75,31 @@ impl<'a> HasManyCodegen<'a> {
             } else {
                 quote! {
                     impl #parent_struct {
-                        pub fn #method_name(&self) -> ::fabrique::model::QueryBuilder<
+                        pub fn #method_name<DB: ::fabrique::Dialect>(&self) -> ::fabrique::model::QueryBuilder<
+                            DB,
                             ::fabrique::model::Building<
-                                <#child_struct as ::fabrique::database::DatabaseAware>::Database,
+                                DB,
                                 ::fabrique::sql::Filtered<::fabrique::sql::Selected>
                             >,
                             ::fabrique::model::join::Joined<(#child_struct, ()), ()>,
                             #child_struct
-                        > {
+                        >
+                        where
+                            #child_struct: ::fabrique::Query<DB> + ::fabrique::BelongsTo<Self>,
+                            <#child_struct as ::fabrique::BelongsTo<Self>>::ForeignKeyColumn: ::fabrique::database::Column<#child_struct>,
+                            for<'q> <<#child_struct as ::fabrique::BelongsTo<Self>>::ForeignKeyColumn as ::fabrique::database::Column<
+                                #child_struct,
+                            >>::DbType: ::sqlx::Encode<'q, DB>
+                                + ::sqlx::Type<DB>,
+                            <Self as ::fabrique::Model>::PrimaryKey: Into<
+                                <<#child_struct as ::fabrique::BelongsTo<Self>>::ForeignKeyColumn as ::fabrique::database::Column<
+                                    #child_struct,
+                                >>::Type,
+                            >,
+                        {
                             let pk = <Self as ::fabrique::Model>::primary_key(self);
                             let fk = <#child_struct as ::fabrique::BelongsTo<Self>>::foreign_key_column();
-                            <#child_struct as ::fabrique::Query>::query()
+                            <#child_struct as ::fabrique::Query<DB>>::query()
                                 .select_as::<#child_struct, _>()
                                 .r#where(fk, "=", pk)
                         }
@@ -129,23 +144,24 @@ mod tests {
             result.to_string(),
             quote! {
                 impl User {
-                    pub fn messages<Alias>(
+                    pub fn messages<DB: ::fabrique::Dialect, Alias>(
                         &self,
                     ) -> ::fabrique::model::QueryBuilder<
+                        DB,
                         ::fabrique::model::Building<
-                            <Message as ::fabrique::database::DatabaseAware>::Database,
+                            DB,
                             ::fabrique::sql::Filtered<::fabrique::sql::Selected>,
                         >,
                         ::fabrique::model::join::Joined<(Message, ()), ()>,
                         Message,
                     >
                     where
-                        Message: ::fabrique::BelongsTo<Self, Alias>,
+                        Message: ::fabrique::Query<DB> + ::fabrique::BelongsTo<Self, Alias>,
                         <Message as ::fabrique::BelongsTo<Self, Alias>>::ForeignKeyColumn: ::fabrique::database::Column<Message>,
                         for<'q> <<Message as ::fabrique::BelongsTo<Self, Alias>>::ForeignKeyColumn as ::fabrique::database::Column<
                             Message,
-                        >>::DbType: ::sqlx::Encode<'q, <Message as ::fabrique::database::DatabaseAware>::Database>
-                            + ::sqlx::Type<<Message as ::fabrique::database::DatabaseAware>::Database>,
+                        >>::DbType: ::sqlx::Encode<'q, DB>
+                            + ::sqlx::Type<DB>,
                         <Self as ::fabrique::Model>::PrimaryKey: Into<
                             <<Message as ::fabrique::BelongsTo<Self, Alias>>::ForeignKeyColumn as ::fabrique::database::Column<
                                 Message,
@@ -154,7 +170,7 @@ mod tests {
                     {
                         let pk = <Self as ::fabrique::Model>::primary_key(self);
                         let fk = <Message as ::fabrique::BelongsTo<Self, Alias>>::foreign_key_column();
-                        <Message as ::fabrique::Query>::query()
+                        <Message as ::fabrique::Query<DB>>::query()
                             .select_as::<Message, _>()
                             .r#where(fk, "=", pk)
                     }
@@ -184,17 +200,31 @@ mod tests {
             result.to_string(),
             quote! {
                 impl User {
-                    pub fn orders(&self) -> ::fabrique::model::QueryBuilder<
+                    pub fn orders<DB: ::fabrique::Dialect>(&self) -> ::fabrique::model::QueryBuilder<
+                        DB,
                         ::fabrique::model::Building<
-                            <Order as ::fabrique::database::DatabaseAware>::Database,
+                            DB,
                             ::fabrique::sql::Filtered<::fabrique::sql::Selected>
                         >,
                         ::fabrique::model::join::Joined<(Order, ()), ()>,
                         Order
-                    > {
+                    >
+                    where
+                        Order: ::fabrique::Query<DB> + ::fabrique::BelongsTo<Self>,
+                        <Order as ::fabrique::BelongsTo<Self>>::ForeignKeyColumn: ::fabrique::database::Column<Order>,
+                        for<'q> <<Order as ::fabrique::BelongsTo<Self>>::ForeignKeyColumn as ::fabrique::database::Column<
+                            Order,
+                        >>::DbType: ::sqlx::Encode<'q, DB>
+                            + ::sqlx::Type<DB>,
+                        <Self as ::fabrique::Model>::PrimaryKey: Into<
+                            <<Order as ::fabrique::BelongsTo<Self>>::ForeignKeyColumn as ::fabrique::database::Column<
+                                Order,
+                            >>::Type,
+                        >,
+                    {
                         let pk = <Self as ::fabrique::Model>::primary_key(self);
                         let fk = <Order as ::fabrique::BelongsTo<Self>>::foreign_key_column();
-                        <Order as ::fabrique::Query>::query()
+                        <Order as ::fabrique::Query<DB>>::query()
                             .select_as::<Order, _>()
                             .r#where(fk, "=", pk)
                     }

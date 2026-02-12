@@ -1,4 +1,3 @@
-use crate::database::DatabaseAware;
 use crate::model::Model;
 use std::marker::PhantomData;
 
@@ -66,23 +65,11 @@ where
 pub trait RootModel {
     /// The root model type at the innermost position of the HList.
     type Root: Model;
-
-    /// The database type of the root model.
-    type Database: sqlx::Database;
-
-    /// The error type of the root model.
-    type Error: From<sqlx::Error>;
 }
 
 // Base case: single element list - M is the root.
-impl<M: Model, Alias> RootModel for Joined<(M, Alias), ()>
-where
-    <M as DatabaseAware>::Database: sqlx::Database,
-    <M as DatabaseAware>::Error: From<sqlx::Error>,
-{
+impl<M: Model, Alias> RootModel for Joined<(M, Alias), ()> {
     type Root = M;
-    type Database = <M as DatabaseAware>::Database;
-    type Error = <M as DatabaseAware>::Error;
 }
 
 // Recursive case: dig into tail to find the root.
@@ -91,6 +78,4 @@ where
     Tail: RootModel,
 {
     type Root = Tail::Root;
-    type Database = Tail::Database;
-    type Error = Tail::Error;
 }

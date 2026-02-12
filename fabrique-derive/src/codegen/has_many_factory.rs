@@ -83,24 +83,33 @@ impl<'a> HasManyFactoryCodegen<'a> {
         method_name: &Ident,
     ) -> TokenStream {
         quote! {
-            #[derive(Clone)]
-            struct #pending_struct {
-                factory: #child_factory,
+            struct #pending_struct<DB: ::fabrique::Dialect> {
+                factory: #child_factory<DB>,
                 count: usize,
             }
 
-            impl fabrique::DeferredFactory<
+            impl<DB: ::fabrique::Dialect> Clone for #pending_struct<DB> {
+                fn clone(&self) -> Self {
+                    Self { factory: self.factory.clone(), count: self.count }
+                }
+            }
+
+            impl<DB: ::fabrique::Dialect> fabrique::DeferredFactory<
                 <#parent_struct as fabrique::Model>::PrimaryKey,
-                <#parent_struct as fabrique::database::DatabaseAware>::Database,
-            > for #pending_struct {
+                DB,
+            > for #pending_struct<DB>
+            where
+                #child_factory<DB>: fabrique::SetForeignKey<#parent_struct> + fabrique::Factory<DB>,
+                for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Acquire<'c, Database = DB>,
+            {
                 fn create<'a>(
                     &'a self,
                     parent_pk: <#parent_struct as fabrique::Model>::PrimaryKey,
-                    conn: &'a mut <<#parent_struct as fabrique::database::DatabaseAware>::Database as ::sqlx::Database>::Connection,
+                    conn: &'a mut <DB as ::sqlx::Database>::Connection,
                 ) -> ::std::pin::Pin<Box<dyn ::std::future::Future<Output = Result<(), fabrique::Error>> + Send + 'a>> {
                     Box::pin(async move {
                         for _ in 0..self.count {
-                            let child_factory = <#child_factory as fabrique::SetForeignKey<#parent_struct>>::set_foreign_key(
+                            let child_factory = <#child_factory<DB> as fabrique::SetForeignKey<#parent_struct>>::set_foreign_key(
                                 self.factory.clone(),
                                 parent_pk.clone(),
                             );
@@ -111,8 +120,12 @@ impl<'a> HasManyFactoryCodegen<'a> {
                 }
             }
 
-            impl #parent_factory {
-                pub fn #method_name(mut self, factory: #child_factory, count: usize) -> Self {
+            impl<DB: ::fabrique::Dialect> #parent_factory<DB> {
+                pub fn #method_name(mut self, factory: #child_factory<DB>, count: usize) -> Self
+                where
+                    #child_factory<DB>: fabrique::SetForeignKey<#parent_struct> + fabrique::Factory<DB>,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Acquire<'c, Database = DB>,
+                {
                     self.children.push(::std::sync::Arc::new(#pending_struct { factory, count }));
                     self
                 }
@@ -129,30 +142,36 @@ impl<'a> HasManyFactoryCodegen<'a> {
         method_name: &Ident,
     ) -> TokenStream {
         quote! {
-            #[derive(Clone)]
-            struct #pending_struct<Alias> {
-                factory: #child_factory,
+            struct #pending_struct<DB: ::fabrique::Dialect, Alias> {
+                factory: #child_factory<DB>,
                 count: usize,
                 _alias: ::std::marker::PhantomData<Alias>,
             }
 
-            impl<Alias> fabrique::DeferredFactory<
+            impl<DB: ::fabrique::Dialect, Alias> Clone for #pending_struct<DB, Alias> {
+                fn clone(&self) -> Self {
+                    Self { factory: self.factory.clone(), count: self.count, _alias: ::std::marker::PhantomData }
+                }
+            }
+
+            impl<DB: ::fabrique::Dialect, Alias> fabrique::DeferredFactory<
                 <#parent_struct as fabrique::Model>::PrimaryKey,
-                <#parent_struct as fabrique::database::DatabaseAware>::Database,
-            > for #pending_struct<Alias>
+                DB,
+            > for #pending_struct<DB, Alias>
             where
                 #child_struct: fabrique::BelongsTo<#parent_struct, Alias>,
-                #child_factory: fabrique::SetForeignKey<#parent_struct, Alias>,
+                #child_factory<DB>: fabrique::SetForeignKey<#parent_struct, Alias> + fabrique::Factory<DB>,
                 Alias: Send + Sync + Clone + 'static,
+                for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Acquire<'c, Database = DB>,
             {
                 fn create<'a>(
                     &'a self,
                     parent_pk: <#parent_struct as fabrique::Model>::PrimaryKey,
-                    conn: &'a mut <<#parent_struct as fabrique::database::DatabaseAware>::Database as ::sqlx::Database>::Connection,
+                    conn: &'a mut <DB as ::sqlx::Database>::Connection,
                 ) -> ::std::pin::Pin<Box<dyn ::std::future::Future<Output = Result<(), fabrique::Error>> + Send + 'a>> {
                     Box::pin(async move {
                         for _ in 0..self.count {
-                            let child_factory = <#child_factory as fabrique::SetForeignKey<#parent_struct, Alias>>::set_foreign_key(
+                            let child_factory = <#child_factory<DB> as fabrique::SetForeignKey<#parent_struct, Alias>>::set_foreign_key(
                                 self.factory.clone(),
                                 parent_pk.clone(),
                             );
@@ -163,12 +182,13 @@ impl<'a> HasManyFactoryCodegen<'a> {
                 }
             }
 
-            impl #parent_factory {
-                pub fn #method_name<Alias>(mut self, factory: #child_factory, count: usize) -> Self
+            impl<DB: ::fabrique::Dialect> #parent_factory<DB> {
+                pub fn #method_name<Alias>(mut self, factory: #child_factory<DB>, count: usize) -> Self
                 where
                     #child_struct: fabrique::BelongsTo<#parent_struct, Alias>,
-                    #child_factory: fabrique::SetForeignKey<#parent_struct, Alias>,
+                    #child_factory<DB>: fabrique::SetForeignKey<#parent_struct, Alias> + fabrique::Factory<DB>,
                     Alias: Send + Sync + Clone + 'static,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Acquire<'c, Database = DB>,
                 {
                     self.children.push(::std::sync::Arc::new(#pending_struct {
                         factory,
@@ -207,24 +227,33 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                #[derive(Clone)]
-                struct __DeferredOrderForUser {
-                    factory: OrderFactory,
+                struct __DeferredOrderForUser<DB: ::fabrique::Dialect> {
+                    factory: OrderFactory<DB>,
                     count: usize,
                 }
 
-                impl fabrique::DeferredFactory<
+                impl<DB: ::fabrique::Dialect> Clone for __DeferredOrderForUser<DB> {
+                    fn clone(&self) -> Self {
+                        Self { factory: self.factory.clone(), count: self.count }
+                    }
+                }
+
+                impl<DB: ::fabrique::Dialect> fabrique::DeferredFactory<
                     <User as fabrique::Model>::PrimaryKey,
-                    <User as fabrique::database::DatabaseAware>::Database,
-                > for __DeferredOrderForUser {
+                    DB,
+                > for __DeferredOrderForUser<DB>
+                where
+                    OrderFactory<DB>: fabrique::SetForeignKey<User> + fabrique::Factory<DB>,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Acquire<'c, Database = DB>,
+                {
                     fn create<'a>(
                         &'a self,
                         parent_pk: <User as fabrique::Model>::PrimaryKey,
-                        conn: &'a mut <<User as fabrique::database::DatabaseAware>::Database as ::sqlx::Database>::Connection,
+                        conn: &'a mut <DB as ::sqlx::Database>::Connection,
                     ) -> ::std::pin::Pin<Box<dyn ::std::future::Future<Output = Result<(), fabrique::Error>> + Send + 'a>> {
                         Box::pin(async move {
                             for _ in 0..self.count {
-                                let child_factory = <OrderFactory as fabrique::SetForeignKey<User>>::set_foreign_key(
+                                let child_factory = <OrderFactory<DB> as fabrique::SetForeignKey<User>>::set_foreign_key(
                                     self.factory.clone(),
                                     parent_pk.clone(),
                                 );
@@ -235,8 +264,12 @@ mod tests {
                     }
                 }
 
-                impl UserFactory {
-                    pub fn has_orders(mut self, factory: OrderFactory, count: usize) -> Self {
+                impl<DB: ::fabrique::Dialect> UserFactory<DB> {
+                    pub fn has_orders(mut self, factory: OrderFactory<DB>, count: usize) -> Self
+                    where
+                        OrderFactory<DB>: fabrique::SetForeignKey<User> + fabrique::Factory<DB>,
+                        for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Acquire<'c, Database = DB>,
+                    {
                         self.children.push(::std::sync::Arc::new(__DeferredOrderForUser { factory, count }));
                         self
                     }
@@ -268,30 +301,36 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                #[derive(Clone)]
-                struct __DeferredMessageForUser<Alias> {
-                    factory: MessageFactory,
+                struct __DeferredMessageForUser<DB: ::fabrique::Dialect, Alias> {
+                    factory: MessageFactory<DB>,
                     count: usize,
                     _alias: ::std::marker::PhantomData<Alias>,
                 }
 
-                impl<Alias> fabrique::DeferredFactory<
+                impl<DB: ::fabrique::Dialect, Alias> Clone for __DeferredMessageForUser<DB, Alias> {
+                    fn clone(&self) -> Self {
+                        Self { factory: self.factory.clone(), count: self.count, _alias: ::std::marker::PhantomData }
+                    }
+                }
+
+                impl<DB: ::fabrique::Dialect, Alias> fabrique::DeferredFactory<
                     <User as fabrique::Model>::PrimaryKey,
-                    <User as fabrique::database::DatabaseAware>::Database,
-                > for __DeferredMessageForUser<Alias>
+                    DB,
+                > for __DeferredMessageForUser<DB, Alias>
                 where
                     Message: fabrique::BelongsTo<User, Alias>,
-                    MessageFactory: fabrique::SetForeignKey<User, Alias>,
+                    MessageFactory<DB>: fabrique::SetForeignKey<User, Alias> + fabrique::Factory<DB>,
                     Alias: Send + Sync + Clone + 'static,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Acquire<'c, Database = DB>,
                 {
                     fn create<'a>(
                         &'a self,
                         parent_pk: <User as fabrique::Model>::PrimaryKey,
-                        conn: &'a mut <<User as fabrique::database::DatabaseAware>::Database as ::sqlx::Database>::Connection,
+                        conn: &'a mut <DB as ::sqlx::Database>::Connection,
                     ) -> ::std::pin::Pin<Box<dyn ::std::future::Future<Output = Result<(), fabrique::Error>> + Send + 'a>> {
                         Box::pin(async move {
                             for _ in 0..self.count {
-                                let child_factory = <MessageFactory as fabrique::SetForeignKey<User, Alias>>::set_foreign_key(
+                                let child_factory = <MessageFactory<DB> as fabrique::SetForeignKey<User, Alias>>::set_foreign_key(
                                     self.factory.clone(),
                                     parent_pk.clone(),
                                 );
@@ -302,12 +341,13 @@ mod tests {
                     }
                 }
 
-                impl UserFactory {
-                    pub fn has_messages<Alias>(mut self, factory: MessageFactory, count: usize) -> Self
+                impl<DB: ::fabrique::Dialect> UserFactory<DB> {
+                    pub fn has_messages<Alias>(mut self, factory: MessageFactory<DB>, count: usize) -> Self
                     where
                         Message: fabrique::BelongsTo<User, Alias>,
-                        MessageFactory: fabrique::SetForeignKey<User, Alias>,
+                        MessageFactory<DB>: fabrique::SetForeignKey<User, Alias> + fabrique::Factory<DB>,
                         Alias: Send + Sync + Clone + 'static,
+                        for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Acquire<'c, Database = DB>,
                     {
                         self.children.push(::std::sync::Arc::new(__DeferredMessageForUser {
                             factory,

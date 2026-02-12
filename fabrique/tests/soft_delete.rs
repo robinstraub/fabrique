@@ -12,7 +12,7 @@ pub struct User {
 }
 
 #[fabrique_derive::test]
-async fn test_soft_delete(connection: Pool<Backend>) {
+async fn test_soft_delete<DB: Dialect>(connection: Pool<DB>) {
     // Create a new row
     let id = Uuid::new_v4();
     let user = User::factory()

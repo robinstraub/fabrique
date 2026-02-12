@@ -19,8 +19,22 @@ impl<'a> PersistCodegen<'a> {
         let fn_create = self.generate_fn_create();
         let fn_save = self.generate_fn_save();
 
+        // Per-column-field Encode/Type bounds (using `as` type when present)
+        let field_bounds = self.analysis.column_fields.iter().map(|f| {
+            let db_ty = f.r#as.as_ref().unwrap_or(&f.ty);
+            quote! {
+                for<'q> #db_ty: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>
+            }
+        });
+
         quote! {
-            impl ::fabrique::Persist for #base_struct_ident {
+            impl<DB: ::fabrique::Dialect> ::fabrique::Persist<DB> for #base_struct_ident
+            where
+                for<'r> #base_struct_ident: ::sqlx::FromRow<'r, <DB as ::sqlx::Database>::Row>,
+                #(#field_bounds,)*
+                for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Acquire<'c, Database = DB> + ::sqlx::Executor<'c, Database = DB>,
+                <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+            {
                 #fn_create
 
                 #fn_save
@@ -28,104 +42,62 @@ impl<'a> PersistCodegen<'a> {
         }
     }
 
-    /// Generates the `create()` method using the Layer 2 query builder.
+    /// Generates the `create()` method using execute + find (universal).
     fn generate_fn_create(&self) -> TokenStream {
-        // Generate .set() calls for each column field
         let set_calls = self.analysis.column_fields.iter().map(|field| {
             let const_name = &field.const_column_name;
             let ident = &field.ident;
             quote! { .set(Self::#const_name, self.#ident) }
         });
 
-        #[cfg(any(feature = "postgres", feature = "sqlite"))]
-        return quote! {
-            fn create<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+        quote! {
+            fn create<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<Self, ::fabrique::Error>> + Send + 'e
             where
-                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
             {
                 async move {
                     let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                    <Self as ::fabrique::Query>::insert()
-                        #(#set_calls)*
-                        .returning()
-                        .first_or_fail(&mut *conn)
-                        .await
-                        .map_err(Into::into)
-                }
-            }
-        };
-
-        #[cfg(feature = "mysql")]
-        return quote! {
-            fn create<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
-            where
-                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-            {
-                async move {
-                    let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                    let pk = self.primary_key();
-                    <Self as ::fabrique::Query>::insert()
+                    let pk = <Self as ::fabrique::Model>::primary_key(&self);
+                    <Self as ::fabrique::Query<DB>>::insert()
                         #(#set_calls)*
                         .execute(&mut *conn)
                         .await?;
-                    <Self as ::fabrique::Query>::find(&mut *conn, pk)
+                    <Self as ::fabrique::Query<DB>>::find(&mut *conn, pk)
                         .await
                         .map_err(Into::into)
                 }
             }
-        };
+        }
     }
 
-    /// Generates the `save()` method using the Layer 2 query builder.
+    /// Generates the `save()` method using execute + find (universal).
     fn generate_fn_save(&self) -> TokenStream {
-        // Generate .set() calls for each column field
         let set_calls = self.analysis.column_fields.iter().map(|field| {
             let const_name = &field.const_column_name;
             let ident = &field.ident;
             quote! { .set(Self::#const_name, self.#ident) }
         });
 
-        #[cfg(any(feature = "postgres", feature = "sqlite"))]
-        return quote! {
-            fn save<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+        quote! {
+            fn save<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<Self, ::fabrique::Error>> + Send + 'e
             where
-                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
             {
                 async move {
                     let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                    <Self as ::fabrique::Query>::insert()
-                        #(#set_calls)*
-                        .on_conflict()
-                        .do_update()
-                        .returning()
-                        .first_or_fail(&mut *conn)
-                        .await
-                        .map_err(Into::into)
-                }
-            }
-        };
-
-        #[cfg(feature = "mysql")]
-        return quote! {
-            fn save<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
-            where
-                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-            {
-                async move {
-                    let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                    let pk = self.primary_key();
-                    <Self as ::fabrique::Query>::insert()
+                    let pk = <Self as ::fabrique::Model>::primary_key(&self);
+                    <Self as ::fabrique::Query<DB>>::insert()
                         #(#set_calls)*
                         .on_conflict()
                         .do_update()
                         .execute(&mut *conn)
                         .await?;
-                    <Self as ::fabrique::Query>::find(&mut *conn, pk)
+                    <Self as ::fabrique::Query<DB>>::find(&mut *conn, pk)
                         .await
                         .map_err(Into::into)
                 }
             }
-        };
+        }
     }
 }
 
@@ -134,7 +106,6 @@ mod tests {
     use super::*;
     use syn::parse_quote;
 
-    #[cfg(any(feature = "postgres", feature = "sqlite"))]
     #[test]
     fn test_generate_persist_trait() {
         // Arrange
@@ -145,38 +116,48 @@ mod tests {
         // Act
         let result = codegen.generate();
 
-        // Assert — PostgreSQL and SQLite use RETURNING clause
+        // Assert
         assert_eq!(
             result.to_string(),
             quote! {
-                impl ::fabrique::Persist for Anvil {
-                    fn create<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+                impl<DB: ::fabrique::Dialect> ::fabrique::Persist<DB> for Anvil
+                where
+                    for<'r> Anvil: ::sqlx::FromRow<'r, <DB as ::sqlx::Database>::Row>,
+                    for<'q> String: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Acquire<'c, Database = DB> + ::sqlx::Executor<'c, Database = DB>,
+                    <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+                {
+                    fn create<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<Self, ::fabrique::Error>> + Send + 'e
                     where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                        A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            <Self as ::fabrique::Query>::insert()
+                            let pk = <Self as ::fabrique::Model>::primary_key(&self);
+                            <Self as ::fabrique::Query<DB>>::insert()
                                 .set(Self::ID, self.id)
-                                .returning()
-                                .first_or_fail(&mut *conn)
+                                .execute(&mut *conn)
+                                .await?;
+                            <Self as ::fabrique::Query<DB>>::find(&mut *conn, pk)
                                 .await
                                 .map_err(Into::into)
                         }
                     }
 
-                    fn save<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+                    fn save<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<Self, ::fabrique::Error>> + Send + 'e
                     where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                        A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            <Self as ::fabrique::Query>::insert()
+                            let pk = <Self as ::fabrique::Model>::primary_key(&self);
+                            <Self as ::fabrique::Query<DB>>::insert()
                                 .set(Self::ID, self.id)
                                 .on_conflict()
                                 .do_update()
-                                .returning()
-                                .first_or_fail(&mut *conn)
+                                .execute(&mut *conn)
+                                .await?;
+                            <Self as ::fabrique::Query<DB>>::find(&mut *conn, pk)
                                 .await
                                 .map_err(Into::into)
                         }
@@ -187,64 +168,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "mysql")]
-    #[test]
-    fn test_generate_persist_trait() {
-        // Arrange
-        let input = parse_quote! { struct Anvil { id: String } };
-        let analysis = Analysis::from(&input).unwrap();
-        let codegen = PersistCodegen::new(&analysis);
-
-        // Act
-        let result = codegen.generate();
-
-        // Assert — MySQL lacks RETURNING, so we INSERT then SELECT
-        assert_eq!(
-            result.to_string(),
-            quote! {
-                impl ::fabrique::Persist for Anvil {
-                    fn create<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
-                    where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            let pk = self.primary_key();
-                            <Self as ::fabrique::Query>::insert()
-                                .set(Self::ID, self.id)
-                                .execute(&mut *conn)
-                                .await?;
-                            <Self as ::fabrique::Query>::find(&mut *conn, pk)
-                                .await
-                                .map_err(Into::into)
-                        }
-                    }
-
-                    fn save<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
-                    where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            let pk = self.primary_key();
-                            <Self as ::fabrique::Query>::insert()
-                                .set(Self::ID, self.id)
-                                .on_conflict()
-                                .do_update()
-                                .execute(&mut *conn)
-                                .await?;
-                            <Self as ::fabrique::Query>::find(&mut *conn, pk)
-                                .await
-                                .map_err(Into::into)
-                        }
-                    }
-                }
-            }
-            .to_string()
-        );
-    }
-
-    #[cfg(any(feature = "postgres", feature = "sqlite"))]
     #[test]
     fn test_generate_persist_trait_with_type_conversion() {
         // Arrange - field with #[fabrique(as = "String")]

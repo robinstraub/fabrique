@@ -1,30 +1,6 @@
 #[cfg(any(feature = "postgres", feature = "sqlite", feature = "mysql"))]
 pub use sqlx::Pool;
 
-/// The active database backend, selected by the feature flag.
-///
-/// Resolves to `sqlx::Postgres`, `sqlx::Sqlite`, or `sqlx::MySql` depending
-/// on which feature is enabled. Features are mutually exclusive.
-#[cfg(feature = "postgres")]
-pub type Backend = sqlx::Postgres;
-#[cfg(feature = "sqlite")]
-pub type Backend = sqlx::Sqlite;
-#[cfg(feature = "mysql")]
-pub type Backend = sqlx::MySql;
-
-/// Database awareness for models.
-///
-/// This trait marks types that are aware of and connected to a database,
-/// providing the database type and error handling. Models extend this trait
-/// to add persistence operations.
-pub trait DatabaseAware: Sized {
-    /// The database connection type.
-    type Database;
-
-    /// The error type returned by database operations.
-    type Error;
-}
-
 /// Represents a type-safe column from a specific model.
 ///
 /// This trait is implemented by zero-sized types generated for each model
@@ -133,13 +109,11 @@ mod tests {
         let _ = Column::<()>::qualified_name(&nil);
     }
 
-    // These tests use Backend; gated to sqlite to avoid conflicts when testing
-    // with other backends (dev-dependencies would otherwise force sqlite).
     #[cfg(feature = "sqlite")]
     #[test]
     #[should_panic(expected = "Nil should never be used as a column type")]
     fn test_nil_type_info_panics() {
-        let _ = <Nil as sqlx::Type<Backend>>::type_info();
+        let _ = <Nil as sqlx::Type<sqlx::Sqlite>>::type_info();
     }
 
     #[cfg(feature = "sqlite")]
@@ -148,13 +122,11 @@ mod tests {
     fn test_nil_encode_panics() {
         use sqlx::Encode;
         let nil = Nil;
-        // Create a properly-sized buffer allocation
-        // We're just testing that the panic occurs before the buffer is actually used
         use std::mem::MaybeUninit;
-        let mut storage: MaybeUninit<<Backend as sqlx::Database>::ArgumentBuffer> =
+        let mut storage: MaybeUninit<<sqlx::Sqlite as sqlx::Database>::ArgumentBuffer> =
             MaybeUninit::uninit();
         let buf_ref = unsafe { storage.assume_init_mut() };
-        let _ = <Nil as Encode<Backend>>::encode_by_ref(&nil, buf_ref);
+        let _ = <Nil as Encode<sqlx::Sqlite>>::encode_by_ref(&nil, buf_ref);
     }
 
     #[test]

@@ -1,5 +1,4 @@
 use fabrique::prelude::*;
-use sqlx::Pool;
 use uuid::Uuid;
 
 #[derive(Debug, Factory, Model)]
@@ -39,7 +38,7 @@ pub struct OrderLine {
 }
 
 #[fabrique_derive::test]
-async fn test_composite_primary_key(connection: Pool<Backend>) {
+async fn test_composite_primary_key<DB: Dialect>(connection: Pool<DB>) {
     let user = User::factory()
         .id(Uuid::new_v4())
         .create(&connection)

@@ -17,7 +17,6 @@ testing = ["dep:fake", "fabrique-core/testing", "fabrique-derive/testing"]
 postgres = ["fabrique-core/postgres", "fabrique-derive/postgres"]
 mysql = ["fabrique-core/mysql", "fabrique-derive/mysql"]
 sqlite = ["fabrique-core/sqlite", "fabrique-derive/sqlite"]
-doctests = ["fabrique-core/doctests"]
 
 [dependencies]
 fabrique-core = { path = "../fabrique-core", version = "0.2.2" }

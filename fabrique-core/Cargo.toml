@@ -17,7 +17,6 @@ testing = []
 postgres = ["sqlx/postgres"]
 mysql = ["sqlx/mysql"]
 sqlite = ["sqlx/sqlite"]
-doctests = ["sqlite"]
 
 [dependencies]
 sqlx = { workspace = true }

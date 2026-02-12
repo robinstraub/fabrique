@@ -21,15 +21,19 @@
 //! you to chain more constraints onto the query and then finally retrieve the
 //! results of the query using the [get][QueryBuilder::get] method:
 //!
-//! ```rust,no_run
+//! ```rust
+//! # extern crate fabrique;
+//! # extern crate sqlx;
+//! # extern crate tokio;
+//! # extern crate uuid;
 //! # use fabrique::sql::QueryBuilder;
-//! # use sqlx::Pool;
-//! # use fabrique::Backend;
+//! # use fabrique::prelude::*;
 //! #
-//! # async fn example(connection: Pool<Backend>) -> Result<(), sqlx::Error> {
-//! let rows: Vec<(uuid::Uuid, String, i32)> = QueryBuilder::table("products")
+//! # #[fabrique::doctest]
+//! # async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
+//! let rows: Vec<(String, String, i32)> = QueryBuilder::table("products")
 //!     .select(&["id", "name", "price_cents"])
-//!     .get(&connection)
+//!     .get(&pool)
 //!     .await?;
 //! #     Ok(())
 //! # }
@@ -39,17 +43,21 @@
 //! You may access each column's value by using the [Row::get] method, which
 //! requires you to specify the expected type for each column:
 //!
-//! ```rust,no_run
+//! ```rust
+//! # extern crate fabrique;
+//! # extern crate sqlx;
+//! # extern crate tokio;
+//! # extern crate uuid;
 //! # use fabrique::sql::QueryBuilder;
-//! # use sqlx::Pool;
-//! # use fabrique::Backend;
+//! # use fabrique::prelude::*;
 //! #
-//! # async fn example(connection: Pool<Backend>) -> Result<(), sqlx::Error> {
-//! # let rows: Vec<(uuid::Uuid, String, i32)> = QueryBuilder::table("products")
-//! #     .select(&["id", "name", "price_cents"])
-//! #     .get(&connection)
-//! #     .await?;
-//! #
+//! # #[fabrique::doctest]
+//! # async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
+//! let rows: Vec<(String, String, i32)> = QueryBuilder::table("products")
+//!     .select(&["id", "name", "price_cents"])
+//!     .get(&pool)
+//!     .await?;
+//!
 //! for (id, name, price_cents) in rows {
 //!     println!("Product {} costs {} cents", name, price_cents);
 //! }
@@ -63,15 +71,19 @@
 //! the [QueryBuilder][QueryBuilder] [first][QueryBuilder::first] method. This
 //! method will return a single [Row][sqlx::Row] object:
 //!
-//! ```rust,no_run
+//! ```rust
+//! # extern crate fabrique;
+//! # extern crate sqlx;
+//! # extern crate tokio;
+//! # extern crate uuid;
 //! # use fabrique::sql::QueryBuilder;
-//! # use sqlx::Pool;
-//! # use fabrique::Backend;
+//! # use fabrique::prelude::*;
 //! #
-//! # async fn example(connection: Pool<Backend>) -> Result<(), sqlx::Error> {
-//! let row: Option<(uuid::Uuid, String, i32)> = QueryBuilder::table("products")
+//! # #[fabrique::doctest]
+//! # async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
+//! let row: Option<(String, String, i32)> = QueryBuilder::table("products")
 //!     .select(&["id", "name", "price_cents"])
-//!     .first(&connection)
+//!     .first(&pool)
 //!     .await?;
 //! #     Ok(())
 //! # }
@@ -81,15 +93,21 @@
 //! an error if no matching row is found, you may use the
 //! [first_or_fail][QueryBuilder::first_or_fail] method:
 //!
-//! ```rust,no_run
+//! ```rust
+//! # extern crate fabrique;
+//! # extern crate sqlx;
+//! # extern crate tokio;
+//! # extern crate uuid;
 //! # use fabrique::sql::QueryBuilder;
-//! # use sqlx::Pool;
-//! # use fabrique::Backend;
+//! # use fabrique::prelude::*;
 //! #
-//! # async fn example(connection: Pool<Backend>) -> Result<(), sqlx::Error> {
-//! let row: (uuid::Uuid, String, i32) = QueryBuilder::table("products")
+//! # #[fabrique::doctest]
+//! # async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
+//! # sqlx::query("INSERT INTO products (id, name, price_cents) VALUES ('550e8400-e29b-41d4-a716-446655440000', 'Widget', 1200)")
+//! #     .execute(&pool).await?;
+//! let row: (String, String, i32) = QueryBuilder::table("products")
 //!     .select(&["id", "name", "price_cents"])
-//!     .first_or_fail(&connection)
+//!     .first_or_fail(&pool)
 //!     .await?;
 //! #     Ok(())
 //! # }
