@@ -231,10 +231,10 @@ to specify which foreign key to follow:
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 # let user = User::factory().create(&pool).await?;
 // Get messages sent by this user
-let sent = user.messages::<Sender>().get(&pool).await?;
+let sent = user.messages::<_, Sender>().get(&pool).await?;
 
 // Get messages received by this user
-let received = user.messages::<Recipient>().get(&pool).await?;
+let received = user.messages::<_, Recipient>().get(&pool).await?;
 # Ok(())
 # }
 ```

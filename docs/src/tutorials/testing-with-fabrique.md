@@ -35,7 +35,7 @@ active backend:
 use fabrique::prelude::*;
 
 #[fabrique::test]
-async fn test_name(pool: Pool<Backend>) {
+async fn test_name(pool: Pool<sqlx::Sqlite>) {
     // pool is a fresh, migrated database
     // unique to this test — no interference
 }
@@ -78,7 +78,7 @@ pattern:
 # }
 #
 # pub async fn list_available_products(
-#     pool: &Pool<Backend>,
+#     pool: &Pool<sqlx::Sqlite>,
 # ) -> Result<Vec<Product>, fabrique::Error> {
 #     Product::query()
 #         .r#where(Product::IN_STOCK, "=", true)
@@ -87,7 +87,7 @@ pattern:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 // Arrange — two in stock, one out of stock
 Product::factory()
     .in_stock(true)
@@ -172,7 +172,7 @@ Create a user first, then create orders that reference it:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 let user = User::factory().create(&pool).await?;
 
 Order::factory()
@@ -185,7 +185,7 @@ Order::factory()
     .create(&pool).await?;
 
 // Both orders belong to the same user
-let orders = user.orders().get(&pool).await?;
+let orders = user.orders::<_>().get(&pool).await?;
 assert_eq!(orders.len(), 2);
 # Ok(())
 # }
@@ -224,7 +224,7 @@ parents.
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 let user = User::factory()
     .has_orders(
         Order::factory().status("pending".to_string()),
@@ -232,7 +232,7 @@ let user = User::factory()
     )
     .create(&pool).await?;
 
-let orders = user.orders().get(&pool).await?;
+let orders = user.orders::<_>().get(&pool).await?;
 assert_eq!(orders.len(), 3);
 assert!(orders.iter().all(|o| o.status == "pending"));
 # Ok(())
@@ -268,21 +268,21 @@ returns only pending orders:
 # }
 #
 # pub async fn get_user_pending_orders(
-#     pool: &Pool<Backend>,
+#     pool: &Pool<sqlx::Sqlite>,
 #     user_id: Uuid,
 # ) -> Result<Vec<Order>, fabrique::Error> {
 #     let user: User = User::query()
 #         .r#where(User::ID, "=", user_id)
 #         .first_or_fail(pool)
 #         .await?;
-#     user.orders()
+#     user.orders::<_>()
 #         .r#where(Order::STATUS, "=", "pending")
 #         .get(pool)
 #         .await
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 // Arrange — a user with mixed order statuses
 let user = User::factory()
     .has_orders(

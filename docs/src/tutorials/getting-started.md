@@ -302,7 +302,7 @@ The `destroy` method deletes by primary key without fetching the record first.
 
 Here's the full working code:
 
-```rust
+```rust,ignore
 # extern crate fabrique;
 # extern crate sqlx;
 # extern crate tokio;

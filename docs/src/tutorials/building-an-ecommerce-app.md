@@ -54,7 +54,7 @@ pub struct Product {
 
 // Get a user with all their orders
 pub async fn get_user_with_orders(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     user_id: Uuid,
 ) -> Result<(User, Vec<Order>), Box<dyn std::error::Error>> {
     unimplemented!()
@@ -62,7 +62,7 @@ pub async fn get_user_with_orders(
 
 // Create an order for a user with multiple products
 pub async fn create_order(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     user_id: Uuid,
     items: Vec<(Uuid, i32, i32)>, // (product_id, quantity, unit_price_cents)
 ) -> Result<Order, Box<dyn std::error::Error>> {
@@ -71,7 +71,7 @@ pub async fn create_order(
 
 // Get all products in an order
 pub async fn get_order_products(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     order_id: Uuid,
 ) -> Result<Vec<Product>, Box<dyn std::error::Error>> {
     unimplemented!()
@@ -276,14 +276,14 @@ This join table has:
 
 /// Fetches a user and all their orders.
 pub async fn get_user_with_orders(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     user_id: Uuid,
 ) -> Result<(User, Vec<Order>), fabrique::Error> {
     let user: User = User::query()
         .r#where(User::ID, "=", user_id)
         .first_or_fail(pool)
         .await?;
-    let orders = user.orders().get(pool).await?;
+    let orders = user.orders::<_>().get(pool).await?;
 
     Ok((user, orders))
 }
@@ -291,7 +291,7 @@ pub async fn get_user_with_orders(
 // --snip--
 
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 #     let user = User::factory().create(&pool).await?;
 #     let (_, orders) = get_user_with_orders(&pool, user.id).await?;
 #     assert_eq!(orders.len(), 0);
@@ -337,7 +337,7 @@ You can add more conditions:
 
 /// Fetches only the pending orders for a user.
 pub async fn get_user_pending_orders(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     user_id: Uuid,
 ) -> Result<Vec<Order>, fabrique::Error> {
     let user: User = User::query()
@@ -345,7 +345,7 @@ pub async fn get_user_pending_orders(
         .first_or_fail(pool)
         .await?;
 
-    user.orders()
+    user.orders::<_>()
         .r#where(Order::STATUS, "=", "pending")
         .get(pool)
         .await
@@ -354,7 +354,7 @@ pub async fn get_user_pending_orders(
 // --snip--
 
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 // Insert a user with 2 pending orders and 1 shipped order
 let user = User::factory()
     .has_orders(Order::factory().status("pending".to_string()), 2)
@@ -423,7 +423,7 @@ assert!(pending.iter().all(|o| o.status == "pending"));
 
 /// Creates an order for a user with the given items.
 pub async fn create_order(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     user_id: Uuid,
     items: Vec<(Uuid, i32, i32)>, // (product_id, quantity, unit_price_cents)
 ) -> Result<Order, fabrique::Error> {
@@ -452,7 +452,7 @@ pub async fn create_order(
 // --snip--
 
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 // Insert a user and two products in the database
 let user = User::factory().create(&pool).await?;
 let product_a = Product::factory().price_cents(1000).create(&pool).await?;
@@ -466,7 +466,7 @@ let order_items = vec![
 let order = create_order(&pool, user.id, order_items).await?;
 
 assert_eq!(order.status, "pending");
-let order_lines = order.order_lines().get(&pool).await?;
+let order_lines = order.order_lines::<_>().get(&pool).await?;
 assert_eq!(order_lines.len(), 2);
 # Ok(())
 # }
@@ -526,7 +526,7 @@ assert_eq!(order_lines.len(), 2);
 
 /// Returns all products in an order via order lines.
 pub async fn get_order_products(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     order_id: Uuid,
 ) -> Result<Vec<Product>, fabrique::Error> {
     Product::query()
@@ -539,7 +539,7 @@ pub async fn get_order_products(
 // --snip--
 
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 // Insert a user, a product, an order, and an order line
 let user = User::factory().create(&pool).await?;
 let product = Product::factory().create(&pool).await?;
@@ -627,17 +627,17 @@ pub struct OrderLine {
 
 /// Fetches a user and all their orders.
 pub async fn get_user_with_orders(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     user_id: Uuid,
 ) -> Result<(User, Vec<Order>), fabrique::Error> {
     let user = User::find(pool, user_id).await?;
-    let orders = user.orders().get(pool).await?;
+    let orders = user.orders::<_>().get(pool).await?;
     Ok((user, orders))
 }
 
 /// Creates an order for a user with the given items.
 pub async fn create_order(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     user_id: Uuid,
     items: Vec<(Uuid, i32, i32)>,
 ) -> Result<Order, fabrique::Error> {
@@ -663,7 +663,7 @@ pub async fn create_order(
 
 /// Returns all products in an order via order lines.
 pub async fn get_order_products(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     order_id: Uuid,
 ) -> Result<Vec<Product>, fabrique::Error> {
     Product::query()
@@ -674,7 +674,7 @@ pub async fn get_order_products(
 }
 
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 // Insert a user and two products in the database
 let user = User::factory()
     .name("Wile E. Coyote".to_string())
