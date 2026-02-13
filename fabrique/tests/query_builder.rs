@@ -881,7 +881,6 @@ mod updated {
         assert!(result.is_ok());
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[sqlx::test(migrations = "../migrations")]
     async fn returning_transitions_to_returned(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
@@ -922,7 +921,6 @@ mod filtered_updated {
         assert!(result.is_ok());
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[sqlx::test(migrations = "../migrations")]
     async fn returning_transitions_to_returned(pool: Pool<Sqlite>) {
         let product = Product::factory().create(&pool).await.expect("setup");
@@ -1021,7 +1019,6 @@ mod inserted {
         assert!(result.is_ok());
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[sqlx::test(migrations = "../migrations")]
     async fn returning_transitions_to_returned(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::insert()
@@ -1056,7 +1053,6 @@ mod inserted {
 mod conflicted {
     use super::*;
 
-    #[cfg(not(feature = "mysql"))]
     #[sqlx::test(migrations = "../migrations")]
     async fn do_update_transitions_to_upserted(pool: Pool<Sqlite>) {
         let id = Uuid::new_v4();
@@ -1117,7 +1113,6 @@ mod conflicted {
 mod upserted {
     use super::*;
 
-    #[cfg(not(feature = "mysql"))]
     #[sqlx::test(migrations = "../migrations")]
     async fn returning_transitions_to_returned(pool: Pool<Sqlite>) {
         let id = Uuid::new_v4();
@@ -1179,7 +1174,6 @@ mod upserted {
 // Returned
 // ============================================================================
 
-#[cfg(not(feature = "mysql"))]
 mod returned {
     use super::*;
 
