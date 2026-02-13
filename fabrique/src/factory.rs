@@ -9,27 +9,31 @@
 //! Use `Model::factory()` to get a factory, configure it with setter methods,
 //! then call `create()` to persist the instance:
 //!
-//!```rust,no_run
+//! ```rust
+//! # extern crate fabrique;
+//! # extern crate sqlx;
+//! # extern crate tokio;
+//! # extern crate uuid;
 //! # use fabrique::prelude::*;
-//! # use sqlx::Pool;
 //! # use uuid::Uuid;
 //! #
-//! #[derive(Factory, Model)]
+//! #[derive(Clone, Factory, Model)]
 //! pub struct Product {
 //!     id: Uuid,
 //!     name: String,
 //!     price_cents: i32,
 //! }
 //!
-//! # async fn example(connection: Pool<Backend>) -> Result<(), fabrique::Error> {
+//! # #[fabrique::doctest]
+//! # async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 //! // Create with defaults
-//! let product = Product::factory().create(&connection).await?;
+//! let product = Product::factory().create(&pool).await?;
 //!
 //! // Override specific fields
 //! let expensive_product = Product::factory()
 //!     .name("Anvil 3000".to_owned())
 //!     .price_cents(9999)
-//!     .create(&connection)
+//!     .create(&pool)
 //!     .await?;
 //! #     Ok(())
 //! # }
@@ -41,35 +45,41 @@
 //! The method accepts either a factory (creates a new parent) or an existing
 //! model instance (uses its primary key):
 //!
-//!```rust,no_run
+//! ```rust
+//! # extern crate fabrique;
+//! # extern crate sqlx;
+//! # extern crate tokio;
+//! # extern crate uuid;
 //! # use fabrique::prelude::*;
-//! # use sqlx::Pool;
 //! # use uuid::Uuid;
-//!
-//! # #[derive(Factory, Model)]
+//! #
+//! # #[derive(Clone, Factory, Model)]
 //! # pub struct User {
 //! #     id: Uuid,
+//! #     name: String,
+//! #     email: String,
 //! # }
 //! #
-//! #[derive(Factory, Model)]
+//! #[derive(Clone, Factory, Model)]
 //! pub struct Order {
 //!     id: Uuid,
 //!     #[fabrique(belongs_to = "User")]
 //!     user_id: Uuid,
 //! }
 //!
-//! # async fn example(connection: Pool<Backend>) -> Result<(), fabrique::Error> {
+//! # #[fabrique::doctest]
+//! # async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 //! // Creates a new User, then creates an Order linked to it
 //! Order::factory()
 //!     .for_user(User::factory())
-//!     .create(&connection)
+//!     .create(&pool)
 //!     .await?;
 //!
 //! // Or use an existing user
-//! let user = User::factory().create(&connection).await?;
+//! let user = User::factory().create(&pool).await?;
 //! Order::factory()
 //!     .for_user(user)
-//!     .create(&connection)
+//!     .create(&pool)
 //!     .await?;
 //! #     Ok(())
 //! # }
@@ -82,28 +92,34 @@
 //! declaration — no `HasMany<T>` field is needed on the parent.
 //! Specify a child factory and the number of instances to create:
 //!
-//!```rust,no_run
+//! ```rust
+//! # extern crate fabrique;
+//! # extern crate sqlx;
+//! # extern crate tokio;
+//! # extern crate uuid;
 //! # use fabrique::prelude::*;
-//! # use sqlx::Pool;
 //! # use uuid::Uuid;
 //!
-//! #[derive(Factory, Model)]
-//! pub struct Customer {
+//! #[derive(Clone, Factory, Model)]
+//! pub struct User {
 //!     id: Uuid,
+//!     name: String,
+//!     email: String,
 //! }
 //!
-//! #[derive(Default, Factory, Model)]
+//! #[derive(Clone, Factory, Model)]
 //! pub struct Order {
 //!     id: Uuid,
-//!     #[fabrique(belongs_to = "Customer")]
-//!     customer_id: Uuid,
+//!     #[fabrique(belongs_to = "User")]
+//!     user_id: Uuid,
 //! }
 //!
-//! # async fn example(connection: Pool<Backend>) -> Result<(), fabrique::Error> {
-//! // Creates a Customer, then creates 3 Orders linked to it
-//! Customer::factory()
+//! # #[fabrique::doctest]
+//! # async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
+//! // Creates a User, then creates 3 Orders linked to it
+//! User::factory()
 //!     .has_orders(Order::factory(), 3)
-//!     .create(&connection)
+//!     .create(&pool)
 //!     .await?;
 //! #     Ok(())
 //! # }
@@ -114,35 +130,52 @@
 //! For many-to-many relationships, create instances through the join model
 //! using `has_<join_model>()`:
 //!
-//!```rust,no_run
+//! ```rust
+//! # extern crate fabrique;
+//! # extern crate sqlx;
+//! # extern crate tokio;
+//! # extern crate uuid;
 //! # use fabrique::prelude::*;
-//! # use sqlx::Pool;
 //! # use uuid::Uuid;
 //!
-//! #[derive(Factory, Model)]
+//! # #[derive(Clone, Factory, Model)]
+//! # pub struct User {
+//! #     id: Uuid,
+//! #     name: String,
+//! #     email: String,
+//! # }
+//! #
+//! #[derive(Clone, Factory, Model)]
 //! pub struct Order {
 //!     id: Uuid,
+//!     #[fabrique(belongs_to = "User")]
+//!     user_id: Uuid,
 //! }
 //!
-//! #[derive(Default, Factory, Model)]
+//! #[derive(Clone, Factory, Model)]
 //! pub struct Product {
 //!     id: Uuid,
+//!     name: String,
+//!     price_cents: i32,
 //! }
 //!
-//! #[derive(Default, Factory, Model)]
+//! #[derive(Clone, Factory, Model)]
 //! #[fabrique(table = "order_lines")]
 //! pub struct OrderLine {
 //!     #[fabrique(primary_key, belongs_to = "Order")]
 //!     order_id: Uuid,
 //!     #[fabrique(primary_key, belongs_to = "Product")]
 //!     product_id: Uuid,
+//!     quantity: i32,
+//!     unit_price_cents: i32,
 //! }
 //!
-//! # async fn example(connection: Pool<Backend>) -> Result<(), fabrique::Error> {
+//! # #[fabrique::doctest]
+//! # async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 //! // Creates an Order, then 2 OrderLines (each auto-creating a Product)
 //! Order::factory()
 //!     .has_order_lines(OrderLine::factory(), 2)
-//!     .create(&connection)
+//!     .create(&pool)
 //!     .await?;
 //! #     Ok(())
 //! # }

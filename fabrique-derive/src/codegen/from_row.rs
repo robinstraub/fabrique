@@ -15,10 +15,19 @@ impl<'a> FromRowCodegen<'a> {
 
     /// Generates the `FromRow` trait implementation.
     ///
-    /// This implementation handles automatic type conversions for fields with
-    /// the `as` attribute.
+    /// This implementation is generic over any sqlx Row type, allowing models
+    /// to work with any database backend that has the `Dialect` trait
+    /// implemented.
     pub fn generate(self) -> TokenStream {
         let base_struct_ident = &self.analysis.ident;
+
+        // Generate where-clause bounds for each field's decode type
+        let field_bounds = self.analysis.column_fields.iter().map(|field| {
+            let decode_ty = field.r#as.as_ref().unwrap_or(&field.ty);
+            quote! {
+                #decode_ty: ::sqlx::decode::Decode<'r, R::Database> + ::sqlx::Type<R::Database>
+            }
+        });
 
         // Generate column field assignments
         let field_assignments = self.analysis.column_fields.iter().map(|field| {
@@ -56,8 +65,12 @@ impl<'a> FromRowCodegen<'a> {
         });
 
         quote! {
-            impl<'r> ::sqlx::FromRow<'r, <::fabrique::Backend as ::sqlx::Database>::Row> for #base_struct_ident {
-                fn from_row(row: &'r <::fabrique::Backend as ::sqlx::Database>::Row) -> ::sqlx::Result<Self> {
+            impl<'r, R: ::sqlx::Row> ::sqlx::FromRow<'r, R> for #base_struct_ident
+            where
+                &'r str: ::sqlx::ColumnIndex<R>,
+                #(#field_bounds,)*
+            {
+                fn from_row(row: &'r R) -> ::sqlx::Result<Self> {
                     use ::sqlx::Row;
                     Ok(Self {
                         #(#field_assignments),*
@@ -75,20 +88,20 @@ mod tests {
 
     #[test]
     fn test_generate_from_row() {
-        // Arrange
         let input = parse_quote! { struct Anvil { id: String } };
         let analysis = Analysis::from(&input).unwrap();
         let codegen = FromRowCodegen::new(&analysis);
-
-        // Act
         let result = codegen.generate();
 
-        // Assert
         assert_eq!(
             result.to_string(),
             quote! {
-                impl<'r> ::sqlx::FromRow<'r, <::fabrique::Backend as ::sqlx::Database>::Row> for Anvil {
-                    fn from_row(row: &'r <::fabrique::Backend as ::sqlx::Database>::Row) -> ::sqlx::Result<Self> {
+                impl<'r, R: ::sqlx::Row> ::sqlx::FromRow<'r, R> for Anvil
+                where
+                    &'r str: ::sqlx::ColumnIndex<R>,
+                    String: ::sqlx::decode::Decode<'r, R::Database> + ::sqlx::Type<R::Database>,
+                {
+                    fn from_row(row: &'r R) -> ::sqlx::Result<Self> {
                         use ::sqlx::Row;
                         Ok(Self {
                             id: row.try_get("id")?
@@ -102,7 +115,6 @@ mod tests {
 
     #[test]
     fn test_generate_from_row_with_type_conversion() {
-        // Arrange - field with #[fabrique(as = "String")]
         let input = parse_quote! {
             struct Account {
                 id: String,
@@ -112,19 +124,40 @@ mod tests {
         };
         let analysis = Analysis::from(&input).unwrap();
         let codegen = FromRowCodegen::new(&analysis);
-
-        // Act
         let result = codegen.generate();
 
-        // Assert - should generate try_from conversion code
-        let result_str = result.to_string();
-        assert!(
-            result_str.contains("try_from"),
-            "should use try_from for type conversion"
-        );
-        assert!(
-            result_str.contains("Conversion"),
-            "should handle conversion errors"
+        assert_eq!(
+            result.to_string(),
+            quote! {
+                impl<'r, R: ::sqlx::Row> ::sqlx::FromRow<'r, R> for Account
+                where
+                    &'r str: ::sqlx::ColumnIndex<R>,
+                    String: ::sqlx::decode::Decode<'r, R::Database> + ::sqlx::Type<R::Database>,
+                    String: ::sqlx::decode::Decode<'r, R::Database> + ::sqlx::Type<R::Database>,
+                {
+                    fn from_row(row: &'r R) -> ::sqlx::Result<Self> {
+                        use ::sqlx::Row;
+                        Ok(Self {
+                            id: row.try_get("id")?,
+                            status: {
+                                let db_value: String = row.try_get("status")?;
+                                let value_str = format!("{:?}", &db_value);
+                                <Status>::try_from(db_value).map_err(|e| {
+                                    ::sqlx::Error::Decode(Box::new(::fabrique::Error::Conversion {
+                                        field: "status".to_string(),
+                                        from: stringify!(String),
+                                        to: stringify!(Status),
+                                        value: value_str,
+                                        reason: e.to_string(),
+                                        direction: ::fabrique::error::ConversionDirection::FromDb,
+                                    }))
+                                })?
+                            }
+                        })
+                    }
+                }
+            }
+            .to_string()
         );
     }
 }

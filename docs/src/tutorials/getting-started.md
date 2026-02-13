@@ -34,7 +34,7 @@ pub struct Product {
 
 // Find a product by its ID
 pub async fn find_product_by_id(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     id: Uuid,
 ) -> Result<Product, Box<dyn std::error::Error>> {
     unimplemented!()
@@ -42,14 +42,14 @@ pub async fn find_product_by_id(
 
 // List all products currently in stock
 pub async fn list_available_products(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
 ) -> Result<Vec<Product>, Box<dyn std::error::Error>> {
     unimplemented!()
 }
 
 // Create a new product
 pub async fn create_product(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     name: String,
     price_cents: i32,
 ) -> Result<Product, Box<dyn std::error::Error>> {
@@ -58,7 +58,7 @@ pub async fn create_product(
 
 // Update a product's price
 pub async fn update_product_price(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     id: Uuid,
     new_price_cents: i32,
 ) -> Result<Product, Box<dyn std::error::Error>> {
@@ -67,7 +67,7 @@ pub async fn update_product_price(
 
 // Delete a product
 pub async fn delete_product(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     id: Uuid,
 ) -> Result<(), Box<dyn std::error::Error>> {
     unimplemented!()
@@ -150,7 +150,7 @@ Fabrique automatically:
 # }
 #
 pub async fn find_product_by_id(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     id: Uuid,
 ) -> Result<Product, fabrique::Error> {
     Product::find(pool, id).await
@@ -179,7 +179,7 @@ record. If no product is found, it returns an error.
 # }
 #
 pub async fn list_available_products(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
 ) -> Result<Vec<Product>, fabrique::Error> {
     Product::query()
         .r#where(Product::IN_STOCK, "=", true)
@@ -216,7 +216,7 @@ won't compile.
 # }
 #
 pub async fn create_product(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     name: String,
     price_cents: i32,
 ) -> Result<Product, fabrique::Error> {
@@ -253,7 +253,7 @@ primary key already exists, it returns an error.
 # }
 #
 pub async fn update_product_price(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     id: Uuid,
     new_price_cents: i32,
 ) -> Result<Product, fabrique::Error> {
@@ -288,7 +288,7 @@ inserts if the record is new, or updates if it exists.
 # }
 #
 pub async fn delete_product(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     id: Uuid,
 ) -> Result<(), fabrique::Error> {
     Product::destroy(pool, id).await
@@ -302,7 +302,7 @@ The `destroy` method deletes by primary key without fetching the record first.
 
 Here's the full working code:
 
-```rust
+```rust,ignore
 # extern crate fabrique;
 # extern crate sqlx;
 # extern crate tokio;
@@ -319,14 +319,14 @@ pub struct Product {
 }
 
 pub async fn find_product_by_id(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     id: Uuid,
 ) -> Result<Product, fabrique::Error> {
     Product::find(pool, id).await
 }
 
 pub async fn list_available_products(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
 ) -> Result<Vec<Product>, fabrique::Error> {
     Product::query()
         .r#where(Product::IN_STOCK, "=", true)
@@ -335,7 +335,7 @@ pub async fn list_available_products(
 }
 
 pub async fn create_product(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     name: String,
     price_cents: i32,
 ) -> Result<Product, fabrique::Error> {
@@ -349,7 +349,7 @@ pub async fn create_product(
 }
 
 pub async fn update_product_price(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     id: Uuid,
     new_price_cents: i32,
 ) -> Result<Product, fabrique::Error> {
@@ -362,7 +362,7 @@ pub async fn update_product_price(
 }
 
 pub async fn delete_product(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
     id: Uuid,
 ) -> Result<(), fabrique::Error> {
     Product::destroy(pool, id).await

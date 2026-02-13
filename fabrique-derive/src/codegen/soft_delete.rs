@@ -1,6 +1,5 @@
 use crate::Analysis;
 use crate::analysis::ast::ColumnField;
-use crate::codegen::{now, placeholder};
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -29,8 +28,28 @@ impl<'a> SoftDeleteCodegen<'a> {
         let fn_restore = &self.generate_fn_restore(soft_delete_field);
         let fn_trashed = &self.generate_fn_trashed(soft_delete_field);
 
+        // PK-field Encode/Type bounds
+        let pk_bounds = self
+            .analysis
+            .column_fields
+            .iter()
+            .filter(|f| f.primary_key)
+            .map(|f| {
+                let db_ty = f.r#as.as_ref().unwrap_or(&f.ty);
+                quote! {
+                    for<'q> #db_ty: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>
+                }
+            });
+
         Some(quote! {
-            impl ::fabrique::SoftDelete for #base_struct_ident {
+            impl<DB: ::fabrique::Dialect> ::fabrique::SoftDelete<DB> for #base_struct_ident
+            where
+                #(#pk_bounds,)*
+                for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Executor<'c, Database = DB>,
+                <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+                usize: ::sqlx::ColumnIndex<<DB as ::sqlx::Database>::Row>,
+                for<'d> bool: ::sqlx::decode::Decode<'d, DB> + ::sqlx::Type<DB>,
+            {
                 #fn_soft_delete
                 #fn_soft_destroy
                 #fn_restore
@@ -40,44 +59,9 @@ impl<'a> SoftDeleteCodegen<'a> {
     }
 
     fn generate_fn_soft_delete(&self, soft_delete_field: &ColumnField) -> TokenStream {
-        let primary_key = self
-            .analysis
-            .column_fields
-            .iter()
-            .filter(|field| field.primary_key);
+        let table_name = &self.analysis.model.table_name;
+        let soft_delete_col = soft_delete_field.ident.to_string();
 
-        let clause = primary_key
-            .clone()
-            .enumerate()
-            .map(|(i, field)| format!("{} = {}", field.ident, placeholder(i + 1)))
-            .collect::<Vec<_>>()
-            .join(" AND ");
-
-        let query = format!(
-            "UPDATE {} SET {} = {} WHERE {}",
-            self.analysis.model.table_name,
-            soft_delete_field.ident,
-            now(),
-            clause
-        );
-
-        let bindings = primary_key.map(|ColumnField { ident, .. }| quote! { self.#ident });
-
-        quote! {
-            fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-            where
-                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-            {
-                async move {
-                    let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                    ::sqlx::query(#query)#(.bind(#bindings))*.execute(&mut *conn).await?;
-                    Ok(())
-                }
-            }
-        }
-    }
-
-    fn generate_fn_soft_destroy(&self, soft_delete_field: &ColumnField) -> TokenStream {
         let primary_key: Vec<_> = self
             .analysis
             .column_fields
@@ -85,20 +69,50 @@ impl<'a> SoftDeleteCodegen<'a> {
             .filter(|field| field.primary_key)
             .collect();
 
-        let clause = primary_key
+        let pk_col_names: Vec<_> = primary_key.iter().map(|f| f.ident.to_string()).collect();
+        let bindings = primary_key
             .iter()
-            .enumerate()
-            .map(|(i, field)| format!("{} = {}", field.ident, placeholder(i + 1)))
-            .collect::<Vec<_>>()
-            .join(" AND ");
+            .map(|ColumnField { ident, .. }| quote! { self.#ident });
 
-        let query = format!(
-            "UPDATE {} SET {} = {} WHERE {}",
-            self.analysis.model.table_name,
-            soft_delete_field.ident,
-            now(),
-            clause
-        );
+        quote! {
+            fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
+            where
+                A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
+            {
+                async move {
+                    let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                    let clause = [#(#pk_col_names),*]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                        .collect::<Vec<_>>()
+                        .join(" AND ");
+                    let query = format!(
+                        "UPDATE {} SET {} = {} WHERE {}",
+                        #table_name,
+                        #soft_delete_col,
+                        <DB as ::fabrique::Dialect>::now(),
+                        clause
+                    );
+                    ::sqlx::query(::sqlx::AssertSqlSafe(query))#(.bind(#bindings))*.execute(&mut *conn).await?;
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    fn generate_fn_soft_destroy(&self, soft_delete_field: &ColumnField) -> TokenStream {
+        let table_name = &self.analysis.model.table_name;
+        let soft_delete_col = soft_delete_field.ident.to_string();
+
+        let primary_key: Vec<_> = self
+            .analysis
+            .column_fields
+            .iter()
+            .filter(|field| field.primary_key)
+            .collect();
+
+        let pk_col_names: Vec<_> = primary_key.iter().map(|f| f.ident.to_string()).collect();
 
         let binds = match primary_key.as_slice() {
             [ColumnField { ident, .. }] => quote! { .bind(#ident) },
@@ -109,13 +123,26 @@ impl<'a> SoftDeleteCodegen<'a> {
         };
 
         quote! {
-            fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+            fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
             where
-                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
             {
                 async move {
                     let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                    ::sqlx::query(#query)
+                    let clause = [#(#pk_col_names),*]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                        .collect::<Vec<_>>()
+                        .join(" AND ");
+                    let query = format!(
+                        "UPDATE {} SET {} = {} WHERE {}",
+                        #table_name,
+                        #soft_delete_col,
+                        <DB as ::fabrique::Dialect>::now(),
+                        clause
+                    );
+                    ::sqlx::query(::sqlx::AssertSqlSafe(query))
                         #binds
                         .execute(&mut *conn)
                         .await?;
@@ -126,6 +153,9 @@ impl<'a> SoftDeleteCodegen<'a> {
     }
 
     fn generate_fn_restore(&self, soft_delete_field: &ColumnField) -> TokenStream {
+        let table_name = &self.analysis.model.table_name;
+        let soft_delete_col = soft_delete_field.ident.to_string();
+
         let primary_key: Vec<_> = self
             .analysis
             .column_fields
@@ -133,17 +163,7 @@ impl<'a> SoftDeleteCodegen<'a> {
             .filter(|field| field.primary_key)
             .collect();
 
-        let clause = primary_key
-            .iter()
-            .enumerate()
-            .map(|(i, field)| format!("{} = {}", field.ident, placeholder(i + 1)))
-            .collect::<Vec<_>>()
-            .join(" AND ");
-
-        let query = format!(
-            "UPDATE {} SET {} = NULL WHERE {}",
-            self.analysis.model.table_name, soft_delete_field.ident, clause
-        );
+        let pk_col_names: Vec<_> = primary_key.iter().map(|f| f.ident.to_string()).collect();
 
         let pk_captures = primary_key.iter().map(|field| {
             let ident = &field.ident;
@@ -156,14 +176,26 @@ impl<'a> SoftDeleteCodegen<'a> {
         });
 
         quote! {
-            fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+            fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
             where
-                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
             {
                 #(#pk_captures)*
                 async move {
                     let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                    ::sqlx::query(#query)#(.bind(#bindings))*.execute(&mut *conn).await?;
+                    let clause = [#(#pk_col_names),*]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                        .collect::<Vec<_>>()
+                        .join(" AND ");
+                    let query = format!(
+                        "UPDATE {} SET {} = NULL WHERE {}",
+                        #table_name,
+                        #soft_delete_col,
+                        clause
+                    );
+                    ::sqlx::query(::sqlx::AssertSqlSafe(query))#(.bind(#bindings))*.execute(&mut *conn).await?;
                     Ok(())
                 }
             }
@@ -171,6 +203,9 @@ impl<'a> SoftDeleteCodegen<'a> {
     }
 
     fn generate_fn_trashed(&self, soft_delete_field: &ColumnField) -> TokenStream {
+        let table_name = &self.analysis.model.table_name;
+        let soft_delete_col = soft_delete_field.ident.to_string();
+
         let primary_key: Vec<_> = self
             .analysis
             .column_fields
@@ -178,17 +213,7 @@ impl<'a> SoftDeleteCodegen<'a> {
             .filter(|field| field.primary_key)
             .collect();
 
-        let clause = primary_key
-            .iter()
-            .enumerate()
-            .map(|(i, field)| format!("{} = {}", field.ident, placeholder(i + 1)))
-            .collect::<Vec<_>>()
-            .join(" AND ");
-
-        let query = format!(
-            "SELECT {} IS NOT NULL FROM {} WHERE {}",
-            soft_delete_field.ident, self.analysis.model.table_name, clause
-        );
+        let pk_col_names: Vec<_> = primary_key.iter().map(|f| f.ident.to_string()).collect();
 
         let pk_captures = primary_key.iter().map(|field| {
             let ident = &field.ident;
@@ -201,14 +226,26 @@ impl<'a> SoftDeleteCodegen<'a> {
         });
 
         quote! {
-            fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
+            fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, ::fabrique::Error>> + Send + 'e
             where
-                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
             {
                 #(#pk_captures)*
                 async move {
                     let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                    ::sqlx::query_scalar(#query)#(.bind(#bindings))*.fetch_one(&mut *conn).await.map_err(Into::into)
+                    let clause = [#(#pk_col_names),*]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                        .collect::<Vec<_>>()
+                        .join(" AND ");
+                    let query = format!(
+                        "SELECT {} IS NOT NULL FROM {} WHERE {}",
+                        #soft_delete_col,
+                        #table_name,
+                        clause
+                    );
+                    ::sqlx::query_scalar(::sqlx::AssertSqlSafe(query))#(.bind(#bindings))*.fetch_one(&mut *conn).await.map_err(Into::into)
                 }
             }
         }
@@ -229,7 +266,6 @@ mod tests {
         assert!(result.is_none());
     }
 
-    #[cfg(feature = "sqlite")]
     #[test]
     fn test_a_struct_with_soft_delete_derive_soft_delete() {
         let input = parse_quote! {
@@ -246,42 +282,102 @@ mod tests {
         assert_eq!(
             result.unwrap().to_string(),
             quote! {
-                impl ::fabrique::SoftDelete for Anvil {
-                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                impl<DB: ::fabrique::Dialect> ::fabrique::SoftDelete<DB> for Anvil
+                where
+                    for<'q> String: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Executor<'c, Database = DB>,
+                    <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+                    usize: ::sqlx::ColumnIndex<<DB as ::sqlx::Database>::Row>,
+                    for<'d> bool: ::sqlx::decode::Decode<'d, DB> + ::sqlx::Type<DB>,
+                {
+                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = datetime('now') WHERE id = ?").bind(self.id).execute(&mut *conn).await?;
+                            let clause = ["id"]
+                                .iter()
+                                .enumerate()
+                                .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                                .collect::<Vec<_>>()
+                                .join(" AND ");
+                            let query = format!(
+                                "UPDATE {} SET {} = {} WHERE {}",
+                                "anvils",
+                                "deleted_at",
+                                <DB as ::fabrique::Dialect>::now(),
+                                clause
+                            );
+                            ::sqlx::query(::sqlx::AssertSqlSafe(query)).bind(self.id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = datetime('now') WHERE id = ?").bind(id).execute(&mut *conn).await?;
+                            let clause = ["id"]
+                                .iter()
+                                .enumerate()
+                                .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                                .collect::<Vec<_>>()
+                                .join(" AND ");
+                            let query = format!(
+                                "UPDATE {} SET {} = {} WHERE {}",
+                                "anvils",
+                                "deleted_at",
+                                <DB as ::fabrique::Dialect>::now(),
+                                clause
+                            );
+                            ::sqlx::query(::sqlx::AssertSqlSafe(query))
+                                .bind(id)
+                                .execute(&mut *conn)
+                                .await?;
                             Ok(())
                         }
                     }
-                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         let id = self.id.clone();
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE id = ?").bind(id).execute(&mut *conn).await?;
+                            let clause = ["id"]
+                                .iter()
+                                .enumerate()
+                                .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                                .collect::<Vec<_>>()
+                                .join(" AND ");
+                            let query = format!(
+                                "UPDATE {} SET {} = NULL WHERE {}",
+                                "anvils",
+                                "deleted_at",
+                                clause
+                            );
+                            ::sqlx::query(::sqlx::AssertSqlSafe(query)).bind(id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, ::fabrique::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         let id = self.id.clone();
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE id = ?").bind(id).fetch_one(&mut *conn).await.map_err(Into::into)
+                            let clause = ["id"]
+                                .iter()
+                                .enumerate()
+                                .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                                .collect::<Vec<_>>()
+                                .join(" AND ");
+                            let query = format!(
+                                "SELECT {} IS NOT NULL FROM {} WHERE {}",
+                                "deleted_at",
+                                "anvils",
+                                clause
+                            );
+                            ::sqlx::query_scalar(::sqlx::AssertSqlSafe(query)).bind(id).fetch_one(&mut *conn).await.map_err(Into::into)
                         }
                     }
                 }
@@ -289,127 +385,6 @@ mod tests {
         )
     }
 
-    #[cfg(feature = "mysql")]
-    #[test]
-    fn test_a_struct_with_soft_delete_derive_soft_delete() {
-        let input = parse_quote! {
-            struct Anvil {
-                id: String,
-                #[fabrique(soft_delete)]
-                deleted_at: Option<chrono::DateTime::<chrono::Utc>>
-            }
-        };
-        let analysis = Analysis::from(&input).unwrap();
-        let codegen = SoftDeleteCodegen::new(&analysis);
-        let result = codegen.generate();
-
-        assert_eq!(
-            result.unwrap().to_string(),
-            quote! {
-                impl ::fabrique::SoftDelete for Anvil {
-                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = ?").bind(self.id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = ?").bind(id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        let id = self.id.clone();
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE id = ?").bind(id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        let id = self.id.clone();
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE id = ?").bind(id).fetch_one(&mut *conn).await.map_err(Into::into)
-                        }
-                    }
-                }
-            }.to_string()
-        )
-    }
-
-    #[cfg(feature = "postgres")]
-    #[test]
-    fn test_a_struct_with_soft_delete_derive_soft_delete() {
-        let input = parse_quote! {
-            struct Anvil {
-                id: String,
-                #[fabrique(soft_delete)]
-                deleted_at: Option<chrono::DateTime::<chrono::Utc>>
-            }
-        };
-        let analysis = Analysis::from(&input).unwrap();
-        let codegen = SoftDeleteCodegen::new(&analysis);
-        let result = codegen.generate();
-
-        assert_eq!(
-            result.unwrap().to_string(),
-            quote! {
-                impl ::fabrique::SoftDelete for Anvil {
-                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(self.id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE id = $1").bind(id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        let id = self.id.clone();
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE id = $1").bind(id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        let id = self.id.clone();
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE id = $1").bind(id).fetch_one(&mut *conn).await.map_err(Into::into)
-                        }
-                    }
-                }
-            }.to_string()
-        )
-    }
-
-    #[cfg(feature = "sqlite")]
     #[test]
     fn test_composite_keys() {
         let input = parse_quote! {
@@ -429,174 +404,106 @@ mod tests {
         assert_eq!(
             result.unwrap().to_string(),
             quote! {
-                impl ::fabrique::SoftDelete for Anvil {
-                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                impl<DB: ::fabrique::Dialect> ::fabrique::SoftDelete<DB> for Anvil
+                where
+                    for<'q> uuid::Uuid: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>,
+                    for<'q> uuid::Uuid: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Executor<'c, Database = DB>,
+                    <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+                    usize: ::sqlx::ColumnIndex<<DB as ::sqlx::Database>::Row>,
+                    for<'d> bool: ::sqlx::decode::Decode<'d, DB> + ::sqlx::Type<DB>,
+                {
+                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = datetime('now') WHERE user_id = ? AND organization_id = ?").bind(self.user_id).bind(self.organization_id).execute(&mut *conn).await?;
+                            let clause = ["user_id", "organization_id"]
+                                .iter()
+                                .enumerate()
+                                .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                                .collect::<Vec<_>>()
+                                .join(" AND ");
+                            let query = format!(
+                                "UPDATE {} SET {} = {} WHERE {}",
+                                "anvils",
+                                "deleted_at",
+                                <DB as ::fabrique::Dialect>::now(),
+                                clause
+                            );
+                            ::sqlx::query(::sqlx::AssertSqlSafe(query)).bind(self.user_id).bind(self.organization_id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = datetime('now') WHERE user_id = ? AND organization_id = ?").bind(id.0).bind(id.1).execute(&mut *conn).await?;
+                            let clause = ["user_id", "organization_id"]
+                                .iter()
+                                .enumerate()
+                                .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                                .collect::<Vec<_>>()
+                                .join(" AND ");
+                            let query = format!(
+                                "UPDATE {} SET {} = {} WHERE {}",
+                                "anvils",
+                                "deleted_at",
+                                <DB as ::fabrique::Dialect>::now(),
+                                clause
+                            );
+                            ::sqlx::query(::sqlx::AssertSqlSafe(query))
+                                .bind(id.0)
+                                .bind(id.1)
+                                .execute(&mut *conn)
+                                .await?;
                             Ok(())
                         }
                     }
-                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         let user_id = self.user_id.clone();
                         let organization_id = self.organization_id.clone();
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE user_id = ? AND organization_id = ?").bind(user_id).bind(organization_id).execute(&mut *conn).await?;
+                            let clause = ["user_id", "organization_id"]
+                                .iter()
+                                .enumerate()
+                                .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                                .collect::<Vec<_>>()
+                                .join(" AND ");
+                            let query = format!(
+                                "UPDATE {} SET {} = NULL WHERE {}",
+                                "anvils",
+                                "deleted_at",
+                                clause
+                            );
+                            ::sqlx::query(::sqlx::AssertSqlSafe(query)).bind(user_id).bind(organization_id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
-                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, ::fabrique::Error>> + Send + 'e
+                    where A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         let user_id = self.user_id.clone();
                         let organization_id = self.organization_id.clone();
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE user_id = ? AND organization_id = ?").bind(user_id).bind(organization_id).fetch_one(&mut *conn).await.map_err(Into::into)
-                        }
-                    }
-                }
-            }.to_string()
-        )
-    }
-
-    #[cfg(feature = "mysql")]
-    #[test]
-    fn test_composite_keys() {
-        let input = parse_quote! {
-            struct Anvil {
-                #[fabrique(primary_key)]
-                user_id: uuid::Uuid,
-                #[fabrique(primary_key)]
-                organization_id: uuid::Uuid,
-                #[fabrique(soft_delete)]
-                deleted_at: Option<chrono::DateTime::<chrono::Utc>>
-            }
-        };
-        let analysis = Analysis::from(&input).unwrap();
-        let codegen = SoftDeleteCodegen::new(&analysis);
-        let result = codegen.generate();
-
-        assert_eq!(
-            result.unwrap().to_string(),
-            quote! {
-                impl ::fabrique::SoftDelete for Anvil {
-                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = ? AND organization_id = ?").bind(self.user_id).bind(self.organization_id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = ? AND organization_id = ?").bind(id.0).bind(id.1).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        let user_id = self.user_id.clone();
-                        let organization_id = self.organization_id.clone();
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE user_id = ? AND organization_id = ?").bind(user_id).bind(organization_id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        let user_id = self.user_id.clone();
-                        let organization_id = self.organization_id.clone();
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE user_id = ? AND organization_id = ?").bind(user_id).bind(organization_id).fetch_one(&mut *conn).await.map_err(Into::into)
-                        }
-                    }
-                }
-            }.to_string()
-        )
-    }
-
-    #[cfg(feature = "postgres")]
-    #[test]
-    fn test_composite_keys() {
-        let input = parse_quote! {
-            struct Anvil {
-                #[fabrique(primary_key)]
-                user_id: uuid::Uuid,
-                #[fabrique(primary_key)]
-                organization_id: uuid::Uuid,
-                #[fabrique(soft_delete)]
-                deleted_at: Option<chrono::DateTime::<chrono::Utc>>
-            }
-        };
-        let analysis = Analysis::from(&input).unwrap();
-        let codegen = SoftDeleteCodegen::new(&analysis);
-        let result = codegen.generate();
-
-        assert_eq!(
-            result.unwrap().to_string(),
-            quote! {
-                impl ::fabrique::SoftDelete for Anvil {
-                    fn soft_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                    fn soft_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = now() WHERE user_id = $1 AND organization_id = $2").bind(id.0).bind(id.1).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                    fn restore<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        let user_id = self.user_id.clone();
-                        let organization_id = self.organization_id.clone();
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("UPDATE anvils SET deleted_at = NULL WHERE user_id = $1 AND organization_id = $2").bind(user_id).bind(organization_id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                    fn trashed<'e, A>(&self, executor: A) -> impl ::std::future::Future<Output = Result<bool, Self::Error>> + Send + 'e
-                    where A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        let user_id = self.user_id.clone();
-                        let organization_id = self.organization_id.clone();
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query_scalar("SELECT deleted_at IS NOT NULL FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(user_id).bind(organization_id).fetch_one(&mut *conn).await.map_err(Into::into)
+                            let clause = ["user_id", "organization_id"]
+                                .iter()
+                                .enumerate()
+                                .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                                .collect::<Vec<_>>()
+                                .join(" AND ");
+                            let query = format!(
+                                "SELECT {} IS NOT NULL FROM {} WHERE {}",
+                                "deleted_at",
+                                "anvils",
+                                clause
+                            );
+                            ::sqlx::query_scalar(::sqlx::AssertSqlSafe(query)).bind(user_id).bind(organization_id).fetch_one(&mut *conn).await.map_err(Into::into)
                         }
                     }
                 }

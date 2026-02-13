@@ -1,4 +1,4 @@
-use crate::{database::DatabaseAware, model::Model, relation::BelongsTo};
+use crate::{dialect::Dialect, model::Model};
 use std::future::Future;
 use std::pin::Pin;
 
@@ -12,7 +12,7 @@ use crate::error::Error;
 /// Factories must implement `Clone` to allow configuration reuse.
 /// A configured factory can be cloned and used multiple times,
 /// for example when creating several related instances.
-pub trait Factory: Clone + Sized {
+pub trait Factory<DB: Dialect>: Clone + Sized {
     /// The model type this factory produces.
     type Model: Model;
 
@@ -20,9 +20,9 @@ pub trait Factory: Clone + Sized {
     fn create<'a, A>(
         self,
         executor: A,
-    ) -> impl Future<Output = Result<Self::Model, <Self::Model as DatabaseAware>::Error>> + Send + 'a
+    ) -> impl Future<Output = Result<Self::Model, Error>> + Send + 'a
     where
-        A: sqlx::Acquire<'a, Database = <Self::Model as DatabaseAware>::Database> + Send + 'a;
+        A: sqlx::Acquire<'a, Database = DB> + Send + 'a;
 }
 
 /// Trait for setting a foreign key on a factory that references a parent model.
@@ -44,25 +44,22 @@ pub trait Factory: Clone + Sized {
 /// //
 /// // <OrderFactory as SetForeignKey<Customer>>::set_foreign_key(factory, customer_pk)
 /// ```
+pub trait SetForeignKey<Parent: Model, Alias = ()>: Sized {
+    /// Sets the foreign key field that references the parent model.
+    fn set_foreign_key(self, parent_key: Parent::PrimaryKey) -> Self;
+}
+
 /// A factory whose execution is deferred until a parent is created.
 ///
 /// When a parent factory has `has_` methods (e.g., `has_orders`), each call
 /// pushes an `Arc<dyn DeferredFactory>` into the parent's children list.
 /// After the parent instance is persisted, each deferred factory is invoked
 /// with the parent's primary key to create the child instances.
-pub trait DeferredFactory<PK, DB: sqlx::Database>: Send + Sync {
+pub trait DeferredFactory<PK, DB: Dialect>: Send + Sync {
     /// Creates child instances using the given parent primary key.
     fn create<'a>(
         &'a self,
         parent_pk: PK,
         conn: &'a mut <DB as sqlx::Database>::Connection,
     ) -> Pin<Box<dyn Future<Output = Result<(), Error>> + Send + 'a>>;
-}
-
-pub trait SetForeignKey<Parent: Model, Alias = ()>: Factory
-where
-    Self::Model: BelongsTo<Parent, Alias>,
-{
-    /// Sets the foreign key field that references the parent model.
-    fn set_foreign_key(self, parent_key: Parent::PrimaryKey) -> Self;
 }

@@ -17,7 +17,7 @@ see [Query Builder](query-builder.md).
 The `Backend` type alias resolves at compile time to the sqlx
 database type selected by a Cargo feature flag (`postgres`, `mysql`,
 or `sqlite`). Features are mutually exclusive — this ensures
-`Pool<Backend>` always refers to a single, known database type.
+`Pool<sqlx::Sqlite>` always refers to a single, known database type.
 
 SQL dialects differ across backends — for example, PostgreSQL
 supports `RETURNING` natively while MySQL doesn't, and placeholder
@@ -37,7 +37,7 @@ For custom Rust types, see
 ## Connections
 
 Every Fabrique operation takes a connection — either a
-`Pool<Backend>` or a transaction. The API is uniform: the same
+`Pool<sqlx::Sqlite>` or a transaction. The API is uniform: the same
 query works with both, and code remains backend-agnostic:
 
 ```rust
@@ -57,10 +57,10 @@ query works with both, and code remains backend-agnostic:
 #
 # #[fabrique::doctest]
 # async fn main(
-#     pool: Pool<Backend>,
+#     pool: Pool<sqlx::Sqlite>,
 # ) -> Result<(), fabrique::Error> {
 async fn count_users(
-    pool: &Pool<Backend>,
+    pool: &Pool<sqlx::Sqlite>,
 ) -> Result<usize, fabrique::Error> {
     let users = User::all(pool).await?;
     Ok(users.len())
@@ -92,7 +92,7 @@ committed explicitly. A transaction that is dropped without
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 # let id = Uuid::new_v4();
 # Product::factory()
 #     .id(id).in_stock(true).price_cents(5000)

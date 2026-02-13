@@ -21,7 +21,6 @@ use crate::codegen::*;
 /// Derives a `Model` implementation for the annotated struct.
 ///
 /// This generates implementations for:
-/// - `DatabaseAware` trait (database and error types)
 /// - `Model` trait (primary key and table name)
 /// - `Query` trait (query building and retrieval)
 /// - `Persist` trait (creation operations)
@@ -44,7 +43,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
     // Trait implementations
     let from_row = FromRowCodegen::new(&analysis).generate();
-    let database_aware = DatabaseAwareCodegen::new(&analysis).generate();
     let model = ModelCodegen::new(&analysis).generate();
     let columns = ColumnsCodegen::new(&analysis).generate();
     let belongs_to = BelongsToCodegen::new(&analysis).generate();
@@ -59,7 +57,6 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 
     quote::quote! {
         #from_row
-        #database_aware
         #model
         #columns
         #belongs_to
@@ -103,36 +100,6 @@ pub fn derive_factory(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Test helper that wraps `#[sqlx::test]` with the correct migrations path
-/// for the active database backend.
-///
-/// Requires the `testing` feature to be enabled.
-///
-/// ```rust,ignore
-/// #[fabrique::test]
-/// async fn test_create(pool: Pool<Backend>) {
-///     let product = Product::factory().create(&pool).await.unwrap();
-/// }
-/// ```
-#[cfg(feature = "testing")]
-#[proc_macro_attribute]
-pub fn test(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as ItemFn);
-
-    #[cfg(feature = "postgres")]
-    let migrations = "../migrations/postgres";
-    #[cfg(feature = "sqlite")]
-    let migrations = "../migrations/sqlite";
-    #[cfg(feature = "mysql")]
-    let migrations = "../migrations/mysql";
-
-    quote::quote! {
-        #[::sqlx::test(migrations = #migrations)]
-        #input
-    }
-    .into()
-}
-
 /// Creates an in-memory SQLite database with migrations for documentation
 /// examples.
 ///
@@ -140,6 +107,10 @@ pub fn test(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// up a Tokio runtime, creates an in-memory SQLite database, runs migrations,
 /// and provides the connection pool to your test code. Use `pool` as the
 /// parameter name.
+///
+/// Requires the `testing` and `sqlite` features. Doctests will fail to compile
+/// without them — use `--lib --tests` to skip doctests when running against
+/// other backends.
 ///
 /// ```rust,ignore
 /// # extern crate fabrique;
@@ -149,7 +120,7 @@ pub fn test(_attr: TokenStream, item: TokenStream) -> TokenStream {
 /// # #[derive(Model, Factory)]
 /// # pub struct User { id: uuid::Uuid, name: String, email: String }
 /// #[fabrique::doctest]
-/// async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+/// async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 ///     let user = User::factory().create(&pool).await?;
 ///     user.delete(&pool).await?;
 ///     Ok(())

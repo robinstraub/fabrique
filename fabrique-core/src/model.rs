@@ -3,7 +3,8 @@ pub mod join;
 mod query_builder;
 
 use crate::{
-    database::{Column, DatabaseAware},
+    database::Column,
+    dialect::Dialect,
     sql::{Inserting, Updating},
 };
 pub use column_set::ColumnSet;
@@ -11,7 +12,7 @@ pub use join::{Joined, RootModel};
 pub use query_builder::{Building, Initial, QueryBuilder};
 
 /// Model metadata and identity
-pub trait Model: DatabaseAware {
+pub trait Model: Sized {
     /// Primary key type (single value or tuple for composite keys)
     type PrimaryKey: Clone + Send;
 
@@ -43,15 +44,12 @@ pub trait Model: DatabaseAware {
 }
 
 /// Query building and retrieval operations
-pub trait Query: Model + Send + Unpin
+pub trait Query<DB: Dialect>: Model + Send + Unpin
 where
-    Self::Database: sqlx::Database,
-    Self::Error: From<sqlx::Error>,
-    <Self::Database as sqlx::Database>::Arguments: sqlx::IntoArguments<Self::Database>,
-    for<'r> Self: sqlx::FromRow<'r, <Self::Database as sqlx::Database>::Row>,
+    for<'r> Self: sqlx::FromRow<'r, <DB as sqlx::Database>::Row>,
 {
     /// Creates a new SELECT query builder for this model.
-    fn query() -> QueryBuilder<Initial, Joined<(Self, ()), ()>> {
+    fn query() -> QueryBuilder<DB, Initial, Joined<(Self, ()), ()>> {
         QueryBuilder::new()
     }
 
@@ -59,7 +57,7 @@ where
     ///
     /// Returns a builder in the `Inserting` state, ready for `.set()` calls.
     #[allow(clippy::type_complexity)]
-    fn insert() -> QueryBuilder<Building<Self::Database, Inserting>, Joined<(Self, ()), ()>> {
+    fn insert() -> QueryBuilder<DB, Building<DB, Inserting>, Joined<(Self, ()), ()>> {
         Self::query().insert()
     }
 
@@ -67,7 +65,7 @@ where
     ///
     /// Returns a builder in the `Updating` state, ready for `.set()` calls.
     #[allow(clippy::type_complexity)]
-    fn update() -> QueryBuilder<Building<Self::Database, Updating>, Joined<(Self, ()), ()>> {
+    fn update() -> QueryBuilder<DB, Building<DB, Updating>, Joined<(Self, ()), ()>> {
         Self::query().update()
     }
 
@@ -77,16 +75,17 @@ where
     fn find<'e, A>(
         executor: A,
         id: Self::PrimaryKey,
-    ) -> impl Future<Output = Result<Self, Self::Error>> + Send + 'e
+    ) -> impl Future<Output = Result<Self, crate::Error>> + Send + 'e
     where
-        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
+        A: sqlx::Acquire<'e, Database = DB> + Send + 'e;
 
     /// Retrieves all instances of this model from the database.
-    fn all<'e, E>(executor: E) -> impl Future<Output = Result<Vec<Self>, Self::Error>> + Send + 'e
+    fn all<'e, E>(executor: E) -> impl Future<Output = Result<Vec<Self>, crate::Error>> + Send + 'e
     where
-        E: sqlx::Executor<'e, Database = Self::Database> + 'e,
+        E: sqlx::Executor<'e, Database = DB> + 'e,
         for<'q> <Self::SoftDeleteColumn as Column<Self>>::DbType:
-            sqlx::Encode<'q, Self::Database> + sqlx::Type<Self::Database>,
+            sqlx::Encode<'q, DB> + sqlx::Type<DB>,
+        <DB as sqlx::Database>::Arguments: sqlx::IntoArguments<DB>,
     {
         async move {
             match Self::soft_delete_column() {
@@ -98,14 +97,14 @@ where
 }
 
 /// Create and update operations
-pub trait Persist: Model {
+pub trait Persist<DB: Dialect>: Model {
     /// Creates and persists this model instance
     fn create<'e, A>(
         self,
         executor: A,
-    ) -> impl Future<Output = Result<Self, Self::Error>> + Send + 'e
+    ) -> impl Future<Output = Result<Self, crate::Error>> + Send + 'e
     where
-        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
+        A: sqlx::Acquire<'e, Database = DB> + Send + 'e;
 
     /// Saves this model instance to the database.
     ///
@@ -114,13 +113,13 @@ pub trait Persist: Model {
     fn save<'e, A>(
         self,
         executor: A,
-    ) -> impl Future<Output = Result<Self, Self::Error>> + Send + 'e
+    ) -> impl Future<Output = Result<Self, crate::Error>> + Send + 'e
     where
-        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
+        A: sqlx::Acquire<'e, Database = DB> + Send + 'e;
 }
 
 /// Delete operations
-pub trait Delete: Model {
+pub trait Delete<DB: Dialect>: Model {
     /// Deletes this model instance
     ///
     /// If the model uses soft delete, this will perform a soft delete.
@@ -128,9 +127,9 @@ pub trait Delete: Model {
     fn delete<'e, A>(
         self,
         executor: A,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
+    ) -> impl Future<Output = Result<(), crate::Error>> + Send + 'e
     where
-        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
+        A: sqlx::Acquire<'e, Database = DB> + Send + 'e;
 
     /// Destroys a model by its primary key
     ///
@@ -139,61 +138,61 @@ pub trait Delete: Model {
     fn destroy<'e, A>(
         executor: A,
         id: Self::PrimaryKey,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
+    ) -> impl Future<Output = Result<(), crate::Error>> + Send + 'e
     where
-        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
+        A: sqlx::Acquire<'e, Database = DB> + Send + 'e;
 }
 
 /// Soft delete operations
-pub trait SoftDelete: Model {
+pub trait SoftDelete<DB: Dialect>: Model {
     /// Soft deletes this model instance
     fn soft_delete<'e, A>(
         self,
         executor: A,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
+    ) -> impl Future<Output = Result<(), crate::Error>> + Send + 'e
     where
-        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
+        A: sqlx::Acquire<'e, Database = DB> + Send + 'e;
 
     /// Soft destroys a model by its primary key
     fn soft_destroy<'e, A>(
         executor: A,
         id: Self::PrimaryKey,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
+    ) -> impl Future<Output = Result<(), crate::Error>> + Send + 'e
     where
-        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
+        A: sqlx::Acquire<'e, Database = DB> + Send + 'e;
 
     /// Restores a soft-deleted model instance
     fn restore<'e, A>(
         &self,
         executor: A,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
+    ) -> impl Future<Output = Result<(), crate::Error>> + Send + 'e
     where
-        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
+        A: sqlx::Acquire<'e, Database = DB> + Send + 'e;
 
     /// Checks if this model instance is soft-deleted
     fn trashed<'e, A>(
         &self,
         executor: A,
-    ) -> impl Future<Output = Result<bool, Self::Error>> + Send + 'e
+    ) -> impl Future<Output = Result<bool, crate::Error>> + Send + 'e
     where
-        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
+        A: sqlx::Acquire<'e, Database = DB> + Send + 'e;
 }
 
 /// Hard delete operations for soft-deletable models
-pub trait HardDelete: Model {
+pub trait HardDelete<DB: Dialect>: Model {
     /// Permanently deletes this model instance (bypassing soft delete)
     fn hard_delete<'e, A>(
         self,
         executor: A,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
+    ) -> impl Future<Output = Result<(), crate::Error>> + Send + 'e
     where
-        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
+        A: sqlx::Acquire<'e, Database = DB> + Send + 'e;
 
     /// Permanently destroys a model by its primary key
     fn hard_destroy<'e, A>(
         executor: A,
         id: Self::PrimaryKey,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send + 'e
+    ) -> impl Future<Output = Result<(), crate::Error>> + Send + 'e
     where
-        A: sqlx::Acquire<'e, Database = Self::Database> + Send + 'e;
+        A: sqlx::Acquire<'e, Database = DB> + Send + 'e;
 }

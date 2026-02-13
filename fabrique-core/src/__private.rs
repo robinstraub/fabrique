@@ -6,7 +6,7 @@
 //! for the generated code to access it, but is marked `#[doc(hidden)]` to
 //! exclude it from the public documentation.
 
-use crate::{Backend, database::Pool, error::Error};
+use crate::{database::Pool, error::Error};
 
 /// Creates an in-memory SQLite test pool with migrations applied.
 ///
@@ -16,9 +16,9 @@ use crate::{Backend, database::Pool, error::Error};
 /// directory without access to the migrations folder. By defining this function
 /// here, migrations are embedded into the library and available at runtime.
 #[cfg(feature = "sqlite")]
-pub async fn doctest_pool() -> Result<Pool<Backend>, Error> {
+pub async fn doctest_pool() -> Result<Pool<sqlx::Sqlite>, Error> {
     let pool = sqlx::SqlitePool::connect("sqlite::memory:").await?;
-    sqlx::migrate!("../migrations/sqlite")
+    sqlx::migrate!("../migrations")
         .run(&pool)
         .await
         .map_err(|e| Error::Other(Box::new(e)))?;

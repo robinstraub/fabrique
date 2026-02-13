@@ -49,10 +49,11 @@ impl<'a> FactoryCodegen<'a> {
         let relation_enums = self.generate_relation_enums();
         let relation_from_impls = self.generate_relation_from_impls();
         let set_foreign_key_impls = self.generate_set_foreign_key_impls();
+        let clone_fields = self.generate_clone_fields();
 
         quote! {
             impl #base_struct_ident {
-                pub fn factory() -> #factory_ident {
+                pub fn factory<DB: ::fabrique::Dialect>() -> #factory_ident<DB> {
                     #factory_ident::new()
                 }
             }
@@ -61,21 +62,29 @@ impl<'a> FactoryCodegen<'a> {
 
             #(#relation_from_impls)*
 
-            #[derive(Clone)]
-            pub struct #factory_ident {
+            pub struct #factory_ident<DB: ::fabrique::Dialect> {
                 #(#factory_fields,)*
                 #(#factory_relation_fields,)*
                 children: Vec<std::sync::Arc<dyn fabrique::DeferredFactory<
                     <#base_struct_ident as fabrique::Model>::PrimaryKey,
-                    <#base_struct_ident as fabrique::database::DatabaseAware>::Database,
+                    DB,
                 >>>,
+            }
+
+            impl<DB: ::fabrique::Dialect> Clone for #factory_ident<DB> {
+                fn clone(&self) -> Self {
+                    Self {
+                        #(#clone_fields,)*
+                        children: self.children.clone(),
+                    }
+                }
             }
 
             #factory_trait_impl
 
             #(#set_foreign_key_impls)*
 
-            impl #factory_ident {
+            impl<DB: ::fabrique::Dialect> #factory_ident<DB> {
                 #factory_method_new
 
                 #(#factory_method_fields)*
@@ -128,7 +137,7 @@ impl<'a> FactoryCodegen<'a> {
             let enum_ident = Self::relation_enum_ident(&struct_name, relation.name);
 
             quote! {
-                #factory_field: std::option::Option<#enum_ident>
+                #factory_field: std::option::Option<#enum_ident<DB>>
             }
         })
     }
@@ -149,10 +158,18 @@ impl<'a> FactoryCodegen<'a> {
             );
 
             quote! {
-                #[derive(Clone)]
-                pub enum #enum_ident {
+                pub enum #enum_ident<DB: ::fabrique::Dialect> {
                     PrimaryKey(<#referenced_type as fabrique::Model>::PrimaryKey),
-                    Factory(#factory_type),
+                    Factory(#factory_type<DB>),
+                }
+
+                impl<DB: ::fabrique::Dialect> Clone for #enum_ident<DB> {
+                    fn clone(&self) -> Self {
+                        match self {
+                            Self::PrimaryKey(pk) => Self::PrimaryKey(pk.clone()),
+                            Self::Factory(f) => Self::Factory(f.clone()),
+                        }
+                    }
                 }
             }
         })
@@ -171,22 +188,22 @@ impl<'a> FactoryCodegen<'a> {
 
             vec![
                 quote! {
-                    impl From<#referenced_type> for #enum_ident {
+                    impl<DB: ::fabrique::Dialect> From<#referenced_type> for #enum_ident<DB> {
                         fn from(model: #referenced_type) -> Self {
                             #enum_ident::PrimaryKey(fabrique::Model::primary_key(&model))
                         }
                     }
                 },
                 quote! {
-                    impl From<&#referenced_type> for #enum_ident {
+                    impl<DB: ::fabrique::Dialect> From<&#referenced_type> for #enum_ident<DB> {
                         fn from(model: &#referenced_type) -> Self {
                             #enum_ident::PrimaryKey(fabrique::Model::primary_key(model))
                         }
                     }
                 },
                 quote! {
-                    impl From<#factory_type> for #enum_ident {
-                        fn from(factory: #factory_type) -> Self {
+                    impl<DB: ::fabrique::Dialect> From<#factory_type<DB>> for #enum_ident<DB> {
+                        fn from(factory: #factory_type<DB>) -> Self {
                             #enum_ident::Factory(factory)
                         }
                     }
@@ -297,22 +314,22 @@ impl<'a> FactoryCodegen<'a> {
             fn create<'a, A>(
                 mut self,
                 executor: A,
-            ) -> impl ::std::future::Future<Output = Result<#struct_ident, <#struct_ident as fabrique::DatabaseAware>::Error>> + Send + 'a
+            ) -> impl ::std::future::Future<Output = Result<#struct_ident, fabrique::Error>> + Send + 'a
             where
-                A: ::sqlx::Acquire<'a, Database = <#struct_ident as fabrique::DatabaseAware>::Database> + Send + 'a,
+                A: ::sqlx::Acquire<'a, Database = DB> + Send + 'a,
             {
                 ::std::boxed::Box::pin(async move {
                     #fake_import
 
                     let mut conn = executor.acquire().await
-                        .map_err(|e| <#struct_ident as fabrique::DatabaseAware>::Error::from(e))?;
+                        .map_err(fabrique::Error::from)?;
 
                     #(#belongs_to_create)*
 
                     let instance = #struct_ident {
                         #(#column_fields,)*
                     };
-                    let instance = <#struct_ident as fabrique::Persist>::create(instance, &mut *conn).await?;
+                    let instance = <#struct_ident as fabrique::Persist<DB>>::create(instance, &mut *conn).await?;
                     let pk = <#struct_ident as fabrique::Model>::primary_key(&instance);
 
                     for child in &self.children {
@@ -384,7 +401,7 @@ impl<'a> FactoryCodegen<'a> {
             let enum_ident = Self::relation_enum_ident(&struct_name, relation.name);
 
             quote! {
-                pub fn #method_name(mut self, input: impl Into<#enum_ident>) -> Self
+                pub fn #method_name(mut self, input: impl Into<#enum_ident<DB>>) -> Self
                 {
                     self.#field_ident = Some(input.into());
                     self
@@ -399,8 +416,20 @@ impl<'a> FactoryCodegen<'a> {
         let model_ident = &self.analysis.ident;
         let factory_method_create = self.generate_factory_method_create();
 
+        // Each belongs_to parent needs its factory to be available
+        let parent_factory_bounds = self.belongs_to_fields().map(|relation| {
+            let parent_type = relation.referenced_type;
+            let parent_factory = Ident::new(&format!("{}Factory", parent_type), parent_type.span());
+            quote! { #parent_factory<DB>: fabrique::Factory<DB, Model = #parent_type> }
+        });
+
         quote! {
-            impl fabrique::Factory for #factory_ident {
+            impl<DB: ::fabrique::Dialect> fabrique::Factory<DB> for #factory_ident<DB>
+            where
+                #model_ident: ::fabrique::Persist<DB>,
+                for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Acquire<'c, Database = DB>,
+                #(#parent_factory_bounds,)*
+            {
                 type Model = #model_ident;
 
                 #factory_method_create
@@ -427,13 +456,33 @@ impl<'a> FactoryCodegen<'a> {
             };
 
             quote! {
-                impl fabrique::SetForeignKey<#trait_params> for #factory_ident {
+                impl<DB: ::fabrique::Dialect> fabrique::SetForeignKey<#trait_params> for #factory_ident<DB> {
                     fn set_foreign_key(self, parent_key: <#parent_type as fabrique::Model>::PrimaryKey) -> Self {
                         self.#fk_field(parent_key)
                     }
                 }
             }
         })
+    }
+
+    /// Generates clone expressions for each field (column + relation fields).
+    fn generate_clone_fields(&self) -> Vec<TokenStream> {
+        let mut fields: Vec<TokenStream> = self
+            .analysis
+            .column_fields
+            .iter()
+            .map(|field| {
+                let name = &field.ident;
+                quote! { #name: self.#name.clone() }
+            })
+            .collect();
+
+        for relation in self.belongs_to_fields() {
+            let name = relation.factory_field;
+            fields.push(quote! { #name: self.#name.clone() });
+        }
+
+        fields
     }
 }
 
@@ -476,61 +525,86 @@ mod tests {
             generated.to_string(),
             quote! {
                 impl Anvil {
-                    pub fn factory() -> AnvilFactory {
+                    pub fn factory<DB: ::fabrique::Dialect>() -> AnvilFactory<DB> {
                         AnvilFactory::new()
                     }
                 }
 
-                #[derive(Clone)]
-                pub enum AnvilHammerRelation {
+                pub enum AnvilHammerRelation<DB: ::fabrique::Dialect> {
                     PrimaryKey(<Hammer as fabrique::Model>::PrimaryKey),
-                    Factory(HammerFactory),
+                    Factory(HammerFactory<DB>),
                 }
 
-                impl From<Hammer> for AnvilHammerRelation {
+                impl<DB: ::fabrique::Dialect> Clone for AnvilHammerRelation<DB> {
+                    fn clone(&self) -> Self {
+                        match self {
+                            Self::PrimaryKey(pk) => Self::PrimaryKey(pk.clone()),
+                            Self::Factory(f) => Self::Factory(f.clone()),
+                        }
+                    }
+                }
+
+                impl<DB: ::fabrique::Dialect> From<Hammer> for AnvilHammerRelation<DB> {
                     fn from(model: Hammer) -> Self {
                         AnvilHammerRelation::PrimaryKey(fabrique::Model::primary_key(&model))
                     }
                 }
 
-                impl From<&Hammer> for AnvilHammerRelation {
+                impl<DB: ::fabrique::Dialect> From<&Hammer> for AnvilHammerRelation<DB> {
                     fn from(model: &Hammer) -> Self {
                         AnvilHammerRelation::PrimaryKey(fabrique::Model::primary_key(model))
                     }
                 }
 
-                impl From<HammerFactory> for AnvilHammerRelation {
-                    fn from(factory: HammerFactory) -> Self {
+                impl<DB: ::fabrique::Dialect> From<HammerFactory<DB>> for AnvilHammerRelation<DB> {
+                    fn from(factory: HammerFactory<DB>) -> Self {
                         AnvilHammerRelation::Factory(factory)
                     }
                 }
 
-                #[derive(Clone)]
-                pub struct AnvilFactory {
+                pub struct AnvilFactory<DB: ::fabrique::Dialect> {
                     id: std::option::Option<u32>,
                     hammer_id: std::option::Option<u32>,
                     hardness: std::option::Option<u32>,
                     weight: std::option::Option<u32>,
-                    hammer_relation: std::option::Option<AnvilHammerRelation>,
+                    hammer_relation: std::option::Option<AnvilHammerRelation<DB>>,
                     children: Vec<std::sync::Arc<dyn fabrique::DeferredFactory<
                         <Anvil as fabrique::Model>::PrimaryKey,
-                        <Anvil as fabrique::database::DatabaseAware>::Database,
+                        DB,
                     >>>,
                 }
 
-                impl fabrique::Factory for AnvilFactory {
+                impl<DB: ::fabrique::Dialect> Clone for AnvilFactory<DB> {
+                    fn clone(&self) -> Self {
+                        Self {
+                            id: self.id.clone(),
+                            hammer_id: self.hammer_id.clone(),
+                            hardness: self.hardness.clone(),
+                            weight: self.weight.clone(),
+                            hammer_relation: self.hammer_relation.clone(),
+                            children: self.children.clone(),
+                        }
+                    }
+                }
+
+                impl<DB: ::fabrique::Dialect> fabrique::Factory<DB> for AnvilFactory<DB>
+                where
+                    Anvil: ::fabrique::Persist<DB>,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Acquire<'c, Database = DB>,
+                    HammerFactory<DB>: fabrique::Factory<DB, Model = Hammer>,
+                {
                     type Model = Anvil;
 
                     fn create<'a, A>(
                         mut self,
                         executor: A,
-                    ) -> impl ::std::future::Future<Output = Result<Anvil, <Anvil as fabrique::DatabaseAware>::Error>> + Send + 'a
+                    ) -> impl ::std::future::Future<Output = Result<Anvil, fabrique::Error>> + Send + 'a
                     where
-                        A: ::sqlx::Acquire<'a, Database = <Anvil as fabrique::DatabaseAware>::Database> + Send + 'a,
+                        A: ::sqlx::Acquire<'a, Database = DB> + Send + 'a,
                     {
                         ::std::boxed::Box::pin(async move {
                             let mut conn = executor.acquire().await
-                                .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
+                                .map_err(fabrique::Error::from)?;
 
                             {
                                 let key = match self.hammer_relation.take() {
@@ -557,7 +631,7 @@ mod tests {
                                 weight: self.weight.unwrap_or_else(::fabrique::seeded_value::<u32>),
                             };
 
-                            let instance = <Anvil as fabrique::Persist>::create(instance, &mut *conn).await?;
+                            let instance = <Anvil as fabrique::Persist<DB>>::create(instance, &mut *conn).await?;
                             let pk = <Anvil as fabrique::Model>::primary_key(&instance);
 
                             for child in &self.children {
@@ -569,13 +643,13 @@ mod tests {
                     }
                 }
 
-                impl fabrique::SetForeignKey<Hammer> for AnvilFactory {
+                impl<DB: ::fabrique::Dialect> fabrique::SetForeignKey<Hammer> for AnvilFactory<DB> {
                     fn set_foreign_key(self, parent_key: <Hammer as fabrique::Model>::PrimaryKey) -> Self {
                         self.hammer_id(parent_key)
                     }
                 }
 
-                impl AnvilFactory {
+                impl<DB: ::fabrique::Dialect> AnvilFactory<DB> {
                     pub fn new() -> Self {
                         Self {
                             id: None,
@@ -607,7 +681,7 @@ mod tests {
                         self
                     }
 
-                    pub fn for_hammer(mut self, input: impl Into<AnvilHammerRelation>) -> Self {
+                    pub fn for_hammer(mut self, input: impl Into<AnvilHammerRelation<DB>>) -> Self {
                         self.hammer_relation = Some(input.into());
                         self
                     }
@@ -663,7 +737,7 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                explosive_relation: std::option::Option<DynamiteExplosiveRelation>
+                explosive_relation: std::option::Option<DynamiteExplosiveRelation<DB>>
             }
             .to_string()
         );
@@ -694,13 +768,13 @@ mod tests {
                 fn create<'a, A>(
                     mut self,
                     executor: A,
-                ) -> impl ::std::future::Future<Output = Result<Anvil, <Anvil as fabrique::DatabaseAware>::Error>> + Send + 'a
+                ) -> impl ::std::future::Future<Output = Result<Anvil, fabrique::Error>> + Send + 'a
                 where
-                    A: ::sqlx::Acquire<'a, Database = <Anvil as fabrique::DatabaseAware>::Database> + Send + 'a,
+                    A: ::sqlx::Acquire<'a, Database = DB> + Send + 'a,
                 {
                     ::std::boxed::Box::pin(async move {
                         let mut conn = executor.acquire().await
-                            .map_err(|e| <Anvil as fabrique::DatabaseAware>::Error::from(e))?;
+                            .map_err(fabrique::Error::from)?;
 
                         {
                             let key = match self.hammer_relation.take() {
@@ -727,7 +801,7 @@ mod tests {
                             weight: self.weight.unwrap_or_else(::fabrique::seeded_value::<u32>),
                         };
 
-                        let instance = <Anvil as fabrique::Persist>::create(instance, &mut *conn).await?;
+                        let instance = <Anvil as fabrique::Persist<DB>>::create(instance, &mut *conn).await?;
                         let pk = <Anvil as fabrique::Model>::primary_key(&instance);
 
                         for child in &self.children {
@@ -834,7 +908,7 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                pub fn for_explosive(mut self, input: impl Into<DynamiteExplosiveRelation>) -> Self {
+                pub fn for_explosive(mut self, input: impl Into<DynamiteExplosiveRelation<DB>>) -> Self {
                     self.explosive_relation = Some(input.into());
                     self
                 }
@@ -863,7 +937,7 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                impl fabrique::SetForeignKey<Customer> for OrderFactory {
+                impl<DB: ::fabrique::Dialect> fabrique::SetForeignKey<Customer> for OrderFactory<DB> {
                     fn set_foreign_key(self, parent_key: <Customer as fabrique::Model>::PrimaryKey) -> Self {
                         self.customer_id(parent_key)
                     }
@@ -893,7 +967,7 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                impl fabrique::SetForeignKey<User, Sender> for MessageFactory {
+                impl<DB: ::fabrique::Dialect> fabrique::SetForeignKey<User, Sender> for MessageFactory<DB> {
                     fn set_foreign_key(self, parent_key: <User as fabrique::Model>::PrimaryKey) -> Self {
                         self.sender_id(parent_key)
                     }
@@ -904,7 +978,7 @@ mod tests {
         assert_eq!(
             generated[1].to_string(),
             quote! {
-                impl fabrique::SetForeignKey<User, Recipient> for MessageFactory {
+                impl<DB: ::fabrique::Dialect> fabrique::SetForeignKey<User, Recipient> for MessageFactory<DB> {
                     fn set_foreign_key(self, parent_key: <User as fabrique::Model>::PrimaryKey) -> Self {
                         self.recipient_id(parent_key)
                     }
@@ -934,7 +1008,7 @@ mod tests {
         assert_eq!(
             generated[0].to_string(),
             quote! {
-                pub fn for_sender(mut self, input: impl Into<MessageSenderRelation>) -> Self {
+                pub fn for_sender(mut self, input: impl Into<MessageSenderRelation<DB>>) -> Self {
                     self.sender_relation = Some(input.into());
                     self
                 }
@@ -944,7 +1018,7 @@ mod tests {
         assert_eq!(
             generated[1].to_string(),
             quote! {
-                pub fn for_recipient(mut self, input: impl Into<MessageRecipientRelation>) -> Self {
+                pub fn for_recipient(mut self, input: impl Into<MessageRecipientRelation<DB>>) -> Self {
                     self.recipient_relation = Some(input.into());
                     self
                 }

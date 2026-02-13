@@ -1,5 +1,4 @@
 use fabrique::prelude::*;
-use sqlx::Pool;
 use uuid::Uuid;
 
 #[derive(Debug, Default, Factory, PartialEq, Model)]
@@ -11,15 +10,15 @@ pub struct Product {
     pub in_stock: bool,
 }
 
-#[fabrique_derive::test]
-async fn test_persistable_macro_compiles(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_persistable_macro_compiles(connection: Pool<Sqlite>) {
     let result = Product::all(&connection).await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap().len(), 0);
 }
 
-#[fabrique_derive::test]
-async fn test_create(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_create(connection: Pool<Sqlite>) {
     let result = Product::factory()
         .name("Anvil 3000".to_owned())
         .price_cents(9999)
@@ -34,8 +33,8 @@ async fn test_create(connection: Pool<Backend>) {
     assert!(product.in_stock);
 }
 
-#[fabrique_derive::test]
-async fn test_delete(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_delete(connection: Pool<Sqlite>) {
     let product = Product::factory().create(&connection).await.unwrap();
     let existing = Product::all(&connection).await.unwrap();
     assert!(!existing.is_empty());
@@ -45,8 +44,8 @@ async fn test_delete(connection: Pool<Backend>) {
     assert!(existing.is_empty());
 }
 
-#[fabrique_derive::test]
-async fn test_destroy(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_destroy(connection: Pool<Sqlite>) {
     let id = Uuid::new_v4();
     Product::factory().id(id).create(&connection).await.unwrap();
     let result = Product::destroy(&connection, id).await;
@@ -55,8 +54,8 @@ async fn test_destroy(connection: Pool<Backend>) {
     assert_eq!(products.len(), 0);
 }
 
-#[fabrique_derive::test]
-async fn test_all(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_all(connection: Pool<Sqlite>) {
     let product = Product::factory().create(&connection).await.unwrap();
 
     let result = Product::all(&connection).await;
@@ -64,8 +63,8 @@ async fn test_all(connection: Pool<Backend>) {
     assert_eq!(result.unwrap(), vec![product]);
 }
 
-#[fabrique_derive::test]
-async fn test_query_builder(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_query_builder(connection: Pool<Sqlite>) {
     Product::factory()
         .name("Anvil 3000".to_owned())
         .price_cents(9999)

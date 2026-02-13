@@ -72,7 +72,7 @@ primary key — no declaration needed on the parent side:
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 # let user = User::factory().create(&pool).await?;
-let orders = user.orders().get(&pool).await?;
+let orders = user.orders::<_>().get(&pool).await?;
 # Ok(())
 # }
 ```
@@ -138,8 +138,8 @@ specify which foreign key to use:
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
 # let user = User::factory().create(&pool).await?;
-let sent = user.messages::<Sender>().get(&pool).await?;
-let received = user.messages::<Recipient>().get(&pool).await?;
+let sent = user.messages::<_, Sender>().get(&pool).await?;
+let received = user.messages::<_, Recipient>().get(&pool).await?;
 # Ok(())
 # }
 ```

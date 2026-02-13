@@ -12,7 +12,7 @@ impl<'a> AliasCodegen<'a> {
         Self { analysis }
     }
 
-    /// Generates alias struct, Alias, DatabaseAware, and Model impls.
+    /// Generates alias struct and Alias trait impl.
     pub fn generate(self) -> TokenStream {
         let impls = self.analysis.belongs_to().filter_map(|(_, relation)| {
             let alias = relation.alias.as_ref()?;

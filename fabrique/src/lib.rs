@@ -29,22 +29,28 @@
 //!
 //! ## Quick Example
 //!
-//! ```rust,no_run
+//! ```rust
+//! # extern crate fabrique;
+//! # extern crate sqlx;
+//! # extern crate tokio;
+//! # extern crate uuid;
 //! use fabrique::prelude::*;
+//! # use uuid::Uuid;
 //!
 //! // Define a model
-//! #[derive(Model, Factory)]
+//! #[derive(Clone, Model, Factory)]
 //! pub struct Product {
 //!     id: uuid::Uuid,
 //!     name: String,
 //!     price_cents: i32,
 //! }
 //!
-//! # async fn example(db: &Pool<Backend>) -> Result<(), fabrique::Error> {
+//! # #[fabrique::doctest]
+//! # async fn main(pool: Pool<sqlx::Sqlite>) -> Result<(), fabrique::Error> {
 //! // Query the database
 //! let expensive_products: Vec<Product> = Product::query()
 //!     .r#where(Product::PRICE_CENTS, ">=", 1000)
-//!     .get(db)
+//!     .get(&pool)
 //!     .await?;
 //!
 //! // Create a new record
@@ -53,10 +59,10 @@
 //!     name: "Anvil 3000".to_string(),
 //!     price_cents: 9999,
 //! };
-//! product.create(db).await?;
+//! product.create(&pool).await?;
 //!
 //! // Generate test data with factories
-//! let test_product = Product::factory().create(db).await?;
+//! let test_product = Product::factory().create(&pool).await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -76,6 +82,7 @@
 //! Then define your models and start querying. See the [`model`] module for a
 //! comprehensive guide on model conventions and usage
 pub use database::*;
+pub use dialect::*;
 pub use error::*;
 #[cfg(feature = "testing")]
 pub use factory::*;
@@ -102,6 +109,7 @@ where
 }
 
 pub mod database;
+pub mod dialect;
 pub mod error;
 #[cfg(feature = "testing")]
 pub mod factory;
@@ -109,11 +117,8 @@ pub mod model;
 pub mod prelude;
 pub mod relation;
 pub mod sql;
-
-#[cfg(feature = "doctests")]
+#[cfg(all(feature = "testing", feature = "sqlite"))]
 #[doc(hidden)]
 pub use fabrique_core::__private;
 
 pub use fabrique_derive::doctest;
-#[cfg(feature = "testing")]
-pub use fabrique_derive::test;

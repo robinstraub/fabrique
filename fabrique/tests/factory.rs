@@ -47,8 +47,8 @@ pub struct OrderLine {
     pub unit_price_cents: i32,
 }
 
-#[fabrique_derive::test]
-async fn test_auto_creates_belongs_to(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_auto_creates_belongs_to(connection: Pool<Sqlite>) {
     // Order has belongs_to User — create without for_user()
     let order = Order::factory().create(&connection).await.unwrap();
 
@@ -57,8 +57,8 @@ async fn test_auto_creates_belongs_to(connection: Pool<Backend>) {
     assert_eq!(user.id, order.user_id);
 }
 
-#[fabrique_derive::test]
-async fn test_factory_for_relations_accept_models(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_factory_for_relations_accept_models(connection: Pool<Sqlite>) {
     let user = User::factory().create(&connection).await.unwrap();
     let product = Product::factory().create(&connection).await.unwrap();
     let order = Order::factory()
@@ -75,8 +75,8 @@ async fn test_factory_for_relations_accept_models(connection: Pool<Backend>) {
         .unwrap();
 }
 
-#[fabrique_derive::test]
-async fn test_factory_for_relations_accept_factories(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_factory_for_relations_accept_factories(connection: Pool<Sqlite>) {
     OrderLine::factory()
         .for_order(Order::factory())
         .for_product(Product::factory())
@@ -85,8 +85,8 @@ async fn test_factory_for_relations_accept_factories(connection: Pool<Backend>) 
         .unwrap();
 }
 
-#[fabrique_derive::test]
-async fn test_has_many_creates_children(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_has_many_creates_children(connection: Pool<Sqlite>) {
     // Arrange a User with 1 Address via has_addresses (generated from Address's
     // belongs_to)
     let user = User::factory()
@@ -107,8 +107,8 @@ async fn test_has_many_creates_children(connection: Pool<Backend>) {
     assert_eq!(count.0, 1);
 }
 
-#[fabrique_derive::test]
-async fn test_has_many_through_join_model(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_has_many_through_join_model(connection: Pool<Sqlite>) {
     // Arrange an Order with 1 OrderLine (which auto-creates a Product via
     // belongs_to)
     let order = Order::factory()

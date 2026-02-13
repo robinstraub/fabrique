@@ -19,8 +19,27 @@ impl<'a> QueryCodegen<'a> {
         let base_struct_ident = &self.analysis.ident;
         let fn_find = FindCodegen::new(self.analysis).generate();
 
+        // Per-PK-field Encode/Type bounds
+        let pk_bounds = self
+            .analysis
+            .column_fields
+            .iter()
+            .filter(|f| f.primary_key)
+            .map(|f| {
+                let db_ty = f.r#as.as_ref().unwrap_or(&f.ty);
+                quote! {
+                    for<'q> #db_ty: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>
+                }
+            });
+
         quote! {
-            impl ::fabrique::Query for #base_struct_ident {
+            impl<DB: ::fabrique::Dialect> ::fabrique::Query<DB> for #base_struct_ident
+            where
+                for<'r> #base_struct_ident: ::sqlx::FromRow<'r, <DB as ::sqlx::Database>::Row>,
+                #(#pk_bounds,)*
+                for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Executor<'c, Database = DB>,
+                <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+            {
                 #fn_find
             }
         }
@@ -46,10 +65,16 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                impl ::fabrique::Query for Anvil {
-                    fn find<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+                impl<DB: ::fabrique::Dialect> ::fabrique::Query<DB> for Anvil
+                where
+                    for<'r> Anvil: ::sqlx::FromRow<'r, <DB as ::sqlx::Database>::Row>,
+                    for<'q> String: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Executor<'c, Database = DB>,
+                    <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+                {
+                    fn find<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, ::fabrique::Error>> + Send + 'e
                     where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                        A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;

@@ -37,9 +37,9 @@ impl<'a> FindCodegen<'a> {
         };
 
         quote! {
-            fn find<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+            fn find<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, ::fabrique::Error>> + Send + 'e
             where
-                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
             {
                 async move {
                     let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
@@ -70,9 +70,9 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                fn find<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+                fn find<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, ::fabrique::Error>> + Send + 'e
                 where
-                    A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                    A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                 {
                     async move {
                         let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
@@ -109,9 +109,9 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                fn find<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, Self::Error>> + Send + 'e
+                fn find<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<Self, ::fabrique::Error>> + Send + 'e
                 where
-                    A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                    A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                 {
                     async move {
                         let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;

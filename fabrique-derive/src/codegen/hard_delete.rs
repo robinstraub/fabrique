@@ -1,6 +1,5 @@
 use crate::Analysis;
 use crate::analysis::ast::ColumnField;
-use crate::codegen::placeholder;
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -22,8 +21,26 @@ impl<'a> HardDeleteCodegen<'a> {
         let fn_hard_destroy = self.generate_fn_hard_destroy();
         let fn_hard_delete = self.generate_fn_hard_delete();
 
+        // PK-field Encode/Type bounds
+        let pk_bounds = self
+            .analysis
+            .column_fields
+            .iter()
+            .filter(|f| f.primary_key)
+            .map(|f| {
+                let db_ty = f.r#as.as_ref().unwrap_or(&f.ty);
+                quote! {
+                    for<'q> #db_ty: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>
+                }
+            });
+
         quote! {
-            impl ::fabrique::HardDelete for #base_struct_ident {
+            impl<DB: ::fabrique::Dialect> ::fabrique::HardDelete<DB> for #base_struct_ident
+            where
+                #(#pk_bounds,)*
+                for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Executor<'c, Database = DB>,
+                <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+            {
                 #fn_hard_destroy
                 #fn_hard_delete
             }
@@ -31,41 +48,8 @@ impl<'a> HardDeleteCodegen<'a> {
     }
 
     fn generate_fn_hard_delete(&self) -> TokenStream {
-        let primary_key = self
-            .analysis
-            .column_fields
-            .iter()
-            .filter(|field| field.primary_key);
+        let table_name = &self.analysis.model.table_name;
 
-        let clause = primary_key
-            .clone()
-            .enumerate()
-            .map(|(i, field)| format!("{} = {}", field.ident, placeholder(i + 1)))
-            .collect::<Vec<_>>()
-            .join(" AND ");
-
-        let query = format!(
-            "DELETE FROM {} WHERE {}",
-            self.analysis.model.table_name, clause
-        );
-
-        let bindings = primary_key.map(|ColumnField { ident, .. }| quote! { self.#ident });
-
-        quote! {
-            fn hard_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-            where
-                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-            {
-                async move {
-                    let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                    ::sqlx::query(#query)#(.bind(#bindings))*.execute(&mut *conn).await?;
-                    Ok(())
-                }
-            }
-        }
-    }
-
-    fn generate_fn_hard_destroy(&self) -> TokenStream {
         let primary_key: Vec<_> = self
             .analysis
             .column_fields
@@ -73,17 +57,47 @@ impl<'a> HardDeleteCodegen<'a> {
             .filter(|field| field.primary_key)
             .collect();
 
-        let clause = primary_key
+        let pk_col_names: Vec<_> = primary_key.iter().map(|f| f.ident.to_string()).collect();
+        let bindings = primary_key
             .iter()
-            .enumerate()
-            .map(|(i, field)| format!("{} = {}", field.ident, placeholder(i + 1)))
-            .collect::<Vec<_>>()
-            .join(" AND ");
+            .map(|ColumnField { ident, .. }| quote! { self.#ident });
 
-        let query = format!(
-            "DELETE FROM {} WHERE {}",
-            self.analysis.model.table_name, clause
-        );
+        quote! {
+            fn hard_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
+            where
+                A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
+            {
+                async move {
+                    let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
+                    let clause = [#(#pk_col_names),*]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                        .collect::<Vec<_>>()
+                        .join(" AND ");
+                    let query = format!(
+                        "DELETE FROM {} WHERE {}",
+                        #table_name,
+                        clause
+                    );
+                    ::sqlx::query(::sqlx::AssertSqlSafe(query))#(.bind(#bindings))*.execute(&mut *conn).await?;
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    fn generate_fn_hard_destroy(&self) -> TokenStream {
+        let table_name = &self.analysis.model.table_name;
+
+        let primary_key: Vec<_> = self
+            .analysis
+            .column_fields
+            .iter()
+            .filter(|field| field.primary_key)
+            .collect();
+
+        let pk_col_names: Vec<_> = primary_key.iter().map(|f| f.ident.to_string()).collect();
 
         let binds = match primary_key.as_slice() {
             [_] => quote! { .bind(id) },
@@ -94,13 +108,24 @@ impl<'a> HardDeleteCodegen<'a> {
         };
 
         quote! {
-            fn hard_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+            fn hard_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
             where
-                A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
             {
                 async move {
                     let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                    ::sqlx::query(#query)
+                    let clause = [#(#pk_col_names),*]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                        .collect::<Vec<_>>()
+                        .join(" AND ");
+                    let query = format!(
+                        "DELETE FROM {} WHERE {}",
+                        #table_name,
+                        clause
+                    );
+                    ::sqlx::query(::sqlx::AssertSqlSafe(query))
                         #binds
                         .execute(&mut *conn)
                         .await?;
@@ -116,7 +141,6 @@ mod tests {
     use super::*;
     use syn::parse_quote;
 
-    #[cfg(any(feature = "sqlite", feature = "mysql"))]
     #[test]
     fn test_a_basic_struct_derive_delete() {
         let input = parse_quote! { struct Anvil { id: String } };
@@ -127,64 +151,55 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                impl ::fabrique::HardDelete for Anvil {
-                    fn hard_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                impl<DB: ::fabrique::Dialect> ::fabrique::HardDelete<DB> for Anvil
+                where
+                    for<'q> String: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Executor<'c, Database = DB>,
+                    <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+                {
+                    fn hard_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
                     where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                        A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("DELETE FROM anvils WHERE id = ?").bind(id).execute(&mut *conn).await?;
+                            let clause = ["id"]
+                                .iter()
+                                .enumerate()
+                                .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                                .collect::<Vec<_>>()
+                                .join(" AND ");
+                            let query = format!(
+                                "DELETE FROM {} WHERE {}",
+                                "anvils",
+                                clause
+                            );
+                            ::sqlx::query(::sqlx::AssertSqlSafe(query))
+                                .bind(id)
+                                .execute(&mut *conn)
+                                .await?;
                             Ok(())
                         }
                     }
 
-                    fn hard_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    fn hard_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
                     where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                        A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("DELETE FROM anvils WHERE id = ?").bind(self.id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                }
-            }
-            .to_string()
-        );
-    }
-
-    #[cfg(feature = "postgres")]
-    #[test]
-    fn test_a_basic_struct_derive_delete() {
-        let input = parse_quote! { struct Anvil { id: String } };
-        let analysis = Analysis::from(&input).unwrap();
-        let codegen = HardDeleteCodegen::new(&analysis);
-        let result = codegen.generate();
-
-        assert_eq!(
-            result.to_string(),
-            quote! {
-                impl ::fabrique::HardDelete for Anvil {
-                    fn hard_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("DELETE FROM anvils WHERE id = $1").bind(id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-
-                    fn hard_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("DELETE FROM anvils WHERE id = $1").bind(self.id).execute(&mut *conn).await?;
+                            let clause = ["id"]
+                                .iter()
+                                .enumerate()
+                                .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                                .collect::<Vec<_>>()
+                                .join(" AND ");
+                            let query = format!(
+                                "DELETE FROM {} WHERE {}",
+                                "anvils",
+                                clause
+                            );
+                            ::sqlx::query(::sqlx::AssertSqlSafe(query)).bind(self.id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }
@@ -194,7 +209,6 @@ mod tests {
         );
     }
 
-    #[cfg(any(feature = "sqlite", feature = "mysql"))]
     #[test]
     fn test_composite_keys() {
         let input = parse_quote! {
@@ -213,72 +227,57 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                impl ::fabrique::HardDelete for Anvil {
-                    fn hard_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                impl<DB: ::fabrique::Dialect> ::fabrique::HardDelete<DB> for Anvil
+                where
+                    for<'q> uuid::Uuid: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>,
+                    for<'q> uuid::Uuid: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Executor<'c, Database = DB>,
+                    <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+                {
+                    fn hard_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
                     where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                        A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("DELETE FROM anvils WHERE user_id = ? AND organization_id = ?").bind(id.0).bind(id.1).execute(&mut *conn).await?;
+                            let clause = ["user_id", "organization_id"]
+                                .iter()
+                                .enumerate()
+                                .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                                .collect::<Vec<_>>()
+                                .join(" AND ");
+                            let query = format!(
+                                "DELETE FROM {} WHERE {}",
+                                "anvils",
+                                clause
+                            );
+                            ::sqlx::query(::sqlx::AssertSqlSafe(query))
+                                .bind(id.0)
+                                .bind(id.1)
+                                .execute(&mut *conn)
+                                .await?;
                             Ok(())
                         }
                     }
 
-                    fn hard_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    fn hard_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
                     where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                        A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
                         async move {
                             let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("DELETE FROM anvils WHERE user_id = ? AND organization_id = ?").bind(self.user_id).bind(self.organization_id).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-                }
-            }
-            .to_string()
-        );
-    }
-
-    #[cfg(feature = "postgres")]
-    #[test]
-    fn test_composite_keys() {
-        let input = parse_quote! {
-            struct Anvil {
-                #[fabrique(primary_key)]
-                user_id: uuid::Uuid,
-
-                #[fabrique(primary_key)]
-                organization_id: uuid::Uuid
-            }
-        };
-        let analysis = Analysis::from(&input).unwrap();
-        let codegen = HardDeleteCodegen::new(&analysis);
-        let result = codegen.generate();
-
-        assert_eq!(
-            result.to_string(),
-            quote! {
-                impl ::fabrique::HardDelete for Anvil {
-                    fn hard_destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("DELETE FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(id.0).bind(id.1).execute(&mut *conn).await?;
-                            Ok(())
-                        }
-                    }
-
-                    fn hard_delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
-                    where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
-                    {
-                        async move {
-                            let mut conn = executor.acquire().await.map_err(|e| ::fabrique::Error::from(e))?;
-                            ::sqlx::query("DELETE FROM anvils WHERE user_id = $1 AND organization_id = $2").bind(self.user_id).bind(self.organization_id).execute(&mut *conn).await?;
+                            let clause = ["user_id", "organization_id"]
+                                .iter()
+                                .enumerate()
+                                .map(|(i, col)| format!("{} = {}", col, <DB as ::fabrique::Dialect>::placeholder(i + 1)))
+                                .collect::<Vec<_>>()
+                                .join(" AND ");
+                            let query = format!(
+                                "DELETE FROM {} WHERE {}",
+                                "anvils",
+                                clause
+                            );
+                            ::sqlx::query(::sqlx::AssertSqlSafe(query)).bind(self.user_id).bind(self.organization_id).execute(&mut *conn).await?;
                             Ok(())
                         }
                     }

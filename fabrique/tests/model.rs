@@ -1,5 +1,4 @@
 use fabrique::prelude::*;
-use sqlx::Pool;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Default, Factory, PartialEq, Model)]
@@ -11,14 +10,14 @@ pub struct Product {
     pub in_stock: bool,
 }
 
-#[fabrique_derive::test]
-async fn test_save(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_save(connection: Pool<Sqlite>) {
     let result = Product::default().save(&connection).await;
     assert!(result.is_ok());
 }
 
-#[fabrique_derive::test]
-async fn test_update(connection: Pool<Backend>) {
+#[sqlx::test(migrations = "../migrations")]
+async fn test_update(connection: Pool<Sqlite>) {
     let product = Product::factory().create(&connection).await.unwrap();
     let result = Product::update()
         .set(Product::NAME, "Anvil 3000")

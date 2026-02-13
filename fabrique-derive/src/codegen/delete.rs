@@ -22,8 +22,43 @@ impl<'a> DeleteCodegen<'a> {
         let fn_delete = self.generate_fn_delete();
         let fn_destroy = self.generate_fn_destroy();
 
+        let has_soft_delete = self
+            .analysis
+            .column_fields
+            .iter()
+            .any(|field| field.soft_delete);
+
+        // PK-field Encode/Type bounds (needed by the delegated trait)
+        let pk_bounds = self
+            .analysis
+            .column_fields
+            .iter()
+            .filter(|f| f.primary_key)
+            .map(|f| {
+                let db_ty = f.r#as.as_ref().unwrap_or(&f.ty);
+                quote! {
+                    for<'q> #db_ty: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>
+                }
+            });
+
+        // When delegating to SoftDelete, we need its extra bounds
+        let soft_delete_bounds = if has_soft_delete {
+            quote! {
+                usize: ::sqlx::ColumnIndex<<DB as ::sqlx::Database>::Row>,
+                for<'d> bool: ::sqlx::decode::Decode<'d, DB> + ::sqlx::Type<DB>,
+            }
+        } else {
+            quote! {}
+        };
+
         quote! {
-            impl ::fabrique::Delete for #base_struct_ident {
+            impl<DB: ::fabrique::Dialect> ::fabrique::Delete<DB> for #base_struct_ident
+            where
+                #(#pk_bounds,)*
+                for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Executor<'c, Database = DB>,
+                <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+                #soft_delete_bounds
+            {
                 #fn_delete
                 #fn_destroy
             }
@@ -39,19 +74,19 @@ impl<'a> DeleteCodegen<'a> {
 
         match soft_delete {
             Some(_) => quote! {
-                fn delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                fn delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
                 where
-                    A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                    A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                 {
-                    <Self as ::fabrique::SoftDelete>::soft_delete(self, executor)
+                    <Self as ::fabrique::SoftDelete<DB>>::soft_delete(self, executor)
                 }
             },
             None => quote! {
-                fn delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                fn delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
                 where
-                    A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                    A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                 {
-                    <Self as ::fabrique::HardDelete>::hard_delete(self, executor)
+                    <Self as ::fabrique::HardDelete<DB>>::hard_delete(self, executor)
                 }
             },
         }
@@ -66,19 +101,19 @@ impl<'a> DeleteCodegen<'a> {
 
         match soft_delete {
             Some(_) => quote! {
-                fn destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                fn destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
                 where
-                    A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                    A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                 {
-                    <Self as ::fabrique::SoftDelete>::soft_destroy(executor, id)
+                    <Self as ::fabrique::SoftDelete<DB>>::soft_destroy(executor, id)
                 }
             },
             None => quote! {
-                fn destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                fn destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
                 where
-                    A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                    A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                 {
-                    <Self as ::fabrique::HardDelete>::hard_destroy(executor, id)
+                    <Self as ::fabrique::HardDelete<DB>>::hard_destroy(executor, id)
                 }
             },
         }
@@ -104,19 +139,24 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                impl ::fabrique::Delete for Anvil {
-                    fn delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                impl<DB: ::fabrique::Dialect> ::fabrique::Delete<DB> for Anvil
+                where
+                    for<'q> String: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Executor<'c, Database = DB>,
+                    <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+                {
+                    fn delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
                     where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                        A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
-                        <Self as ::fabrique::HardDelete>::hard_delete(self, executor)
+                        <Self as ::fabrique::HardDelete<DB>>::hard_delete(self, executor)
                     }
 
-                    fn destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    fn destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
                     where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                        A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
-                        <Self as ::fabrique::HardDelete>::hard_destroy(executor, id)
+                        <Self as ::fabrique::HardDelete<DB>>::hard_destroy(executor, id)
                     }
                 }
             }
@@ -145,19 +185,26 @@ mod tests {
         assert_eq!(
             result.to_string(),
             quote! {
-                impl ::fabrique::Delete for Anvil {
-                    fn delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                impl<DB: ::fabrique::Dialect> ::fabrique::Delete<DB> for Anvil
+                where
+                    for<'q> String: ::sqlx::Encode<'q, DB> + ::sqlx::Type<DB>,
+                    for<'c> &'c mut <DB as ::sqlx::Database>::Connection: ::sqlx::Executor<'c, Database = DB>,
+                    <DB as ::sqlx::Database>::Arguments: ::sqlx::IntoArguments<DB>,
+                    usize: ::sqlx::ColumnIndex<<DB as ::sqlx::Database>::Row>,
+                    for<'d> bool: ::sqlx::decode::Decode<'d, DB> + ::sqlx::Type<DB>,
+                {
+                    fn delete<'e, A>(self, executor: A) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
                     where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                        A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
-                        <Self as ::fabrique::SoftDelete>::soft_delete(self, executor)
+                        <Self as ::fabrique::SoftDelete<DB>>::soft_delete(self, executor)
                     }
 
-                    fn destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), Self::Error>> + Send + 'e
+                    fn destroy<'e, A>(executor: A, id: Self::PrimaryKey) -> impl ::std::future::Future<Output = Result<(), ::fabrique::Error>> + Send + 'e
                     where
-                        A: ::sqlx::Acquire<'e, Database = Self::Database> + Send + 'e,
+                        A: ::sqlx::Acquire<'e, Database = DB> + Send + 'e,
                     {
-                        <Self as ::fabrique::SoftDelete>::soft_destroy(executor, id)
+                        <Self as ::fabrique::SoftDelete<DB>>::soft_destroy(executor, id)
                     }
                 }
             }

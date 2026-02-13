@@ -257,7 +257,7 @@ let user = User::factory()
     .create(&pool)
     .await?;
 
-let orders = user.orders().get(&pool).await?;
+let orders = user.orders::<_>().get(&pool).await?;
 assert_eq!(orders.len(), 3);
 # Ok(())
 # }
