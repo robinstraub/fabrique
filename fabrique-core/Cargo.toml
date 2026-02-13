@@ -13,7 +13,7 @@ features = ["sqlite", "testing"]
 
 
 [features]
-testing = ["tokio"]
+testing = []
 postgres = ["sqlx/postgres"]
 mysql = ["sqlx/mysql"]
 sqlite = ["sqlx/sqlite"]
@@ -21,7 +21,6 @@ sqlite = ["sqlx/sqlite"]
 [dependencies]
 sqlx = { workspace = true }
 thiserror = "2"
-tokio = { version = "1", features = ["rt"], optional = true }
 
 [dev-dependencies]
 fabrique-derive = { path = "../fabrique-derive" }

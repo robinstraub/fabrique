@@ -1,6 +1,9 @@
 #[cfg(not(any(feature = "postgres", feature = "sqlite", feature = "mysql")))]
 compile_error!("one of the features \"postgres\", \"sqlite\", or \"mysql\" must be enabled");
 
+#[cfg(all(feature = "testing", feature = "sqlite"))]
+#[doc(hidden)]
+pub mod __private;
 pub mod database;
 pub mod dialect;
 pub mod error;
@@ -9,12 +12,6 @@ pub mod factory;
 pub mod model;
 pub mod relation;
 pub mod sql;
-#[cfg(feature = "testing")]
-pub mod testing;
-
-#[cfg(all(feature = "testing", feature = "sqlite"))]
-#[doc(hidden)]
-pub mod __private;
 
 // Re-export for use in generated code
 pub use database::Nil;

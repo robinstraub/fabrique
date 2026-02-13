@@ -75,16 +75,16 @@ mod initial {
         let _qb = QueryBuilder::<(), _, fabrique::model::Joined<(Product, ()), ()>>::default();
     }
 
-    #[fabrique_derive::test]
-    async fn select_as_transitions_to_selected<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn select_as_transitions_to_selected(pool: Pool<Sqlite>) {
         // select_as on Initial can only select the base model (no joins available)
         let result: Result<Vec<Product>, _> =
             Product::query().select_as::<Product, _>().get(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn insert_transitions_to_inserting<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn insert_transitions_to_inserting(pool: Pool<Sqlite>) {
         let result = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
@@ -95,8 +95,8 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn update_transitions_to_updating<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn update_transitions_to_updating(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
         let result = Product::update()
@@ -106,14 +106,14 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn join_transitions_to_joining<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn join_transitions_to_joining(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query().join::<Order>().get(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn select_columns_transitions_to_selected<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn select_columns_transitions_to_selected(pool: Pool<Sqlite>) {
         let result: Result<Vec<(String, i32)>, _> = Product::query()
             .select((Product::NAME, Product::PRICE_CENTS))
             .get(&pool)
@@ -121,8 +121,8 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_implicit_select_transitions_to_filtered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .r#where(Product::PRICE_CENTS, ">=", 1000)
             .get(&pool)
@@ -130,8 +130,8 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_not_null_implicit_select_transitions_to_filtered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_not_null_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .where_not_null(Product::NAME)
             .get(&pool)
@@ -139,8 +139,8 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn order_by_implicit_select_transitions_to_ordered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn order_by_implicit_select_transitions_to_ordered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .order_by(Product::NAME, "ASC")
             .get(&pool)
@@ -148,28 +148,28 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn limit_implicit_select_transitions_to_limited<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn limit_implicit_select_transitions_to_limited(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query().limit(10).get(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn first_implicit_select_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_implicit_select_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::query().first(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn first_or_fail_implicit_select_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_or_fail_implicit_select_executes(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Product, _> = Product::query().first_or_fail(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn get_implicit_select_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn get_implicit_select_executes(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query().get(&pool).await;
         assert!(result.is_ok());
     }
@@ -182,8 +182,8 @@ mod initial {
 mod joining {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn join_chains<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn join_chains(pool: Pool<Sqlite>) {
         let result: Result<Vec<Order>, _> = Order::query()
             .join::<User>()
             .join::<OrderLine>()
@@ -192,8 +192,8 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn join_as_chains<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn join_as_chains(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
             .join_as::<User, Recipient>()
@@ -202,8 +202,8 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn join_through_chains<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn join_through_chains(pool: Pool<Sqlite>) {
         let result: Result<Vec<Order>, _> = Order::query()
             .join::<OrderLine>()
             .join_through::<Product, OrderLine, _>()
@@ -212,8 +212,8 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn select_as_transitions_to_selected<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn select_as_transitions_to_selected(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
             .select_as::<User, _>()
@@ -222,8 +222,8 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn select_columns_transitions_to_selected<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn select_columns_transitions_to_selected(pool: Pool<Sqlite>) {
         let result: Result<Vec<(String, String)>, _> = Order::query()
             .join::<OrderLine>()
             .join_through::<Product, OrderLine, _>()
@@ -233,8 +233,8 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_implicit_select_transitions_to_filtered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
             .r#where(User::EMAIL, "=", "test@example.com")
@@ -243,8 +243,8 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_null_implicit_select_transitions_to_filtered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_null_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
             .where_null(User::EMAIL)
@@ -253,8 +253,8 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_not_null_implicit_select_transitions_to_filtered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_not_null_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
             .where_not_null(User::EMAIL)
@@ -263,8 +263,8 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn order_by_implicit_select_transitions_to_ordered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn order_by_implicit_select_transitions_to_ordered(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
             .order_by(User::NAME, "ASC")
@@ -273,20 +273,20 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn limit_implicit_select_transitions_to_limited<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn limit_implicit_select_transitions_to_limited(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query().join::<Order>().limit(10).get(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn first_implicit_select_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_implicit_select_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<User>, _> = User::query().join::<Order>().first(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn first_or_fail_implicit_select_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_or_fail_implicit_select_executes(pool: Pool<Sqlite>) {
         User::factory()
             .has_orders(Order::factory(), 1)
             .create(&pool)
@@ -297,14 +297,14 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn get_implicit_select_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn get_implicit_select_executes(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query().join::<Order>().get(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_on_implicit_select_transitions_to_filtered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_on_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
             .where_on::<Sender, _, _, _, _>(User::NAME, "=", "Alice".to_string())
@@ -313,8 +313,8 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_null_on_implicit_select_transitions_to_filtered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_null_on_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
             .where_null_on::<Sender, _, _, _>(User::NAME)
@@ -323,10 +323,8 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_not_null_on_implicit_select_transitions_to_filtered<DB: Dialect>(
-        pool: Pool<DB>,
-    ) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_not_null_on_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
             .where_not_null_on::<Sender, _, _, _>(User::NAME)
@@ -335,8 +333,8 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn order_by_on_implicit_select_transitions_to_ordered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn order_by_on_implicit_select_transitions_to_ordered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
             .order_by_on::<Sender, _, _, _>(User::NAME, "ASC")
@@ -353,8 +351,8 @@ mod joining {
 mod selected {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn where_transitions_to_filtered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_transitions_to_filtered(pool: Pool<Sqlite>) {
         Product::factory()
             .in_stock(true)
             .create(&pool)
@@ -370,8 +368,8 @@ mod selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[fabrique_derive::test]
-    async fn where_null_transitions_to_filtered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_null_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .where_null(Product::NAME)
@@ -380,8 +378,8 @@ mod selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_not_null_transitions_to_filtered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_not_null_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .where_not_null(Product::NAME)
@@ -390,8 +388,8 @@ mod selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn order_by_transitions_to_ordered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn order_by_transitions_to_ordered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .order_by(Product::NAME, "ASC")
@@ -400,8 +398,8 @@ mod selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn limit_transitions_to_limited<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn limit_transitions_to_limited(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .limit(10)
@@ -410,8 +408,8 @@ mod selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn get_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn get_executes(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Vec<Product>, _> =
@@ -420,8 +418,8 @@ mod selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[fabrique_derive::test]
-    async fn first_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .first(&pool)
@@ -429,8 +427,8 @@ mod selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn first_or_fail_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_or_fail_executes(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Product, _> = Product::query()
@@ -440,8 +438,8 @@ mod selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn first_or_fail_fails_when_empty<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_or_fail_fails_when_empty(pool: Pool<Sqlite>) {
         let result: Result<Product, _> = Product::query()
             .select_as::<Product, _>()
             .first_or_fail(&pool)
@@ -457,8 +455,8 @@ mod selected {
 mod joined_selected {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn where_transitions_to_filtered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_transitions_to_filtered(pool: Pool<Sqlite>) {
         let user = User::factory()
             .has_orders(Order::factory(), 1)
             .create(&pool)
@@ -475,8 +473,8 @@ mod joined_selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[fabrique_derive::test]
-    async fn where_on_joined_model_column<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_on_joined_model_column(pool: Pool<Sqlite>) {
         User::factory()
             .has_orders(Order::factory().status("pending".to_string()), 1)
             .create(&pool)
@@ -493,8 +491,8 @@ mod joined_selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[fabrique_derive::test]
-    async fn where_on_named_join<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_on_named_join(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
             .select_as::<Message, _>()
@@ -504,8 +502,8 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_null_on_named_join<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_null_on_named_join(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
             .select_as::<Message, _>()
@@ -515,8 +513,8 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_not_null_on_named_join<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_not_null_on_named_join(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
             .select_as::<Message, _>()
@@ -526,8 +524,8 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn order_by_transitions_to_ordered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn order_by_transitions_to_ordered(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
             .select_as::<User, _>()
@@ -537,8 +535,8 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn order_by_on_named_join<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn order_by_on_named_join(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
             .select_as::<Message, _>()
@@ -548,8 +546,8 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn limit_transitions_to_limited<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn limit_transitions_to_limited(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
             .select_as::<User, _>()
@@ -559,8 +557,8 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn get_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn get_executes(pool: Pool<Sqlite>) {
         User::factory()
             .has_orders(Order::factory(), 1)
             .create(&pool)
@@ -576,8 +574,8 @@ mod joined_selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[fabrique_derive::test]
-    async fn first_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<User>, _> = User::query()
             .join::<Order>()
             .select_as::<User, _>()
@@ -586,8 +584,8 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn first_or_fail_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_or_fail_executes(pool: Pool<Sqlite>) {
         User::factory()
             .has_orders(Order::factory(), 1)
             .create(&pool)
@@ -610,8 +608,8 @@ mod joined_selected {
 mod filtered_selected {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn where_chains<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_chains(pool: Pool<Sqlite>) {
         Product::factory()
             .in_stock(true)
             .price_cents(100)
@@ -629,8 +627,8 @@ mod filtered_selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[fabrique_derive::test]
-    async fn where_null_chains<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_null_chains(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
@@ -640,8 +638,8 @@ mod filtered_selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_not_null_chains<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_not_null_chains(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
@@ -651,8 +649,8 @@ mod filtered_selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn order_by_transitions_to_ordered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn order_by_transitions_to_ordered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
@@ -662,8 +660,8 @@ mod filtered_selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn limit_transitions_to_limited<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn limit_transitions_to_limited(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
@@ -673,8 +671,8 @@ mod filtered_selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn get_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn get_executes(pool: Pool<Sqlite>) {
         Product::factory()
             .in_stock(true)
             .create(&pool)
@@ -690,8 +688,8 @@ mod filtered_selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[fabrique_derive::test]
-    async fn first_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .r#where(Product::IN_STOCK, "=", true)
@@ -700,8 +698,8 @@ mod filtered_selected {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn first_or_fail_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_or_fail_executes(pool: Pool<Sqlite>) {
         Product::factory()
             .in_stock(true)
             .create(&pool)
@@ -724,8 +722,8 @@ mod filtered_selected {
 mod ordered {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn limit_transitions_to_limited<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn limit_transitions_to_limited(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .order_by(Product::NAME, "ASC")
@@ -735,8 +733,8 @@ mod ordered {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn get_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn get_executes(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Vec<Product>, _> = Product::query()
@@ -748,8 +746,8 @@ mod ordered {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[fabrique_derive::test]
-    async fn first_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .order_by(Product::NAME, "ASC")
@@ -758,8 +756,8 @@ mod ordered {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn first_or_fail_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_or_fail_executes(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Product, _> = Product::query()
@@ -778,8 +776,8 @@ mod ordered {
 mod limited {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn offset_transitions_to_offsetted<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn offset_transitions_to_offsetted(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
             .limit(10)
@@ -789,8 +787,8 @@ mod limited {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn get_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn get_executes(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Vec<Product>, _> = Product::query()
@@ -810,8 +808,8 @@ mod limited {
 mod offsetted {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn get_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn get_executes(pool: Pool<Sqlite>) {
         for _ in 0..3 {
             Product::factory().create(&pool).await.expect("setup");
         }
@@ -840,8 +838,8 @@ mod offsetted {
 mod updating {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn set_transitions_to_updated<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_transitions_to_updated(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
         let result = Product::update()
@@ -859,8 +857,8 @@ mod updating {
 mod updated {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn set_chains<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_chains(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
         let result = Product::update()
@@ -871,8 +869,8 @@ mod updated {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn where_transitions_to_filtered<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_transitions_to_filtered(pool: Pool<Sqlite>) {
         let product = Product::factory().create(&pool).await.expect("setup");
 
         let result = Product::update()
@@ -884,8 +882,8 @@ mod updated {
     }
 
     #[cfg(not(feature = "mysql"))]
-    #[fabrique_derive::test]
-    async fn returning_transitions_to_returned<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn returning_transitions_to_returned(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Vec<Product>, _> = Product::update()
@@ -907,8 +905,8 @@ mod updated {
 mod filtered_updated {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn where_chains<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn where_chains(pool: Pool<Sqlite>) {
         let product = Product::factory()
             .in_stock(true)
             .create(&pool)
@@ -925,8 +923,8 @@ mod filtered_updated {
     }
 
     #[cfg(not(feature = "mysql"))]
-    #[fabrique_derive::test]
-    async fn returning_transitions_to_returned<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn returning_transitions_to_returned(pool: Pool<Sqlite>) {
         let product = Product::factory().create(&pool).await.expect("setup");
 
         let result: Result<Vec<Product>, _> = Product::update()
@@ -941,8 +939,8 @@ mod filtered_updated {
         assert_eq!(updated[0].name, "Updated");
     }
 
-    #[fabrique_derive::test]
-    async fn execute_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn execute_executes(pool: Pool<Sqlite>) {
         let product = Product::factory().create(&pool).await.expect("setup");
 
         let result = Product::update()
@@ -967,8 +965,8 @@ mod filtered_updated {
 mod inserting {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn set_transitions_to_inserted<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_transitions_to_inserted(pool: Pool<Sqlite>) {
         let result = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
@@ -987,8 +985,8 @@ mod inserting {
 mod inserted {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn set_chains<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn set_chains(pool: Pool<Sqlite>) {
         let result = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
@@ -999,8 +997,8 @@ mod inserted {
         assert!(result.is_ok());
     }
 
-    #[fabrique_derive::test]
-    async fn on_conflict_transitions_to_conflicted<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn on_conflict_transitions_to_conflicted(pool: Pool<Sqlite>) {
         let id = Uuid::new_v4();
 
         // First insert
@@ -1024,8 +1022,8 @@ mod inserted {
     }
 
     #[cfg(not(feature = "mysql"))]
-    #[fabrique_derive::test]
-    async fn returning_transitions_to_returned<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn returning_transitions_to_returned(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
@@ -1038,8 +1036,8 @@ mod inserted {
         assert!(result.unwrap().is_some());
     }
 
-    #[fabrique_derive::test]
-    async fn execute_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn execute_executes(pool: Pool<Sqlite>) {
         let result = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Original")
@@ -1059,8 +1057,8 @@ mod conflicted {
     use super::*;
 
     #[cfg(not(feature = "mysql"))]
-    #[fabrique_derive::test]
-    async fn do_update_transitions_to_upserted<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn do_update_transitions_to_upserted(pool: Pool<Sqlite>) {
         let id = Uuid::new_v4();
 
         // First insert
@@ -1087,8 +1085,8 @@ mod conflicted {
         assert_eq!(updated[0].name, "Updated");
     }
 
-    #[fabrique_derive::test]
-    async fn do_nothing_transitions_to_upserted<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn do_nothing_transitions_to_upserted(pool: Pool<Sqlite>) {
         let id = Uuid::new_v4();
 
         // First insert
@@ -1120,8 +1118,8 @@ mod upserted {
     use super::*;
 
     #[cfg(not(feature = "mysql"))]
-    #[fabrique_derive::test]
-    async fn returning_transitions_to_returned<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn returning_transitions_to_returned(pool: Pool<Sqlite>) {
         let id = Uuid::new_v4();
 
         // First insert
@@ -1146,8 +1144,8 @@ mod upserted {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[fabrique_derive::test]
-    async fn execute_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn execute_executes(pool: Pool<Sqlite>) {
         let id = Uuid::new_v4();
 
         // First insert
@@ -1185,8 +1183,8 @@ mod upserted {
 mod returned {
     use super::*;
 
-    #[fabrique_derive::test]
-    async fn get_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn get_executes(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
@@ -1199,8 +1197,8 @@ mod returned {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[fabrique_derive::test]
-    async fn first_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")
@@ -1213,8 +1211,8 @@ mod returned {
         assert!(result.unwrap().is_some());
     }
 
-    #[fabrique_derive::test]
-    async fn first_or_fail_executes<DB: Dialect>(pool: Pool<DB>) {
+    #[sqlx::test(migrations = "../migrations")]
+    async fn first_or_fail_executes(pool: Pool<Sqlite>) {
         let result: Result<Product, _> = Product::insert()
             .set(Product::ID, Uuid::new_v4())
             .set(Product::NAME, "Test")

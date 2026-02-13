@@ -18,7 +18,7 @@ use crate::{database::Pool, error::Error};
 #[cfg(feature = "sqlite")]
 pub async fn doctest_pool() -> Result<Pool<sqlx::Sqlite>, Error> {
     let pool = sqlx::SqlitePool::connect("sqlite::memory:").await?;
-    sqlx::migrate!("../migrations/sqlite")
+    sqlx::migrate!("../migrations")
         .run(&pool)
         .await
         .map_err(|e| Error::Other(Box::new(e)))?;

@@ -1,6 +1,13 @@
 #[cfg(any(feature = "postgres", feature = "sqlite", feature = "mysql"))]
 pub use sqlx::Pool;
 
+#[cfg(feature = "mysql")]
+pub use sqlx::MySql;
+#[cfg(feature = "postgres")]
+pub use sqlx::Postgres;
+#[cfg(feature = "sqlite")]
+pub use sqlx::Sqlite;
+
 /// Represents a type-safe column from a specific model.
 ///
 /// This trait is implemented by zero-sized types generated for each model

@@ -117,13 +117,8 @@ pub mod model;
 pub mod prelude;
 pub mod relation;
 pub mod sql;
-#[cfg(feature = "testing")]
-pub mod testing;
-
 #[cfg(all(feature = "testing", feature = "sqlite"))]
 #[doc(hidden)]
 pub use fabrique_core::__private;
 
 pub use fabrique_derive::doctest;
-#[cfg(feature = "testing")]
-pub use fabrique_derive::test;

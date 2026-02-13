@@ -14,7 +14,6 @@ use syn::{DeriveInput, ItemFn, parse_macro_input};
 mod analysis;
 mod codegen;
 mod error;
-mod test;
 
 use crate::analysis::Analysis;
 use crate::codegen::*;
@@ -99,32 +98,6 @@ pub fn derive_factory(input: TokenStream) -> TokenStream {
         #has_many_factory
     }
     .into()
-}
-
-/// Test helper that wraps `#[sqlx::test]` with the correct migrations path
-/// for the active database backend.
-///
-/// Requires the `testing` feature to be enabled.
-///
-/// ```rust,ignore
-/// #[fabrique::test]
-/// async fn test_create<DB: Dialect>(pool: Pool<DB>) {
-///     let product = Product::factory().create(&pool).await.unwrap();
-/// }
-/// ```
-#[cfg(feature = "testing")]
-#[cfg_attr(coverage_nightly, coverage(off))]
-#[proc_macro_attribute]
-pub fn test(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as ItemFn);
-
-    match test::generate(&input) {
-        Ok(tokens) => tokens.into(),
-        Err(e) => {
-            let syn_error: syn::Error = e.into();
-            syn_error.into_compile_error().into()
-        }
-    }
 }
 
 /// Creates an in-memory SQLite database with migrations for documentation
