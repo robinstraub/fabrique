@@ -54,22 +54,8 @@ jobs:
         run: npx --yes markdownlint-cli2@0.20.0
 
   test:
-    name: Tests (${{ matrix.name }})
+    name: Tests
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: SQLite
-            feature: sqlite
-          - name: PostgreSQL
-            feature: postgres
-            database_url: postgres://postgres:postgres@localhost:5432/postgres
-            postgres_url: postgres://postgres:postgres@localhost:5432/postgres
-          - name: MySQL
-            feature: mysql
-            database_url: mysql://root:mysql@localhost:3306/fabrique
-            mysql_url: mysql://root:mysql@localhost:3306/fabrique
     services:
       postgres:
         image: postgres:16
@@ -97,9 +83,8 @@ jobs:
         ports:
           - 3306:3306
     env:
-      DATABASE_URL: ${{ matrix.database_url || '' }}
-      POSTGRES_URL: ${{ matrix.postgres_url || '' }}
-      MYSQL_URL: ${{ matrix.mysql_url || '' }}
+      POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
+      MYSQL_URL: mysql://root:mysql@localhost:3306/fabrique
     steps:
       - uses: actions/checkout@v5
 
@@ -112,13 +97,14 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run tests with coverage
-        run: cargo llvm-cov --lib --tests --features ${{ matrix.feature }},testing --workspace --exclude ui-tests --lcov --output-path lcov-${{ matrix.feature }}.info
+        run: cargo llvm-cov --lib --tests --features sqlite,postgres,mysql,testing --workspace --exclude ui-tests --lcov --output-path lcov.info
 
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
         with:
-          name: lcov-${{ matrix.feature }}
-          path: lcov-${{ matrix.feature }}.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: true
 
   test-ui:
     name: Tests (UI)
@@ -131,26 +117,6 @@ jobs:
 
       - name: Run UI tests
         run: cargo test -p ui-tests
-
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-latest
-    needs: [test]
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Download all coverage artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: lcov-*
-          merge-multiple: true
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: lcov-postgres.info,lcov-sqlite.info,lcov-mysql.info
-          fail_ci_if_error: true
 
   docs:
     name: Documentation
