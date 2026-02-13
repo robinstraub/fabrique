@@ -117,6 +117,8 @@ pub mod model;
 pub mod prelude;
 pub mod relation;
 pub mod sql;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 #[cfg(all(feature = "testing", feature = "sqlite"))]
 #[doc(hidden)]

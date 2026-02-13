@@ -53,9 +53,23 @@ jobs:
       - name: Lint markdown
         run: npx --yes markdownlint-cli2@0.20.0
 
-  test-postgres:
-    name: Tests (PostgreSQL)
+  test:
+    name: Tests (${{ matrix.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: SQLite
+            feature: sqlite
+          - name: PostgreSQL
+            feature: postgres
+            database_url: postgres://postgres:postgres@localhost:5432/postgres
+            postgres_url: postgres://postgres:postgres@localhost:5432/postgres
+          - name: MySQL
+            feature: mysql
+            database_url: mysql://root:mysql@localhost:3306/fabrique
+            mysql_url: mysql://root:mysql@localhost:3306/fabrique
     services:
       postgres:
         image: postgres:16
@@ -70,55 +84,6 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: nightly
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Run tests with coverage
-        run: cargo llvm-cov --features postgres,testing --workspace --exclude ui-tests --lcov --output-path lcov-postgres.info -- --lib --tests
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lcov-postgres
-          path: lcov-postgres.info
-
-  test-sqlite:
-    name: Tests (SQLite)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: nightly
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Run tests with coverage
-        run: cargo llvm-cov --features sqlite,testing --workspace --exclude ui-tests --lcov --output-path lcov-sqlite.info
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lcov-sqlite
-          path: lcov-sqlite.info
-
-  test-mysql:
-    name: Tests (MySQL)
-    runs-on: ubuntu-latest
-    services:
       mysql:
         image: mysql:8
         env:
@@ -132,7 +97,9 @@ jobs:
         ports:
           - 3306:3306
     env:
-      DATABASE_URL: mysql://root:mysql@localhost:3306/fabrique
+      DATABASE_URL: ${{ matrix.database_url || '' }}
+      POSTGRES_URL: ${{ matrix.postgres_url || '' }}
+      MYSQL_URL: ${{ matrix.mysql_url || '' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -145,13 +112,13 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run tests with coverage
-        run: cargo llvm-cov --features mysql,testing --workspace --exclude ui-tests --lcov --output-path lcov-mysql.info -- --lib --tests
+        run: cargo llvm-cov --lib --tests --features ${{ matrix.feature }},testing --workspace --exclude ui-tests --lcov --output-path lcov-${{ matrix.feature }}.info
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lcov-mysql
-          path: lcov-mysql.info
+          name: lcov-${{ matrix.feature }}
+          path: lcov-${{ matrix.feature }}.info
 
   test-ui:
     name: Tests (UI)
@@ -168,7 +135,7 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
-    needs: [test-postgres, test-sqlite, test-mysql]
+    needs: [test]
     steps:
       - uses: actions/checkout@v5
 

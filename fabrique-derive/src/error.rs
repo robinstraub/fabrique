@@ -55,16 +55,19 @@ pub enum ErrorKind {
     #[error("Duplicate alias `{0}`: each alias name must be unique within a model")]
     DuplicateAlias(String),
 
-    #[error("#[fabrique::test] expects `async fn test<DB: Dialect>(pool: Pool<DB>)`")]
+    #[error(
+        "#[fabrique::test] expects `async fn test<DB: Dialect>(pool: Pool<DB>)` or `async fn test(pool: Pool<Sqlite>)`"
+    )]
     InvalidTestSignature,
 
     #[error("#[fabrique::test] requires at least one backend feature (sqlite, postgres, mysql)")]
     NoBackendFeature,
 
-    #[error(
-        "#[fabrique::test] requires exactly one backend feature, but multiple are active. Run tests separately per backend (e.g. `cargo test --features sqlite,testing`)"
-    )]
-    MultipleBackendFeatures,
+    #[error("#[fabrique::test] unknown backend type `{0}`, expected Postgres, Sqlite, or MySql")]
+    UnknownBackendType(String),
+
+    #[error("#[fabrique::test] backend feature `{0}` is not enabled")]
+    BackendFeatureNotEnabled(String),
 }
 
 impl From<Error> for syn::Error {
