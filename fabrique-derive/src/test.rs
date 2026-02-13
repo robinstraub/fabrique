@@ -263,3 +263,176 @@ fn backends() -> Vec<BackendConfig> {
 
     backends
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    // -----------------------------------------------------------------------
+    // Generic mode
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_generic_mode_generates_suffixed_test() {
+        let input: ItemFn = parse_quote! {
+            async fn my_test<DB: Dialect>(pool: Pool<DB>) {
+                assert!(true);
+            }
+        };
+
+        let result = generate(&input).unwrap().to_string();
+
+        assert!(result.contains("fn my_test_sqlite"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Concrete mode
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_concrete_sqlite_generates_single_test() {
+        let input: ItemFn = parse_quote! {
+            async fn my_test(pool: Pool<Sqlite>) {
+                assert!(true);
+            }
+        };
+
+        let result = generate(&input).unwrap().to_string();
+
+        assert!(result.contains("fn my_test"));
+        assert!(!result.contains("my_test_sqlite"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Error paths: extract_dialect_generic
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_too_many_generics_fails() {
+        let input: ItemFn = parse_quote! {
+            async fn bad<A: Dialect, B: Dialect>(pool: Pool<A>) {}
+        };
+
+        let err = generate(&input).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidTestSignature));
+    }
+
+    #[test]
+    fn test_non_type_generic_fails() {
+        let input: ItemFn = parse_quote! {
+            async fn bad<const N: usize>(pool: Pool<i32>) {}
+        };
+
+        let err = generate(&input).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidTestSignature));
+    }
+
+    #[test]
+    fn test_generic_without_dialect_bound_fails() {
+        let input: ItemFn = parse_quote! {
+            async fn bad<T: Clone>(pool: Pool<T>) {}
+        };
+
+        let err = generate(&input).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidTestSignature));
+    }
+
+    // -----------------------------------------------------------------------
+    // Error paths: extract_param_name
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_no_params_fails() {
+        let input: ItemFn = parse_quote! {
+            async fn bad() {}
+        };
+
+        let err = generate(&input).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidTestSignature));
+    }
+
+    #[test]
+    fn test_self_param_fails() {
+        let input: ItemFn = parse_quote! {
+            async fn bad(self) {}
+        };
+
+        let err = generate(&input).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidTestSignature));
+    }
+
+    // -----------------------------------------------------------------------
+    // Error paths: extract_concrete_backend
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_unknown_backend_type_fails() {
+        let input: ItemFn = parse_quote! {
+            async fn bad(pool: Pool<Oracle>) {}
+        };
+
+        let err = generate(&input).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::UnknownBackendType(_)));
+    }
+
+    #[test]
+    fn test_non_pool_type_fails() {
+        let input: ItemFn = parse_quote! {
+            async fn bad(pool: Vec<Sqlite>) {}
+        };
+
+        let err = generate(&input).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidTestSignature));
+    }
+
+    #[test]
+    fn test_pool_without_angle_brackets_fails() {
+        let input: ItemFn = parse_quote! {
+            async fn bad(pool: Pool) {}
+        };
+
+        let err = generate(&input).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidTestSignature));
+    }
+
+    #[test]
+    fn test_pool_with_too_many_type_args_fails() {
+        let input: ItemFn = parse_quote! {
+            async fn bad(pool: Pool<Sqlite, Extra>) {}
+        };
+
+        let err = generate(&input).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidTestSignature));
+    }
+
+    #[test]
+    fn test_tuple_pattern_param_fails() {
+        let input: ItemFn = parse_quote! {
+            async fn bad((a, b): (Pool<Sqlite>, i32)) {}
+        };
+
+        let err = generate(&input).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidTestSignature));
+    }
+
+    #[test]
+    fn test_reference_type_param_fails() {
+        let input: ItemFn = parse_quote! {
+            async fn bad(pool: &Pool<Sqlite>) {}
+        };
+
+        let err = generate(&input).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidTestSignature));
+    }
+
+    #[test]
+    fn test_non_path_generic_arg_fails() {
+        let input: ItemFn = parse_quote! {
+            async fn bad(pool: Pool<()>) {}
+        };
+
+        let err = generate(&input).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidTestSignature));
+    }
+}
