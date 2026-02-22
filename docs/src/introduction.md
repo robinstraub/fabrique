@@ -53,7 +53,7 @@ constants. Use them to build queries that read like SQL:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 let deals = Product::query()
     .r#where(Product::IN_STOCK, "=", true)
     .r#where(Product::PRICE_CENTS, "<=", 5000)
@@ -85,7 +85,7 @@ the query builder, so you don't have to assemble it yourself:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 let anvil = Product {
     id: Uuid::new_v4(),
     name: "Anvil 3000".to_string(),

@@ -57,7 +57,7 @@ them. With factories, the entire graph is built in one chain
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 let order = Order::factory()
     .has_order_lines(OrderLine::factory(), 3)
     .create(&pool)
@@ -99,7 +99,7 @@ next ones reuse the same record:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 let user = User::factory()
     .name("Wile E. Coyote".to_string())
     .create(&pool)
@@ -153,7 +153,7 @@ generate everything else:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 // Arrange — only the status matters for this test
 Order::factory()
     .status("shipped".to_string())
@@ -216,7 +216,7 @@ Here, Alice and Bob each send 100 messages to each other —
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 let alice = User::factory()
     .name("Alice".to_string())
     .create(&pool)

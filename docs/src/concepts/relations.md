@@ -70,7 +70,7 @@ primary key — no declaration needed on the parent side:
 #     status: String,
 # }
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 # let user = User::factory().create(&pool).await?;
 let orders = user.orders::<_>().get(&pool).await?;
 # Ok(())
@@ -136,7 +136,7 @@ specify which foreign key to use:
 #     recipient_id: Uuid,
 # }
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 # let user = User::factory().create(&pool).await?;
 let sent = user.messages::<_, Sender>().get(&pool).await?;
 let received = user.messages::<_, Recipient>().get(&pool).await?;
@@ -168,7 +168,7 @@ through a specific alias:
 # }
 # #[fabrique::doctest]
 # async fn main(
-#     pool: Pool<Backend>,
+#     pool: Pool<Sqlite>,
 # ) -> Result<(), fabrique::Error> {
 let messages = Message::query()
     .join_as::<User, Sender>()

@@ -37,7 +37,7 @@ pub struct OrderLine {
     unit_price_cents: i32,
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_composite_primary_key(connection: Pool<Sqlite>) {
     let user = User::factory()
         .id(Uuid::new_v4())

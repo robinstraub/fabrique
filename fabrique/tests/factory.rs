@@ -47,7 +47,7 @@ pub struct OrderLine {
     pub unit_price_cents: i32,
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_auto_creates_belongs_to(connection: Pool<Sqlite>) {
     // Order has belongs_to User — create without for_user()
     let order = Order::factory().create(&connection).await.unwrap();
@@ -57,7 +57,7 @@ async fn test_auto_creates_belongs_to(connection: Pool<Sqlite>) {
     assert_eq!(user.id, order.user_id);
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_factory_for_relations_accept_models(connection: Pool<Sqlite>) {
     let user = User::factory().create(&connection).await.unwrap();
     let product = Product::factory().create(&connection).await.unwrap();
@@ -75,7 +75,7 @@ async fn test_factory_for_relations_accept_models(connection: Pool<Sqlite>) {
         .unwrap();
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_factory_for_relations_accept_factories(connection: Pool<Sqlite>) {
     OrderLine::factory()
         .for_order(Order::factory())
@@ -85,7 +85,7 @@ async fn test_factory_for_relations_accept_factories(connection: Pool<Sqlite>) {
         .unwrap();
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_has_many_creates_children(connection: Pool<Sqlite>) {
     // Arrange a User with 1 Address via has_addresses (generated from Address's
     // belongs_to)
@@ -107,7 +107,7 @@ async fn test_has_many_creates_children(connection: Pool<Sqlite>) {
     assert_eq!(count.0, 1);
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_has_many_through_join_model(connection: Pool<Sqlite>) {
     // Arrange an Order with 1 OrderLine (which auto-creates a Product via
     // belongs_to)

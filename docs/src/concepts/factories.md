@@ -30,7 +30,7 @@ any fields you care about, then call `create()` to persist:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 let product = Product::factory()
     .name("Anvil 3000".to_string())  // Override name
     .create(&pool)                    // id and price_cents: defaults
@@ -111,7 +111,7 @@ creates the parent record if none is specified:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 // A User is auto-created — no manual setup needed
 let order = Order::factory()
     .create(&pool)
@@ -157,7 +157,7 @@ existing one:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 // Pass a factory: creates a new user with specific attributes
 let order = Order::factory()
     .for_user(User::factory().name("Wile E.".to_string()))
@@ -202,7 +202,7 @@ an instance shares the **same** parent:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 // A conversation between two specific people
 let wile = User::factory()
     .name("Wile E.".to_string())
@@ -251,7 +251,7 @@ children for a parent:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 let user = User::factory()
     .has_orders(Order::factory(), 3)
     .create(&pool)
@@ -309,7 +309,7 @@ Missing parents are auto-created at every level of the chain:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 // 1 order, 3 order lines, each with its own product
 let order = Order::factory()
     .has_order_lines(OrderLine::factory(), 3)

@@ -10,13 +10,13 @@ pub struct Product {
     pub in_stock: bool,
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_save(connection: Pool<Sqlite>) {
     let result = Product::default().save(&connection).await;
     assert!(result.is_ok());
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_update(connection: Pool<Sqlite>) {
     let product = Product::factory().create(&connection).await.unwrap();
     let result = Product::update()

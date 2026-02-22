@@ -11,7 +11,7 @@ pub struct User {
     pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_soft_delete(connection: Pool<Sqlite>) {
     // Create a new row
     let id = Uuid::new_v4();

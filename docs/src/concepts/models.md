@@ -240,7 +240,7 @@ query builder for common operations. For instance:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 // Insert a new record
 let anvil = Product {
     id: Uuid::new_v4(),

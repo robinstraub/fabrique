@@ -44,6 +44,18 @@ jobs:
           cargo check --workspace --features sqlite,postgres,mysql,testing --exclude ui-tests
           cargo check --workspace --features sqlite,testing --package ui-tests
 
+  packaging:
+    name: Packaging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Verify crates can be packaged
+        run: cargo package --workspace --all-features --exclude ui-tests
+
   codestyle-markdown:
     name: Codestyle (Markdown)
     runs-on: ubuntu-latest

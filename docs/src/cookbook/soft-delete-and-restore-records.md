@@ -66,7 +66,7 @@ line references — stays intact:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 let anvil = Product::factory()
     .name("Anvil 3000".to_string())
     .create(&pool)
@@ -122,7 +122,7 @@ clear `deleted_at` and bring the product back:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 # let product = Product::factory().create(&pool).await?;
 # let id = product.id;
 # product.delete(&pool).await?;
@@ -163,7 +163,7 @@ without a prior SELECT:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 # let product = Product::factory().create(&pool).await?;
 # let id = product.id;
 // DELETE /products/:id handler
@@ -200,7 +200,7 @@ real `DELETE` — bypassing the soft delete mechanism:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 # let product = Product::factory().create(&pool).await?;
 # let id = product.id;
 // Permanently remove the record

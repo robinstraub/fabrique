@@ -75,7 +75,7 @@ mod initial {
         let _qb = QueryBuilder::<(), _, fabrique::model::Joined<(Product, ()), ()>>::default();
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn select_as_transitions_to_selected(pool: Pool<Sqlite>) {
         // select_as on Initial can only select the base model (no joins available)
         let result: Result<Vec<Product>, _> =
@@ -83,7 +83,7 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn insert_transitions_to_inserting(pool: Pool<Sqlite>) {
         let result = Product::insert()
             .set(Product::ID, Uuid::new_v4())
@@ -95,7 +95,7 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn update_transitions_to_updating(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
@@ -106,13 +106,13 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn join_transitions_to_joining(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query().join::<Order>().get(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn select_columns_transitions_to_selected(pool: Pool<Sqlite>) {
         let result: Result<Vec<(String, i32)>, _> = Product::query()
             .select((Product::NAME, Product::PRICE_CENTS))
@@ -121,7 +121,7 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .r#where(Product::PRICE_CENTS, ">=", 1000)
@@ -130,7 +130,7 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_not_null_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .where_not_null(Product::NAME)
@@ -139,7 +139,7 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn order_by_implicit_select_transitions_to_ordered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .order_by(Product::NAME, "ASC")
@@ -148,19 +148,19 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn limit_implicit_select_transitions_to_limited(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query().limit(10).get(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_implicit_select_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::query().first(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_or_fail_implicit_select_executes(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
@@ -168,7 +168,7 @@ mod initial {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn get_implicit_select_executes(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query().get(&pool).await;
         assert!(result.is_ok());
@@ -182,7 +182,7 @@ mod initial {
 mod joining {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn join_chains(pool: Pool<Sqlite>) {
         let result: Result<Vec<Order>, _> = Order::query()
             .join::<User>()
@@ -192,7 +192,7 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn join_as_chains(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
@@ -202,7 +202,7 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn join_through_chains(pool: Pool<Sqlite>) {
         let result: Result<Vec<Order>, _> = Order::query()
             .join::<OrderLine>()
@@ -212,7 +212,7 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn select_as_transitions_to_selected(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
@@ -222,7 +222,7 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn select_columns_transitions_to_selected(pool: Pool<Sqlite>) {
         let result: Result<Vec<(String, String)>, _> = Order::query()
             .join::<OrderLine>()
@@ -233,7 +233,7 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
@@ -243,7 +243,7 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_null_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
@@ -253,7 +253,7 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_not_null_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
@@ -263,7 +263,7 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn order_by_implicit_select_transitions_to_ordered(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
@@ -273,19 +273,19 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn limit_implicit_select_transitions_to_limited(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query().join::<Order>().limit(10).get(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_implicit_select_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<User>, _> = User::query().join::<Order>().first(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_or_fail_implicit_select_executes(pool: Pool<Sqlite>) {
         User::factory()
             .has_orders(Order::factory(), 1)
@@ -297,13 +297,13 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn get_implicit_select_executes(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query().join::<Order>().get(&pool).await;
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_on_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
@@ -313,7 +313,7 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_null_on_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
@@ -323,7 +323,7 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_not_null_on_implicit_select_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
@@ -333,7 +333,7 @@ mod joining {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn order_by_on_implicit_select_transitions_to_ordered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
@@ -351,7 +351,7 @@ mod joining {
 mod selected {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_transitions_to_filtered(pool: Pool<Sqlite>) {
         Product::factory()
             .in_stock(true)
@@ -368,7 +368,7 @@ mod selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_null_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -378,7 +378,7 @@ mod selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_not_null_transitions_to_filtered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -388,7 +388,7 @@ mod selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn order_by_transitions_to_ordered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -398,7 +398,7 @@ mod selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn limit_transitions_to_limited(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -408,7 +408,7 @@ mod selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn get_executes(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
@@ -418,7 +418,7 @@ mod selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -427,7 +427,7 @@ mod selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_or_fail_executes(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
@@ -438,7 +438,7 @@ mod selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_or_fail_fails_when_empty(pool: Pool<Sqlite>) {
         let result: Result<Product, _> = Product::query()
             .select_as::<Product, _>()
@@ -455,7 +455,7 @@ mod selected {
 mod joined_selected {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_transitions_to_filtered(pool: Pool<Sqlite>) {
         let user = User::factory()
             .has_orders(Order::factory(), 1)
@@ -473,7 +473,7 @@ mod joined_selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_on_joined_model_column(pool: Pool<Sqlite>) {
         User::factory()
             .has_orders(Order::factory().status("pending".to_string()), 1)
@@ -491,7 +491,7 @@ mod joined_selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_on_named_join(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
@@ -502,7 +502,7 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_null_on_named_join(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
@@ -513,7 +513,7 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_not_null_on_named_join(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
@@ -524,7 +524,7 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn order_by_transitions_to_ordered(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
@@ -535,7 +535,7 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn order_by_on_named_join(pool: Pool<Sqlite>) {
         let result: Result<Vec<Message>, _> = Message::query()
             .join_as::<User, Sender>()
@@ -546,7 +546,7 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn limit_transitions_to_limited(pool: Pool<Sqlite>) {
         let result: Result<Vec<User>, _> = User::query()
             .join::<Order>()
@@ -557,7 +557,7 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn get_executes(pool: Pool<Sqlite>) {
         User::factory()
             .has_orders(Order::factory(), 1)
@@ -574,7 +574,7 @@ mod joined_selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<User>, _> = User::query()
             .join::<Order>()
@@ -584,7 +584,7 @@ mod joined_selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_or_fail_executes(pool: Pool<Sqlite>) {
         User::factory()
             .has_orders(Order::factory(), 1)
@@ -608,7 +608,7 @@ mod joined_selected {
 mod filtered_selected {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_chains(pool: Pool<Sqlite>) {
         Product::factory()
             .in_stock(true)
@@ -627,7 +627,7 @@ mod filtered_selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_null_chains(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -638,7 +638,7 @@ mod filtered_selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_not_null_chains(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -649,7 +649,7 @@ mod filtered_selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn order_by_transitions_to_ordered(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -660,7 +660,7 @@ mod filtered_selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn limit_transitions_to_limited(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -671,7 +671,7 @@ mod filtered_selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn get_executes(pool: Pool<Sqlite>) {
         Product::factory()
             .in_stock(true)
@@ -688,7 +688,7 @@ mod filtered_selected {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -698,7 +698,7 @@ mod filtered_selected {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_or_fail_executes(pool: Pool<Sqlite>) {
         Product::factory()
             .in_stock(true)
@@ -722,7 +722,7 @@ mod filtered_selected {
 mod ordered {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn limit_transitions_to_limited(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -733,7 +733,7 @@ mod ordered {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn get_executes(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
@@ -746,7 +746,7 @@ mod ordered {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -756,7 +756,7 @@ mod ordered {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_or_fail_executes(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
@@ -776,7 +776,7 @@ mod ordered {
 mod limited {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn offset_transitions_to_offsetted(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::query()
             .select_as::<Product, _>()
@@ -787,7 +787,7 @@ mod limited {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn get_executes(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
@@ -808,7 +808,7 @@ mod limited {
 mod offsetted {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn get_executes(pool: Pool<Sqlite>) {
         for _ in 0..3 {
             Product::factory().create(&pool).await.expect("setup");
@@ -838,7 +838,7 @@ mod offsetted {
 mod updating {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn set_transitions_to_updated(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
@@ -857,7 +857,7 @@ mod updating {
 mod updated {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn set_chains(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
@@ -869,7 +869,7 @@ mod updated {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_transitions_to_filtered(pool: Pool<Sqlite>) {
         let product = Product::factory().create(&pool).await.expect("setup");
 
@@ -881,7 +881,7 @@ mod updated {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn returning_transitions_to_returned(pool: Pool<Sqlite>) {
         Product::factory().create(&pool).await.expect("setup");
 
@@ -904,7 +904,7 @@ mod updated {
 mod filtered_updated {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn where_chains(pool: Pool<Sqlite>) {
         let product = Product::factory()
             .in_stock(true)
@@ -921,7 +921,7 @@ mod filtered_updated {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn returning_transitions_to_returned(pool: Pool<Sqlite>) {
         let product = Product::factory().create(&pool).await.expect("setup");
 
@@ -937,7 +937,7 @@ mod filtered_updated {
         assert_eq!(updated[0].name, "Updated");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn execute_executes(pool: Pool<Sqlite>) {
         let product = Product::factory().create(&pool).await.expect("setup");
 
@@ -963,7 +963,7 @@ mod filtered_updated {
 mod inserting {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn set_transitions_to_inserted(pool: Pool<Sqlite>) {
         let result = Product::insert()
             .set(Product::ID, Uuid::new_v4())
@@ -983,7 +983,7 @@ mod inserting {
 mod inserted {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn set_chains(pool: Pool<Sqlite>) {
         let result = Product::insert()
             .set(Product::ID, Uuid::new_v4())
@@ -995,7 +995,7 @@ mod inserted {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn on_conflict_transitions_to_conflicted(pool: Pool<Sqlite>) {
         let id = Uuid::new_v4();
 
@@ -1019,7 +1019,7 @@ mod inserted {
         assert!(result.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn returning_transitions_to_returned(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::insert()
             .set(Product::ID, Uuid::new_v4())
@@ -1033,7 +1033,7 @@ mod inserted {
         assert!(result.unwrap().is_some());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn execute_executes(pool: Pool<Sqlite>) {
         let result = Product::insert()
             .set(Product::ID, Uuid::new_v4())
@@ -1053,7 +1053,7 @@ mod inserted {
 mod conflicted {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn do_update_transitions_to_upserted(pool: Pool<Sqlite>) {
         let id = Uuid::new_v4();
 
@@ -1081,7 +1081,7 @@ mod conflicted {
         assert_eq!(updated[0].name, "Updated");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn do_nothing_transitions_to_upserted(pool: Pool<Sqlite>) {
         let id = Uuid::new_v4();
 
@@ -1113,7 +1113,7 @@ mod conflicted {
 mod upserted {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn returning_transitions_to_returned(pool: Pool<Sqlite>) {
         let id = Uuid::new_v4();
 
@@ -1139,7 +1139,7 @@ mod upserted {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn execute_executes(pool: Pool<Sqlite>) {
         let id = Uuid::new_v4();
 
@@ -1177,7 +1177,7 @@ mod upserted {
 mod returned {
     use super::*;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn get_executes(pool: Pool<Sqlite>) {
         let result: Result<Vec<Product>, _> = Product::insert()
             .set(Product::ID, Uuid::new_v4())
@@ -1191,7 +1191,7 @@ mod returned {
         assert_eq!(result.unwrap().len(), 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_executes(pool: Pool<Sqlite>) {
         let result: Result<Option<Product>, _> = Product::insert()
             .set(Product::ID, Uuid::new_v4())
@@ -1205,7 +1205,7 @@ mod returned {
         assert!(result.unwrap().is_some());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[fabrique::test]
     async fn first_or_fail_executes(pool: Pool<Sqlite>) {
         let result: Result<Product, _> = Product::insert()
             .set(Product::ID, Uuid::new_v4())

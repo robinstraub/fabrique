@@ -9,11 +9,13 @@
 //!   operations
 
 use proc_macro::TokenStream;
-use syn::{DeriveInput, ItemFn, parse_macro_input};
+use syn::{DeriveInput, parse_macro_input};
 
 mod analysis;
 mod codegen;
 mod error;
+#[cfg(feature = "testing")]
+mod test;
 
 use crate::analysis::Analysis;
 use crate::codegen::*;
@@ -100,17 +102,42 @@ pub fn derive_factory(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Creates an in-memory SQLite database with migrations for documentation
-/// examples.
+/// Sets up a test database with migrations for the detected backend.
 ///
-/// This macro transforms an async function into an executable doctest. It sets
-/// up a Tokio runtime, creates an in-memory SQLite database, runs migrations,
-/// and provides the connection pool to your test code. Use `pool` as the
-/// parameter name.
+/// Transforms an async test function into a `#[tokio::test]` function
+/// that creates a pool, runs migrations, and cleans up temporary
+/// databases (Postgres, MySQL) after the test completes.
 ///
-/// Requires the `testing` and `sqlite` features. Doctests will fail to compile
-/// without them — use `--lib --tests` to skip doctests when running against
-/// other backends.
+/// The backend is detected from the `Pool<T>` parameter type.
+///
+/// ```rust,ignore
+/// #[fabrique::test]
+/// async fn test_create(pool: Pool<Sqlite>) {
+///     let product = Product::factory().create(&pool).await.unwrap();
+///     assert_eq!(product.name.is_empty(), false);
+/// }
+/// ```
+#[cfg(feature = "testing")]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[proc_macro_attribute]
+pub fn test(attr: TokenStream, item: TokenStream) -> TokenStream {
+    match test::expand_test(attr.into(), item.into()) {
+        Ok(tokens) => tokens.into(),
+        Err(e) => e.into_compile_error().into(),
+    }
+}
+
+/// Creates an in-memory SQLite database with migrations for
+/// documentation examples.
+///
+/// This macro transforms an async function into an executable
+/// doctest. It sets up a Tokio runtime, creates an in-memory SQLite
+/// database, runs migrations, and provides the connection pool to
+/// your test code.
+///
+/// Requires the `testing` and `sqlite` features. Doctests will fail
+/// to compile without them — use `--lib --tests` to skip doctests
+/// when running against other backends.
 ///
 /// ```rust,ignore
 /// # extern crate fabrique;
@@ -126,27 +153,12 @@ pub fn derive_factory(input: TokenStream) -> TokenStream {
 ///     Ok(())
 /// }
 /// ```
-// Tested via mdbook doctests, not unit tests - coverage measured separately
+#[cfg(feature = "testing")]
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[proc_macro_attribute]
 pub fn doctest(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as ItemFn);
-    let block = &input.block;
-
-    quote::quote! {
-        fn main() {
-            ::tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("Failed to create Tokio runtime")
-                .block_on(async {
-                    let pool = ::fabrique::__private::doctest_pool()
-                        .await
-                        .expect("Failed to create doctest pool");
-                    let __result: Result<(), ::fabrique::Error> = async #block.await;
-                    __result.expect("Doctest failed");
-                });
-        }
+    match test::expand_doctest(item.into()) {
+        Ok(tokens) => tokens.into(),
+        Err(e) => e.into_compile_error().into(),
     }
-    .into()
 }

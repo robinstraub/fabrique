@@ -10,14 +10,14 @@ pub struct Product {
     pub in_stock: bool,
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_persistable_macro_compiles(connection: Pool<Sqlite>) {
     let result = Product::all(&connection).await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap().len(), 0);
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_create(connection: Pool<Sqlite>) {
     let result = Product::factory()
         .name("Anvil 3000".to_owned())
@@ -33,7 +33,7 @@ async fn test_create(connection: Pool<Sqlite>) {
     assert!(product.in_stock);
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_delete(connection: Pool<Sqlite>) {
     let product = Product::factory().create(&connection).await.unwrap();
     let existing = Product::all(&connection).await.unwrap();
@@ -44,7 +44,7 @@ async fn test_delete(connection: Pool<Sqlite>) {
     assert!(existing.is_empty());
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_destroy(connection: Pool<Sqlite>) {
     let id = Uuid::new_v4();
     Product::factory().id(id).create(&connection).await.unwrap();
@@ -54,7 +54,7 @@ async fn test_destroy(connection: Pool<Sqlite>) {
     assert_eq!(products.len(), 0);
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_all(connection: Pool<Sqlite>) {
     let product = Product::factory().create(&connection).await.unwrap();
 
@@ -63,7 +63,7 @@ async fn test_all(connection: Pool<Sqlite>) {
     assert_eq!(result.unwrap(), vec![product]);
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[fabrique::test]
 async fn test_query_builder(connection: Pool<Sqlite>) {
     Product::factory()
         .name("Anvil 3000".to_owned())
