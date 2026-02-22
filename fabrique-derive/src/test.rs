@@ -5,8 +5,10 @@
 //! that creates a temporary pool with migrations applied.
 
 use proc_macro2::TokenStream;
-use quote::quote;
-use syn::{FnArg, GenericArgument, Ident, ItemFn, Pat, PathArguments, Type};
+use quote::{format_ident, quote};
+use syn::{
+    FnArg, GenericArgument, GenericParam, Generics, Ident, ItemFn, Pat, PathArguments, Type,
+};
 
 // ── Analysis ────────────────────────────────────────────────────
 
@@ -16,6 +18,9 @@ pub enum Backend {
     Sqlite,
     Postgres,
     MySql,
+    /// Generic backend from `<DB: Dialect>`. Generates one test
+    /// per backend, each cfg-gated by feature.
+    Multi(Ident),
 }
 
 /// Parsed representation of a `#[fabrique::test]` function.
@@ -33,7 +38,8 @@ impl TestAnalysis {
     /// Parses an async test function into its components.
     ///
     /// Expects exactly one parameter of type `Pool<Sqlite>`,
-    /// `Pool<Postgres>`, or `Pool<MySql>`.
+    /// `Pool<Postgres>`, `Pool<MySql>`, or `Pool<DB>` where `DB`
+    /// is a generic type parameter (multi-backend).
     pub fn from(input: &ItemFn) -> Result<Self, syn::Error> {
         let fn_name = input.sig.ident.clone();
         let body = (*input.block).clone();
@@ -57,7 +63,7 @@ impl TestAnalysis {
                         ));
                     }
                 };
-                let backend = Self::parse_backend(&pat_type.ty)?;
+                let backend = Self::parse_backend(&pat_type.ty, &input.sig.generics)?;
                 (name, backend)
             }
             _ => return Err(syn::Error::new_spanned(param, "expected a typed parameter")),
@@ -75,7 +81,9 @@ impl TestAnalysis {
     ///
     /// Recognises `Sqlite`, `Postgres`, and `MySql` as the last
     /// segment of the inner type path (e.g. `sqlx::Sqlite`).
-    fn parse_backend(ty: &Type) -> Result<Backend, syn::Error> {
+    /// If the inner type matches a generic type parameter from the
+    /// function signature, returns `Backend::Multi`.
+    fn parse_backend(ty: &Type, generics: &Generics) -> Result<Backend, syn::Error> {
         let type_path = match ty {
             Type::Path(tp) => tp,
             _ => {
@@ -135,15 +143,97 @@ impl TestAnalysis {
             "Sqlite" => Ok(Backend::Sqlite),
             "Postgres" => Ok(Backend::Postgres),
             "MySql" => Ok(Backend::MySql),
-            other => Err(syn::Error::new_spanned(
-                ident,
-                format!("unsupported backend: {other}"),
-            )),
+            _ => {
+                let is_generic = generics
+                    .params
+                    .iter()
+                    .any(|p| matches!(p, GenericParam::Type(tp) if tp.ident == *ident));
+                if is_generic {
+                    Ok(Backend::Multi(ident.clone()))
+                } else {
+                    Err(syn::Error::new_spanned(
+                        ident,
+                        format!("unsupported backend: {ident}"),
+                    ))
+                }
+            }
         }
     }
 }
 
 // ── Codegen ─────────────────────────────────────────────────────
+
+/// All concrete backends, in generation order.
+const CONCRETE_BACKENDS: [Backend; 3] = [Backend::Sqlite, Backend::Postgres, Backend::MySql];
+
+impl Backend {
+    /// Feature flag name for cfg-gating.
+    fn feature(&self) -> &'static str {
+        match self {
+            Backend::Sqlite => "sqlite",
+            Backend::Postgres => "postgres",
+            Backend::MySql => "mysql",
+            Backend::Multi(_) => unreachable!(),
+        }
+    }
+
+    /// Fully-qualified sqlx type path.
+    fn sqlx_type(&self) -> TokenStream {
+        match self {
+            Backend::Sqlite => quote! { ::sqlx::Sqlite },
+            Backend::Postgres => quote! { ::sqlx::Postgres },
+            Backend::MySql => quote! { ::sqlx::MySql },
+            Backend::Multi(_) => unreachable!(),
+        }
+    }
+}
+
+/// Generates pool creation tokens for a concrete backend.
+fn pool_setup_tokens(backend: &Backend, param: &Ident, path: &str) -> TokenStream {
+    match backend {
+        Backend::Sqlite => quote! {
+            let #param =
+                ::fabrique::__private::create_sqlite_pool(#path)
+                    .await
+                    .expect("Failed to create test pool");
+        },
+        Backend::Postgres => quote! {
+            let (#param, __base_url, __db_name) =
+                ::fabrique::__private::create_postgres_pool(#path)
+                    .await
+                    .expect("Failed to create test pool");
+        },
+        Backend::MySql => quote! {
+            let (#param, __base_url, __db_name) =
+                ::fabrique::__private::create_mysql_pool(#path)
+                    .await
+                    .expect("Failed to create test pool");
+        },
+        Backend::Multi(_) => unreachable!(),
+    }
+}
+
+/// Generates cleanup tokens for a concrete backend.
+fn cleanup_tokens(backend: &Backend) -> TokenStream {
+    match backend {
+        Backend::Sqlite => quote! {},
+        Backend::Postgres => quote! {
+            ::fabrique::__private::cleanup_test_db_postgres(
+                &__base_url,
+                &__db_name,
+            )
+            .await;
+        },
+        Backend::MySql => quote! {
+            ::fabrique::__private::cleanup_test_db_mysql(
+                &__base_url,
+                &__db_name,
+            )
+            .await;
+        },
+        Backend::Multi(_) => unreachable!(),
+    }
+}
 
 /// Code generator for `#[fabrique::test]` and `#[fabrique::doctest]`.
 ///
@@ -159,7 +249,10 @@ impl<'a> TestCodegen<'a> {
     /// Creates a code generator, resolving the migration path
     /// from the workspace root.
     pub fn new(analysis: &'a TestAnalysis) -> Self {
-        let migration_path = Self::resolve_migration_path(&analysis.backend);
+        let migration_path = match &analysis.backend {
+            Backend::Multi(_) => String::new(),
+            backend => Self::resolve_migration_path(backend),
+        };
         Self {
             analysis,
             migration_path,
@@ -177,21 +270,13 @@ impl<'a> TestCodegen<'a> {
         }
     }
 
-    /// Generates a `#[tokio::test]` function with pool setup and
-    /// optional cleanup.
+    /// Generates test function(s). For a concrete backend, emits
+    /// a single `#[tokio::test]`. For `Multi`, emits one per
+    /// backend, each cfg-gated.
     pub fn generate(&self) -> TokenStream {
-        let fn_name = &self.analysis.fn_name;
-        let stmts = &self.analysis.body.stmts;
-        let pool_setup = self.generate_pool_setup();
-        let cleanup = self.generate_cleanup();
-
-        quote! {
-            #[::tokio::test]
-            async fn #fn_name() {
-                #pool_setup
-                #(#stmts)*
-                #cleanup
-            }
+        match &self.analysis.backend {
+            Backend::Multi(type_param) => self.generate_multi(type_param),
+            _ => self.generate_single(),
         }
     }
 
@@ -199,7 +284,17 @@ impl<'a> TestCodegen<'a> {
     ///
     /// Unlike `generate()`, this wraps the body in a manual Tokio
     /// runtime since doctests cannot use `#[tokio::test]`.
+    /// Multi-backend is not supported for doctests.
     pub fn generate_doctest(&self) -> TokenStream {
+        if matches!(self.analysis.backend, Backend::Multi(_)) {
+            return syn::Error::new_spanned(
+                &self.analysis.fn_name,
+                "#[fabrique::doctest] does not support \
+                 generic backends",
+            )
+            .into_compile_error();
+        }
+
         let body = &self.analysis.body;
         let param = &self.analysis.param_name;
         let path = &self.migration_path;
@@ -223,63 +318,58 @@ impl<'a> TestCodegen<'a> {
         }
     }
 
-    /// Generates the pool creation expression for the detected
-    /// backend.
-    fn generate_pool_setup(&self) -> TokenStream {
+    /// Generates a single `#[tokio::test]` for a concrete backend.
+    fn generate_single(&self) -> TokenStream {
+        let fn_name = &self.analysis.fn_name;
+        let stmts = &self.analysis.body.stmts;
         let param = &self.analysis.param_name;
-        let path = &self.migration_path;
+        let setup = pool_setup_tokens(&self.analysis.backend, param, &self.migration_path);
+        let cleanup = cleanup_tokens(&self.analysis.backend);
 
-        match self.analysis.backend {
-            Backend::Sqlite => quote! {
-                let #param =
-                    ::fabrique::__private::create_sqlite_pool(#path)
-                        .await
-                        .expect("Failed to create test pool");
-            },
-            Backend::Postgres => quote! {
-                let (#param, __base_url, __db_name) =
-                    ::fabrique::__private::create_postgres_pool(#path)
-                        .await
-                        .expect("Failed to create test pool");
-            },
-            Backend::MySql => quote! {
-                let (#param, __base_url, __db_name) =
-                    ::fabrique::__private::create_mysql_pool(#path)
-                        .await
-                        .expect("Failed to create test pool");
-            },
+        quote! {
+            #[::tokio::test]
+            async fn #fn_name() {
+                #setup
+                #(#stmts)*
+                #cleanup
+            }
         }
     }
 
-    /// Generates cleanup code for backends that use temporary
-    /// databases (Postgres, MySQL).
-    fn generate_cleanup(&self) -> TokenStream {
-        match self.analysis.backend {
-            Backend::Sqlite => quote! {},
-            Backend::Postgres => quote! {
-                ::fabrique::__private::cleanup_test_db_postgres(
-                    &__base_url,
-                    &__db_name,
-                )
-                .await;
-            },
-            Backend::MySql => quote! {
-                ::fabrique::__private::cleanup_test_db_mysql(
-                    &__base_url,
-                    &__db_name,
-                )
-                .await;
-            },
-        }
+    /// Generates three cfg-gated `#[tokio::test]` functions,
+    /// one per backend. Each introduces a `type DB = ...;` alias
+    /// so the body can reference the generic type parameter.
+    fn generate_multi(&self, type_param: &Ident) -> TokenStream {
+        let stmts = &self.analysis.body.stmts;
+        let param = &self.analysis.param_name;
+
+        let fns = CONCRETE_BACKENDS.iter().map(|backend| {
+            let feature = backend.feature();
+            let db_type = backend.sqlx_type();
+            let suffix = feature;
+            let fn_name = format_ident!("{}_{}", self.analysis.fn_name, suffix,);
+            let path = Self::resolve_migration_path(backend);
+            let setup = pool_setup_tokens(backend, param, &path);
+            let cleanup = cleanup_tokens(backend);
+
+            quote! {
+                #[cfg(feature = #feature)]
+                #[::tokio::test]
+                async fn #fn_name() {
+                    type #type_param = #db_type;
+                    #setup
+                    #(#stmts)*
+                    #cleanup
+                }
+            }
+        });
+
+        quote! { #(#fns)* }
     }
 
     /// Returns the absolute migration path for the given backend.
     fn resolve_migration_path(backend: &Backend) -> String {
-        let subdir = match backend {
-            Backend::Sqlite => "sqlite",
-            Backend::Postgres => "postgres",
-            Backend::MySql => "mysql",
-        };
+        let subdir = backend.feature();
         workspace_root()
             .join("migrations")
             .join(subdir)
@@ -507,6 +597,71 @@ mod tests {
             }
             .to_string()
         );
+    }
+
+    #[test]
+    fn test_analysis_parses_multi_backend() {
+        let input: ItemFn = parse_quote! {
+            async fn my_test<DB: Dialect>(pool: Pool<DB>) {}
+        };
+        let analysis = TestAnalysis::from(&input).unwrap();
+
+        assert_eq!(analysis.fn_name, "my_test");
+        assert_eq!(analysis.param_name, "pool");
+        assert!(matches!(&analysis.backend, Backend::Multi(id) if id == "DB"),);
+    }
+
+    #[test]
+    fn test_analysis_parses_multi_custom_name() {
+        let input: ItemFn = parse_quote! {
+            async fn my_test<T: Dialect>(pool: Pool<T>) {}
+        };
+        let analysis = TestAnalysis::from(&input).unwrap();
+
+        assert!(matches!(&analysis.backend, Backend::Multi(id) if id == "T"),);
+    }
+
+    #[test]
+    fn test_generate_multi_backend() {
+        let input: ItemFn = parse_quote! {
+            async fn test_create<DB: Dialect>(pool: Pool<DB>) {
+                let result = Product::all(&pool).await;
+                assert!(result.is_ok());
+            }
+        };
+        let analysis = TestAnalysis::from(&input).unwrap();
+        let codegen = TestCodegen::new(&analysis);
+
+        let output = codegen.generate().to_string();
+
+        // Three cfg-gated functions are generated
+        assert!(output.contains("fn test_create_sqlite"));
+        assert!(output.contains("fn test_create_postgres"));
+        assert!(output.contains("fn test_create_mysql"));
+        assert!(output.contains("# [cfg (feature = \"sqlite\")]"));
+        assert!(output.contains("# [cfg (feature = \"postgres\")]"));
+        assert!(output.contains("# [cfg (feature = \"mysql\")]"));
+
+        // Type aliases for the generic parameter
+        assert!(output.contains("type DB = :: sqlx :: Sqlite"));
+        assert!(output.contains("type DB = :: sqlx :: Postgres"));
+        assert!(output.contains("type DB = :: sqlx :: MySql"));
+    }
+
+    #[test]
+    fn test_doctest_rejects_multi_backend() {
+        let input: ItemFn = parse_quote! {
+            async fn main<DB: Dialect>(
+                pool: Pool<DB>,
+            ) -> Result<(), fabrique::Error> {
+                Ok(())
+            }
+        };
+        let analysis = TestAnalysis::from(&input).unwrap();
+        let codegen = TestCodegen::with_path(&analysis, "/ws/migrations/sqlite");
+
+        let output = codegen.generate_doctest().to_string();
+        assert!(output.contains("compile_error"));
     }
 
     #[test]

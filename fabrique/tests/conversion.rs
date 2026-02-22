@@ -50,7 +50,7 @@ pub struct User {
 }
 
 #[fabrique::test]
-async fn test_where_accepts_a_rust_type(pool: Pool<Sqlite>) {
+async fn test_where_accepts_a_rust_type<DB: Dialect>(pool: Pool<DB>) {
     // Arrange a fixture
     Order::factory()
         .status(Status::Pending)
@@ -70,7 +70,7 @@ async fn test_where_accepts_a_rust_type(pool: Pool<Sqlite>) {
 }
 
 #[fabrique::test]
-async fn test_set_accepts_a_rust_type(pool: Pool<Sqlite>) {
+async fn test_set_accepts_a_rust_type<DB: Dialect>(pool: Pool<DB>) {
     // Arrange a fixture
     let order = Order::factory().create(&pool).await.unwrap();
 

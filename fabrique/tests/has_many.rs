@@ -24,7 +24,7 @@ pub struct Message {
 // via HasManyCodegen from the child side.
 
 #[fabrique::test]
-async fn test_load_messages_by_alias(pool: Pool<Sqlite>) {
+async fn test_load_messages_by_alias<DB: Dialect>(pool: Pool<DB>) {
     let sender = User::factory().create(&pool).await.unwrap();
     let recipient = User::factory().create(&pool).await.unwrap();
 

@@ -38,7 +38,7 @@ pub struct OrderLine {
 }
 
 #[fabrique::test]
-async fn test_composite_primary_key(connection: Pool<Sqlite>) {
+async fn test_composite_primary_key<DB: Dialect>(connection: Pool<DB>) {
     let user = User::factory()
         .id(Uuid::new_v4())
         .create(&connection)

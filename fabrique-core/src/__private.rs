@@ -143,4 +143,29 @@ mod tests {
         let result: (i64,) = sqlx::query_as("SELECT 1").fetch_one(&pool).await.unwrap();
         assert_eq!(result.0, 1);
     }
+
+    #[cfg(any(feature = "postgres", feature = "mysql"))]
+    #[test]
+    fn temp_db_name_has_expected_prefix() {
+        let name = temp_db_name();
+        assert!(name.starts_with("fabrique_test_"));
+    }
+
+    #[cfg(any(feature = "postgres", feature = "mysql"))]
+    #[test]
+    fn replace_db_in_url_swaps_last_segment() {
+        assert_eq!(
+            replace_db_in_url("postgres://user:pass@host/olddb", "newdb",),
+            "postgres://user:pass@host/newdb"
+        );
+    }
+
+    #[cfg(any(feature = "postgres", feature = "mysql"))]
+    #[test]
+    fn replace_db_in_url_appends_when_no_slash() {
+        assert_eq!(
+            replace_db_in_url("postgres://host", "newdb"),
+            "postgres://host/newdb"
+        );
+    }
 }

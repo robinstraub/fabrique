@@ -11,13 +11,13 @@ pub struct Product {
 }
 
 #[fabrique::test]
-async fn test_save(connection: Pool<Sqlite>) {
+async fn test_save<DB: Dialect>(connection: Pool<DB>) {
     let result = Product::default().save(&connection).await;
     assert!(result.is_ok());
 }
 
 #[fabrique::test]
-async fn test_update(connection: Pool<Sqlite>) {
+async fn test_update<DB: Dialect>(connection: Pool<DB>) {
     let product = Product::factory().create(&connection).await.unwrap();
     let result = Product::update()
         .set(Product::NAME, "Anvil 3000")
