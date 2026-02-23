@@ -12,12 +12,18 @@ use syn::{
 
 // ── Analysis ────────────────────────────────────────────────────
 
-/// Database backend detected from the `Pool<T>` parameter type.
-#[derive(Debug, PartialEq)]
-pub enum Backend {
+/// A concrete database backend.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ConcreteBackend {
     Sqlite,
     Postgres,
     MySql,
+}
+
+/// Database backend detected from the `Pool<T>` parameter type.
+#[derive(Debug, PartialEq)]
+pub enum Backend {
+    Concrete(ConcreteBackend),
     /// Generic backend from `<DB: Dialect>`. Generates one test
     /// per backend, each cfg-gated by feature.
     Multi(Ident),
@@ -27,6 +33,7 @@ pub enum Backend {
 ///
 /// Extracts the function name, parameter name, body, and database
 /// backend from the function signature.
+#[derive(Debug)]
 pub struct TestAnalysis {
     pub fn_name: Ident,
     pub param_name: Ident,
@@ -140,9 +147,9 @@ impl TestAnalysis {
             .ident;
 
         match ident.to_string().as_str() {
-            "Sqlite" => Ok(Backend::Sqlite),
-            "Postgres" => Ok(Backend::Postgres),
-            "MySql" => Ok(Backend::MySql),
+            "Sqlite" => Ok(Backend::Concrete(ConcreteBackend::Sqlite)),
+            "Postgres" => Ok(Backend::Concrete(ConcreteBackend::Postgres)),
+            "MySql" => Ok(Backend::Concrete(ConcreteBackend::MySql)),
             _ => {
                 let is_generic = generics
                     .params
@@ -164,74 +171,74 @@ impl TestAnalysis {
 // ── Codegen ─────────────────────────────────────────────────────
 
 /// All concrete backends, in generation order.
-const CONCRETE_BACKENDS: [Backend; 3] = [Backend::Sqlite, Backend::Postgres, Backend::MySql];
+const CONCRETE_BACKENDS: [ConcreteBackend; 3] = [
+    ConcreteBackend::Sqlite,
+    ConcreteBackend::Postgres,
+    ConcreteBackend::MySql,
+];
 
-impl Backend {
+impl ConcreteBackend {
     /// Feature flag name for cfg-gating.
     fn feature(&self) -> &'static str {
         match self {
-            Backend::Sqlite => "sqlite",
-            Backend::Postgres => "postgres",
-            Backend::MySql => "mysql",
-            Backend::Multi(_) => unreachable!(),
+            ConcreteBackend::Sqlite => "sqlite",
+            ConcreteBackend::Postgres => "postgres",
+            ConcreteBackend::MySql => "mysql",
         }
     }
 
     /// Fully-qualified sqlx type path.
     fn sqlx_type(&self) -> TokenStream {
         match self {
-            Backend::Sqlite => quote! { ::sqlx::Sqlite },
-            Backend::Postgres => quote! { ::sqlx::Postgres },
-            Backend::MySql => quote! { ::sqlx::MySql },
-            Backend::Multi(_) => unreachable!(),
+            ConcreteBackend::Sqlite => quote! { ::sqlx::Sqlite },
+            ConcreteBackend::Postgres => quote! { ::sqlx::Postgres },
+            ConcreteBackend::MySql => quote! { ::sqlx::MySql },
         }
     }
 }
 
 /// Generates pool creation tokens for a concrete backend.
-fn pool_setup_tokens(backend: &Backend, param: &Ident, path: &str) -> TokenStream {
+fn pool_setup_tokens(backend: &ConcreteBackend, param: &Ident, path: &str) -> TokenStream {
     match backend {
-        Backend::Sqlite => quote! {
+        ConcreteBackend::Sqlite => quote! {
             let #param =
                 ::fabrique::__private::create_sqlite_pool(#path)
                     .await
                     .expect("Failed to create test pool");
         },
-        Backend::Postgres => quote! {
+        ConcreteBackend::Postgres => quote! {
             let (#param, __base_url, __db_name) =
                 ::fabrique::__private::create_postgres_pool(#path)
                     .await
                     .expect("Failed to create test pool");
         },
-        Backend::MySql => quote! {
+        ConcreteBackend::MySql => quote! {
             let (#param, __base_url, __db_name) =
                 ::fabrique::__private::create_mysql_pool(#path)
                     .await
                     .expect("Failed to create test pool");
         },
-        Backend::Multi(_) => unreachable!(),
     }
 }
 
 /// Generates cleanup tokens for a concrete backend.
-fn cleanup_tokens(backend: &Backend) -> TokenStream {
+fn cleanup_tokens(backend: &ConcreteBackend) -> TokenStream {
     match backend {
-        Backend::Sqlite => quote! {},
-        Backend::Postgres => quote! {
+        ConcreteBackend::Sqlite => quote! {},
+        ConcreteBackend::Postgres => quote! {
             ::fabrique::__private::cleanup_test_db_postgres(
                 &__base_url,
                 &__db_name,
             )
             .await;
         },
-        Backend::MySql => quote! {
+        ConcreteBackend::MySql => quote! {
             ::fabrique::__private::cleanup_test_db_mysql(
                 &__base_url,
                 &__db_name,
             )
             .await;
         },
-        Backend::Multi(_) => unreachable!(),
     }
 }
 
@@ -251,7 +258,7 @@ impl<'a> TestCodegen<'a> {
     pub fn new(analysis: &'a TestAnalysis) -> Self {
         let migration_path = match &analysis.backend {
             Backend::Multi(_) => String::new(),
-            backend => Self::resolve_migration_path(backend),
+            Backend::Concrete(concrete) => Self::resolve_migration_path(concrete),
         };
         Self {
             analysis,
@@ -276,7 +283,7 @@ impl<'a> TestCodegen<'a> {
     pub fn generate(&self) -> TokenStream {
         match &self.analysis.backend {
             Backend::Multi(type_param) => self.generate_multi(type_param),
-            _ => self.generate_single(),
+            Backend::Concrete(concrete) => self.generate_single(concrete),
         }
     }
 
@@ -319,12 +326,12 @@ impl<'a> TestCodegen<'a> {
     }
 
     /// Generates a single `#[tokio::test]` for a concrete backend.
-    fn generate_single(&self) -> TokenStream {
+    fn generate_single(&self, backend: &ConcreteBackend) -> TokenStream {
         let fn_name = &self.analysis.fn_name;
         let stmts = &self.analysis.body.stmts;
         let param = &self.analysis.param_name;
-        let setup = pool_setup_tokens(&self.analysis.backend, param, &self.migration_path);
-        let cleanup = cleanup_tokens(&self.analysis.backend);
+        let setup = pool_setup_tokens(backend, param, &self.migration_path);
+        let cleanup = cleanup_tokens(backend);
 
         quote! {
             #[::tokio::test]
@@ -368,7 +375,7 @@ impl<'a> TestCodegen<'a> {
     }
 
     /// Returns the absolute migration path for the given backend.
-    fn resolve_migration_path(backend: &Backend) -> String {
+    fn resolve_migration_path(backend: &ConcreteBackend) -> String {
         let subdir = backend.feature();
         workspace_root()
             .join("migrations")
@@ -440,7 +447,7 @@ mod tests {
 
         assert_eq!(analysis.fn_name, "my_test");
         assert_eq!(analysis.param_name, "pool");
-        assert_eq!(analysis.backend, Backend::Sqlite);
+        assert_eq!(analysis.backend, Backend::Concrete(ConcreteBackend::Sqlite));
     }
 
     #[test]
@@ -450,7 +457,10 @@ mod tests {
         };
         let analysis = TestAnalysis::from(&input).unwrap();
 
-        assert_eq!(analysis.backend, Backend::Postgres);
+        assert_eq!(
+            analysis.backend,
+            Backend::Concrete(ConcreteBackend::Postgres)
+        );
     }
 
     #[test]
@@ -460,7 +470,7 @@ mod tests {
         };
         let analysis = TestAnalysis::from(&input).unwrap();
 
-        assert_eq!(analysis.backend, Backend::MySql);
+        assert_eq!(analysis.backend, Backend::Concrete(ConcreteBackend::MySql));
     }
 
     #[test]
@@ -470,7 +480,7 @@ mod tests {
         };
         let analysis = TestAnalysis::from(&input).unwrap();
 
-        assert_eq!(analysis.backend, Backend::Sqlite);
+        assert_eq!(analysis.backend, Backend::Concrete(ConcreteBackend::Sqlite));
     }
 
     #[test]
@@ -662,6 +672,93 @@ mod tests {
 
         let output = codegen.generate_doctest().to_string();
         assert!(output.contains("compile_error"));
+    }
+
+    #[test]
+    fn test_analysis_rejects_non_ident_pattern() {
+        let input: ItemFn = parse_quote! {
+            async fn my_test((a, b): Pool<Sqlite>) {}
+        };
+        let err = TestAnalysis::from(&input).unwrap_err();
+        assert_eq!(err.to_string(), "expected a simple identifier");
+    }
+
+    #[test]
+    fn test_analysis_rejects_self_param() {
+        let input: ItemFn = parse_quote! {
+            async fn my_test(&self) {}
+        };
+        let err = TestAnalysis::from(&input).unwrap_err();
+        assert_eq!(err.to_string(), "expected a typed parameter");
+    }
+
+    #[test]
+    fn test_analysis_rejects_non_path_type() {
+        let input: ItemFn = parse_quote! {
+            async fn my_test(pool: &Pool<Sqlite>) {}
+        };
+        let err = TestAnalysis::from(&input).unwrap_err();
+        assert_eq!(err.to_string(), "expected Pool<Sqlite|Postgres|MySql>");
+    }
+
+    #[test]
+    fn test_analysis_rejects_non_pool_type() {
+        let input: ItemFn = parse_quote! {
+            async fn my_test(pool: NotPool<Sqlite>) {}
+        };
+        let err = TestAnalysis::from(&input).unwrap_err();
+        assert_eq!(err.to_string(), "expected Pool type");
+    }
+
+    #[test]
+    fn test_analysis_rejects_pool_without_angle_brackets() {
+        let input: ItemFn = parse_quote! {
+            async fn my_test(pool: Pool) {}
+        };
+        let err = TestAnalysis::from(&input).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "expected Pool<\u{2026}> with angle brackets"
+        );
+    }
+
+    #[test]
+    fn test_analysis_rejects_non_path_type_argument() {
+        let input: ItemFn = parse_quote! {
+            async fn my_test(pool: Pool<&Sqlite>) {}
+        };
+        let err = TestAnalysis::from(&input).unwrap_err();
+        assert_eq!(err.to_string(), "expected a path type argument");
+    }
+
+    #[test]
+    fn test_expand_test_delegates_correctly() {
+        let input: TokenStream = quote! {
+            async fn my_test(pool: Pool<Sqlite>) {
+                let result = Product::all(&pool).await;
+                assert!(result.is_ok());
+            }
+        };
+        let output = expand_test(TokenStream::new(), input).unwrap().to_string();
+
+        assert!(output.contains("fn my_test"));
+        assert!(output.contains("create_sqlite_pool"));
+    }
+
+    #[test]
+    fn test_expand_doctest_delegates_correctly() {
+        let input: TokenStream = quote! {
+            async fn main(
+                pool: Pool<Sqlite>,
+            ) -> Result<(), fabrique::Error> {
+                Ok(())
+            }
+        };
+        let output = expand_doctest(input).unwrap().to_string();
+
+        assert!(output.contains("fn main"));
+        assert!(output.contains("block_on"));
+        assert!(output.contains("create_sqlite_pool"));
     }
 
     #[test]
