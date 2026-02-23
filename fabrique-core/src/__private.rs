@@ -125,8 +125,10 @@ fn temp_db_name() -> String {
 
 #[cfg(any(feature = "postgres", feature = "mysql"))]
 fn replace_db_in_url(url: &str, db_name: &str) -> String {
-    match url.rsplit_once('/') {
-        Some((base, _)) => format!("{base}/{db_name}"),
+    let after_scheme = url.find("://").map(|i| i + 3).unwrap_or(0);
+
+    match url[after_scheme..].rfind('/') {
+        Some(pos) => format!("{}/{db_name}", &url[..after_scheme + pos]),
         None => format!("{url}/{db_name}"),
     }
 }
