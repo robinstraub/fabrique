@@ -125,11 +125,19 @@ fn temp_db_name() -> String {
 
 #[cfg(any(feature = "postgres", feature = "mysql"))]
 fn replace_db_in_url(url: &str, db_name: &str) -> String {
-    let after_scheme = url.find("://").map(|i| i + 3).unwrap_or(0);
+    let (url_without_query, query) = match url.find('?') {
+        Some(pos) => (&url[..pos], &url[pos..]),
+        None => (url, ""),
+    };
 
-    match url[after_scheme..].rfind('/') {
-        Some(pos) => format!("{}/{db_name}", &url[..after_scheme + pos]),
-        None => format!("{url}/{db_name}"),
+    let after_scheme = url_without_query.find("://").map(|i| i + 3).unwrap_or(0);
+
+    match url_without_query[after_scheme..].rfind('/') {
+        Some(pos) => format!(
+            "{}/{db_name}{query}",
+            &url_without_query[..after_scheme + pos]
+        ),
+        None => format!("{url_without_query}/{db_name}{query}"),
     }
 }
 
@@ -168,6 +176,24 @@ mod tests {
         assert_eq!(
             replace_db_in_url("postgres://host", "newdb"),
             "postgres://host/newdb"
+        );
+    }
+
+    #[cfg(any(feature = "postgres", feature = "mysql"))]
+    #[test]
+    fn replace_db_in_url_preserves_query_params() {
+        assert_eq!(
+            replace_db_in_url("postgres://user:pass@host/olddb?sslmode=require", "newdb"),
+            "postgres://user:pass@host/newdb?sslmode=require"
+        );
+    }
+
+    #[cfg(any(feature = "postgres", feature = "mysql"))]
+    #[test]
+    fn replace_db_in_url_preserves_query_params_without_path() {
+        assert_eq!(
+            replace_db_in_url("postgres://host?sslmode=require", "newdb"),
+            "postgres://host/newdb?sslmode=require"
         );
     }
 }

@@ -47,7 +47,7 @@ impl TestAnalysis {
     /// Expects exactly one parameter of type `Pool<Sqlite>`,
     /// `Pool<Postgres>`, `Pool<MySql>`, or `Pool<DB>` where `DB`
     /// is a generic type parameter (multi-backend).
-    pub fn from(input: &ItemFn) -> Result<Self, syn::Error> {
+    pub fn try_from_item(input: &ItemFn) -> Result<Self, syn::Error> {
         let fn_name = input.sig.ident.clone();
         let body = (*input.block).clone();
 
@@ -222,10 +222,11 @@ fn pool_setup_tokens(backend: &ConcreteBackend, param: &Ident, path: &str) -> To
 }
 
 /// Generates cleanup tokens for a concrete backend.
-fn cleanup_tokens(backend: &ConcreteBackend) -> TokenStream {
+fn cleanup_tokens(backend: &ConcreteBackend, param: &Ident) -> TokenStream {
     match backend {
         ConcreteBackend::Sqlite => quote! {},
         ConcreteBackend::Postgres => quote! {
+            drop(#param);
             ::fabrique::__private::cleanup_test_db_postgres(
                 &__base_url,
                 &__db_name,
@@ -233,6 +234,7 @@ fn cleanup_tokens(backend: &ConcreteBackend) -> TokenStream {
             .await;
         },
         ConcreteBackend::MySql => quote! {
+            drop(#param);
             ::fabrique::__private::cleanup_test_db_mysql(
                 &__base_url,
                 &__db_name,
@@ -293,11 +295,13 @@ impl<'a> TestCodegen<'a> {
     /// runtime since doctests cannot use `#[tokio::test]`.
     /// Multi-backend is not supported for doctests.
     pub fn generate_doctest(&self) -> TokenStream {
-        if matches!(self.analysis.backend, Backend::Multi(_)) {
+        if !matches!(
+            self.analysis.backend,
+            Backend::Concrete(ConcreteBackend::Sqlite)
+        ) {
             return syn::Error::new_spanned(
                 &self.analysis.fn_name,
-                "#[fabrique::doctest] does not support \
-                 generic backends",
+                "#[fabrique::doctest] only supports Sqlite",
             )
             .into_compile_error();
         }
@@ -331,7 +335,7 @@ impl<'a> TestCodegen<'a> {
         let stmts = &self.analysis.body.stmts;
         let param = &self.analysis.param_name;
         let setup = pool_setup_tokens(backend, param, &self.migration_path);
-        let cleanup = cleanup_tokens(backend);
+        let cleanup = cleanup_tokens(backend, param);
 
         quote! {
             #[::tokio::test]
@@ -349,15 +353,20 @@ impl<'a> TestCodegen<'a> {
     fn generate_multi(&self, type_param: &Ident) -> TokenStream {
         let stmts = &self.analysis.body.stmts;
         let param = &self.analysis.param_name;
+        let ws_root = workspace_root();
 
         let fns = CONCRETE_BACKENDS.iter().map(|backend| {
             let feature = backend.feature();
             let db_type = backend.sqlx_type();
             let suffix = feature;
             let fn_name = format_ident!("{}_{}", self.analysis.fn_name, suffix,);
-            let path = Self::resolve_migration_path(backend);
+            let path = ws_root
+                .join("migrations")
+                .join(backend.feature())
+                .to_string_lossy()
+                .into_owned();
             let setup = pool_setup_tokens(backend, param, &path);
-            let cleanup = cleanup_tokens(backend);
+            let cleanup = cleanup_tokens(backend, param);
 
             quote! {
                 #[cfg(feature = #feature)]
@@ -420,9 +429,15 @@ fn find_workspace_root(mut path: std::path::PathBuf) -> std::path::PathBuf {
 // ── Entry points ────────────────────────────────────────────────
 
 /// Entry point for `#[fabrique::test]`.
-pub fn expand_test(_attr: TokenStream, item: TokenStream) -> Result<TokenStream, syn::Error> {
+pub fn expand_test(attr: TokenStream, item: TokenStream) -> Result<TokenStream, syn::Error> {
+    if !attr.is_empty() {
+        return Err(syn::Error::new_spanned(
+            attr,
+            "#[fabrique::test] does not accept arguments",
+        ));
+    }
     let input: ItemFn = syn::parse2(item)?;
-    let analysis = TestAnalysis::from(&input)?;
+    let analysis = TestAnalysis::try_from_item(&input)?;
     let codegen = TestCodegen::new(&analysis);
     Ok(codegen.generate())
 }
@@ -430,7 +445,7 @@ pub fn expand_test(_attr: TokenStream, item: TokenStream) -> Result<TokenStream,
 /// Entry point for `#[fabrique::doctest]`.
 pub fn expand_doctest(item: TokenStream) -> Result<TokenStream, syn::Error> {
     let input: ItemFn = syn::parse2(item)?;
-    let analysis = TestAnalysis::from(&input)?;
+    let analysis = TestAnalysis::try_from_item(&input)?;
     let codegen = TestCodegen::new(&analysis);
     Ok(codegen.generate_doctest())
 }
@@ -447,7 +462,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test(pool: Pool<Sqlite>) {}
         };
-        let analysis = TestAnalysis::from(&input).unwrap();
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
 
         assert_eq!(analysis.fn_name, "my_test");
         assert_eq!(analysis.param_name, "pool");
@@ -459,7 +474,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test(pool: Pool<Postgres>) {}
         };
-        let analysis = TestAnalysis::from(&input).unwrap();
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
 
         assert_eq!(
             analysis.backend,
@@ -472,7 +487,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test(pool: Pool<MySql>) {}
         };
-        let analysis = TestAnalysis::from(&input).unwrap();
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
 
         assert_eq!(analysis.backend, Backend::Concrete(ConcreteBackend::MySql));
     }
@@ -482,7 +497,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test(pool: Pool<sqlx::Sqlite>) {}
         };
-        let analysis = TestAnalysis::from(&input).unwrap();
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
 
         assert_eq!(analysis.backend, Backend::Concrete(ConcreteBackend::Sqlite));
     }
@@ -492,7 +507,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test() {}
         };
-        let result = TestAnalysis::from(&input);
+        let result = TestAnalysis::try_from_item(&input);
 
         assert!(result.is_err());
     }
@@ -502,7 +517,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test(pool: Pool<Mssql>) {}
         };
-        let result = TestAnalysis::from(&input);
+        let result = TestAnalysis::try_from_item(&input);
 
         assert!(result.is_err());
     }
@@ -515,7 +530,7 @@ mod tests {
                 assert!(result.is_ok());
             }
         };
-        let analysis = TestAnalysis::from(&input).unwrap();
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
         let codegen = TestCodegen::with_path(&analysis, "/ws/migrations/sqlite");
 
         let generated = codegen.generate();
@@ -547,7 +562,7 @@ mod tests {
                 assert!(result.is_ok());
             }
         };
-        let analysis = TestAnalysis::from(&input).unwrap();
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
         let codegen = TestCodegen::with_path(&analysis, "/ws/migrations/postgres");
 
         let generated = codegen.generate();
@@ -565,6 +580,7 @@ mod tests {
                             .expect("Failed to create test pool");
                     let result = Product::all(&pool).await;
                     assert!(result.is_ok());
+                    drop(pool);
                     ::fabrique::__private::cleanup_test_db_postgres(
                         &__base_url,
                         &__db_name,
@@ -584,7 +600,7 @@ mod tests {
                 assert!(result.is_ok());
             }
         };
-        let analysis = TestAnalysis::from(&input).unwrap();
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
         let codegen = TestCodegen::with_path(&analysis, "/ws/migrations/mysql");
 
         let generated = codegen.generate();
@@ -602,6 +618,7 @@ mod tests {
                             .expect("Failed to create test pool");
                     let result = Product::all(&pool).await;
                     assert!(result.is_ok());
+                    drop(pool);
                     ::fabrique::__private::cleanup_test_db_mysql(
                         &__base_url,
                         &__db_name,
@@ -618,7 +635,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test<DB: Dialect>(pool: Pool<DB>) {}
         };
-        let analysis = TestAnalysis::from(&input).unwrap();
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
 
         assert_eq!(analysis.fn_name, "my_test");
         assert_eq!(analysis.param_name, "pool");
@@ -630,7 +647,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test<T: Dialect>(pool: Pool<T>) {}
         };
-        let analysis = TestAnalysis::from(&input).unwrap();
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
 
         assert!(matches!(&analysis.backend, Backend::Multi(id) if id == "T"),);
     }
@@ -643,7 +660,7 @@ mod tests {
                 assert!(result.is_ok());
             }
         };
-        let analysis = TestAnalysis::from(&input).unwrap();
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
         let codegen = TestCodegen::new(&analysis);
 
         let output = codegen.generate().to_string();
@@ -671,8 +688,24 @@ mod tests {
                 Ok(())
             }
         };
-        let analysis = TestAnalysis::from(&input).unwrap();
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
         let codegen = TestCodegen::with_path(&analysis, "/ws/migrations/sqlite");
+
+        let output = codegen.generate_doctest().to_string();
+        assert!(output.contains("compile_error"));
+    }
+
+    #[test]
+    fn test_doctest_rejects_non_sqlite_backend() {
+        let input: ItemFn = parse_quote! {
+            async fn main(
+                pool: Pool<Postgres>,
+            ) -> Result<(), fabrique::Error> {
+                Ok(())
+            }
+        };
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
+        let codegen = TestCodegen::with_path(&analysis, "/ws/migrations/postgres");
 
         let output = codegen.generate_doctest().to_string();
         assert!(output.contains("compile_error"));
@@ -683,7 +716,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test((a, b): Pool<Sqlite>) {}
         };
-        let err = TestAnalysis::from(&input).unwrap_err();
+        let err = TestAnalysis::try_from_item(&input).unwrap_err();
         assert_eq!(err.to_string(), "expected a simple identifier");
     }
 
@@ -692,7 +725,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test(&self) {}
         };
-        let err = TestAnalysis::from(&input).unwrap_err();
+        let err = TestAnalysis::try_from_item(&input).unwrap_err();
         assert_eq!(err.to_string(), "expected a typed parameter");
     }
 
@@ -701,7 +734,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test(pool: &Pool<Sqlite>) {}
         };
-        let err = TestAnalysis::from(&input).unwrap_err();
+        let err = TestAnalysis::try_from_item(&input).unwrap_err();
         assert_eq!(err.to_string(), "expected Pool<Sqlite|Postgres|MySql>");
     }
 
@@ -710,7 +743,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test(pool: NotPool<Sqlite>) {}
         };
-        let err = TestAnalysis::from(&input).unwrap_err();
+        let err = TestAnalysis::try_from_item(&input).unwrap_err();
         assert_eq!(err.to_string(), "expected Pool type");
     }
 
@@ -719,7 +752,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test(pool: Pool) {}
         };
-        let err = TestAnalysis::from(&input).unwrap_err();
+        let err = TestAnalysis::try_from_item(&input).unwrap_err();
         assert_eq!(
             err.to_string(),
             "expected Pool<\u{2026}> with angle brackets"
@@ -731,7 +764,7 @@ mod tests {
         let input: ItemFn = parse_quote! {
             async fn my_test(pool: Pool<&Sqlite>) {}
         };
-        let err = TestAnalysis::from(&input).unwrap_err();
+        let err = TestAnalysis::try_from_item(&input).unwrap_err();
         assert_eq!(err.to_string(), "expected a path type argument");
     }
 
@@ -747,6 +780,19 @@ mod tests {
 
         assert!(output.contains("fn my_test"));
         assert!(output.contains("create_sqlite_pool"));
+    }
+
+    #[test]
+    fn test_expand_test_rejects_attributes() {
+        let attr: TokenStream = quote! { some_config };
+        let input: TokenStream = quote! {
+            async fn my_test(pool: Pool<Sqlite>) {}
+        };
+        let err = expand_test(attr, input).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "#[fabrique::test] does not accept arguments"
+        );
     }
 
     #[test]
@@ -775,7 +821,7 @@ mod tests {
                 Ok(())
             }
         };
-        let analysis = TestAnalysis::from(&input).unwrap();
+        let analysis = TestAnalysis::try_from_item(&input).unwrap();
         let codegen = TestCodegen::with_path(&analysis, "/ws/migrations/sqlite");
 
         let generated = codegen.generate_doctest();
@@ -823,6 +869,15 @@ mod tests {
     fn test_find_workspace_root_panics_without_workspace() {
         let dir = std::env::temp_dir().join("fabrique_test_no_workspace");
         std::fs::create_dir_all(&dir).unwrap();
+
+        struct Cleanup(std::path::PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _guard = Cleanup(dir.clone());
+
         find_workspace_root(dir);
     }
 }
