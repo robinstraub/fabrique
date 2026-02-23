@@ -394,8 +394,12 @@ impl<'a> TestCodegen<'a> {
 /// Panics if no workspace root is found.
 fn workspace_root() -> std::path::PathBuf {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR must be set");
-    let mut path = std::path::PathBuf::from(manifest_dir);
+    find_workspace_root(std::path::PathBuf::from(manifest_dir))
+}
 
+/// Walks up from `start` looking for a `Cargo.toml` containing
+/// a `[workspace]` section. Panics if none is found.
+fn find_workspace_root(mut path: std::path::PathBuf) -> std::path::PathBuf {
     loop {
         let cargo_toml = path.join("Cargo.toml");
         if cargo_toml.exists() {
@@ -803,5 +807,22 @@ mod tests {
             }
             .to_string()
         );
+    }
+
+    #[test]
+    fn test_find_workspace_root_from_subcrate() {
+        let start = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let root = find_workspace_root(start);
+        assert!(root.join("Cargo.toml").exists());
+        let content = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+        assert!(content.contains("[workspace]"));
+    }
+
+    #[test]
+    #[should_panic(expected = "could not find workspace root")]
+    fn test_find_workspace_root_panics_without_workspace() {
+        let dir = std::env::temp_dir().join("fabrique_test_no_workspace");
+        std::fs::create_dir_all(&dir).unwrap();
+        find_workspace_root(dir);
     }
 }
