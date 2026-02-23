@@ -78,7 +78,7 @@ All code examples should be executable via `mdbook test`. Use the
 
 ```rust
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 let user = User::factory().create(&pool).await?;
 assert_eq!(user.name, "Test User");
 # Ok(())

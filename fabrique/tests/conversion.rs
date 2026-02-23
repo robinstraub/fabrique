@@ -49,8 +49,8 @@ pub struct User {
     pub email: String,
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_where_accepts_a_rust_type(pool: Pool<Sqlite>) {
+#[fabrique::test]
+async fn test_where_accepts_a_rust_type<DB: Dialect>(pool: Pool<DB>) {
     // Arrange a fixture
     Order::factory()
         .status(Status::Pending)
@@ -69,8 +69,8 @@ async fn test_where_accepts_a_rust_type(pool: Pool<Sqlite>) {
     assert_eq!(result.iter().len(), 1);
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_set_accepts_a_rust_type(pool: Pool<Sqlite>) {
+#[fabrique::test]
+async fn test_set_accepts_a_rust_type<DB: Dialect>(pool: Pool<DB>) {
     // Arrange a fixture
     let order = Order::factory().create(&pool).await.unwrap();
 

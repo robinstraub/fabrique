@@ -28,7 +28,7 @@ touches every matching row:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 # Product::factory()
 #     .price_cents(15000)
 #     .in_stock(true)
@@ -68,7 +68,7 @@ Chain multiple `.set()` calls to update several columns at once:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 # Product::factory()
 #     .name("Anvil 3000".to_string())
 #     .price_cents(100)
@@ -113,7 +113,7 @@ separate SELECT:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 # Product::factory()
 #     .price_cents(15000)
 #     .in_stock(true)
@@ -162,7 +162,7 @@ statement:
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 # let product = Product::factory()
 #     .name("Old Name".to_string())
 #     .create(&pool)
@@ -209,7 +209,7 @@ If you only want to skip duplicates without updating, use
 # }
 #
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 # let id = Uuid::new_v4();
 // Insert if not exists, silently skip if exists
 Product::insert()

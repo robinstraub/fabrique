@@ -6,14 +6,14 @@ changelog_path = "./CHANGELOG.md"
 name = "fabrique"
 changelog_update = true
 version_group = "fabrique"
-publish_features = ["sqlite", "testing"]
+publish_all_features = true
 
 [[package]]
 name = "fabrique-core"
 version_group = "fabrique"
-publish_features = ["sqlite"]
+publish_all_features = true
 
 [[package]]
 name = "fabrique-derive"
 version_group = "fabrique"
-publish_features = ["sqlite", "testing"]
+publish_all_features = true

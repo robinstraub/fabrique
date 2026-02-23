@@ -10,19 +10,19 @@ pub struct Product {
     pub in_stock: bool,
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_save(connection: Pool<Sqlite>) {
-    let result = Product::default().save(&connection).await;
+#[fabrique::test]
+async fn test_save<DB: Dialect>(pool: Pool<DB>) {
+    let result = Product::default().save(&pool).await;
     assert!(result.is_ok());
 }
 
-#[sqlx::test(migrations = "../migrations")]
-async fn test_update(connection: Pool<Sqlite>) {
-    let product = Product::factory().create(&connection).await.unwrap();
+#[fabrique::test]
+async fn test_update<DB: Dialect>(pool: Pool<DB>) {
+    let product = Product::factory().create(&pool).await.unwrap();
     let result = Product::update()
         .set(Product::NAME, "Anvil 3000")
         .r#where(Product::ID, "=", product.id)
-        .execute(&connection)
+        .execute(&pool)
         .await;
     assert!(result.is_ok());
 }

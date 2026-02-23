@@ -69,7 +69,7 @@ With aliases, you can join the same model multiple times using `join_as`:
 #     recipient_id: Uuid,
 # }
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 let messages = Message::query()
     .join_as::<User, Sender>()
     .join_as::<User, Recipient>()
@@ -111,7 +111,7 @@ Use `where_on` to filter on a specific alias:
 #     recipient_id: Uuid,
 # }
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 // Find messages sent by Alice
 let messages = Message::query()
     .join_as::<User, Sender>()
@@ -145,7 +145,7 @@ Use `order_by_on` to sort by a column from a specific alias:
 #     recipient_id: Uuid,
 # }
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 // Order messages by sender name
 let messages = Message::query()
     .join_as::<User, Sender>()
@@ -179,7 +179,7 @@ Aliases generate `for_<alias>` methods on the factory:
 #     recipient_id: Uuid,
 # }
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 let alice = User::factory()
     .name("Alice".to_string())
     .create(&pool)
@@ -228,7 +228,7 @@ to specify which foreign key to follow:
 #     email: String,
 # }
 # #[fabrique::doctest]
-# async fn main(pool: Pool<Backend>) -> Result<(), fabrique::Error> {
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 # let user = User::factory().create(&pool).await?;
 // Get messages sent by this user
 let sent = user.messages::<_, Sender>().get(&pool).await?;
