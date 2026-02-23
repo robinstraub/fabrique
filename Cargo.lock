@@ -427,7 +427,7 @@ dependencies = [
 
 [[package]]
 name = "fabrique"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cargo-husky",
  "chrono",
@@ -445,7 +445,7 @@ dependencies = [
 
 [[package]]
 name = "fabrique-core"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "fabrique",
  "fabrique-derive",
@@ -457,7 +457,7 @@ dependencies = [
 
 [[package]]
 name = "fabrique-derive"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "darling 0.21.3",
  "fabrique",

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/robinstraub/fabrique/compare/fabrique-v0.2.2...fabrique-v0.3.1) - 2026-02-23
+
+### Added
+
+- genericize test macro ([#133](https://github.com/robinstraub/fabrique/pull/133))
+
+### Other
+
+- release v0.3.0 ([#127](https://github.com/robinstraub/fabrique/pull/127))
+- [**breaking**] allow multiple backends ([#131](https://github.com/robinstraub/fabrique/pull/131))
+- accept model references in factory methods ([#130](https://github.com/robinstraub/fabrique/pull/130))
+- generate HasMany methods from the child side ([#129](https://github.com/robinstraub/fabrique/pull/129))
+- gate factories behind the testing feature ([#128](https://github.com/robinstraub/fabrique/pull/128))
+
 ## [0.3.0](https://github.com/robinstraub/fabrique/compare/fabrique-v0.2.2...fabrique-v0.3.0) - 2026-02-13
 
 ### Other
