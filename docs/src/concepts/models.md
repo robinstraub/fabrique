@@ -255,8 +255,12 @@ let anvil: Product = Product::find(&pool, anvil.id).await?;
 // Upsert (insert or update on PK conflict)
 let anvil: Product = anvil.save(&pool).await?;
 
+// Bulk upsert a collection
+let products = vec![anvil];
+products.upsert(&pool, Product::ID).await?;
+
 // Delete by primary key, no instance needed
-Product::destroy(&pool, anvil.id).await?;
+Product::destroy(&pool, Uuid::new_v4()).await?;
 # Ok(())
 # }
 ```

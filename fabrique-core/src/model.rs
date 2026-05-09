@@ -116,6 +116,10 @@ pub trait Persist<DB: Dialect>: Model {
     ) -> impl Future<Output = Result<Self, crate::Error>> + Send + 'e
     where
         A: sqlx::Acquire<'e, Database = DB> + Send + 'e;
+
+    /// Pushes all field values as bind parameters into a separated
+    /// query builder row.
+    fn push_bind_values(self, separated: sqlx::query_builder::Separated<'_, DB, &'static str>);
 }
 
 /// Delete operations

@@ -42,6 +42,7 @@ impl<'a> FactoryCodegen<'a> {
         let factory_ident = &self.ident;
         let factory_fields = self.generate_factory_fields();
         let factory_method_new = self.generate_factory_method_new();
+        let factory_method_make = self.generate_factory_method_make();
         let factory_method_fields = self.generate_factory_method_fields();
         let factory_methods_for_relation = self.generate_factory_methods_for_relation();
         let factory_relation_fields = self.generate_factory_relation_fields();
@@ -86,6 +87,8 @@ impl<'a> FactoryCodegen<'a> {
 
             impl<DB: ::fabrique::Dialect> #factory_ident<DB> {
                 #factory_method_new
+
+                #factory_method_make
 
                 #(#factory_method_fields)*
 
@@ -364,6 +367,47 @@ impl<'a> FactoryCodegen<'a> {
                     #(#initialized_fields,)*
                     #(#initialized_relation_fields,)*
                     children: Vec::new(),
+                }
+            }
+        }
+    }
+
+    /// Generates the `make()` method that builds a model instance
+    /// without persisting it.
+    fn generate_factory_method_make(&self) -> TokenStream {
+        let struct_ident = &self.analysis.ident;
+
+        let has_custom_faker = self
+            .analysis
+            .column_fields
+            .iter()
+            .any(|f| f.faker.is_some());
+
+        let fake_import = if has_custom_faker {
+            quote! { use ::fabrique::fake::Fake; }
+        } else {
+            quote! {}
+        };
+
+        let column_fields = self.analysis.column_fields.iter().map(|field| {
+            let name = &field.ident;
+            let ty = &field.ty;
+
+            match &field.faker {
+                Some(faker_expr) => quote! {
+                    #name: self.#name.unwrap_or_else(|| #faker_expr.fake())
+                },
+                None => quote! {
+                    #name: self.#name.unwrap_or_else(::fabrique::seeded_value::<#ty>)
+                },
+            }
+        });
+
+        quote! {
+            pub fn make(self) -> #struct_ident {
+                #fake_import
+                #struct_ident {
+                    #(#column_fields,)*
                 }
             }
         }
@@ -658,6 +702,15 @@ mod tests {
                             weight: None,
                             hammer_relation: None,
                             children: Vec::new(),
+                        }
+                    }
+
+                    pub fn make(self) -> Anvil {
+                        Anvil {
+                            id: self.id.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                            hammer_id: self.hammer_id.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                            hardness: self.hardness.unwrap_or_else(::fabrique::seeded_value::<u32>),
+                            weight: self.weight.unwrap_or_else(::fabrique::seeded_value::<u32>),
                         }
                     }
 

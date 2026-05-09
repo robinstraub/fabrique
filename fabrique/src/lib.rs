@@ -88,6 +88,7 @@ pub use error::*;
 pub use factory::*;
 pub use model::*;
 pub use relation::*;
+pub use upsert::*;
 
 #[cfg(feature = "testing")]
 pub use fake;
@@ -117,6 +118,7 @@ pub mod model;
 pub mod prelude;
 pub mod relation;
 pub mod sql;
+pub mod upsert;
 #[cfg(feature = "testing")]
 #[doc(hidden)]
 pub use fabrique_core::__private;

@@ -70,6 +70,12 @@ impl<'a> ColumnsCodegen<'a> {
                         #into_db_body
                     }
                 }
+
+                impl ::fabrique::UniqueBy<#base_struct_ident> for #type_name {
+                    fn column_names() -> &'static [&'static str] {
+                        &[#column_name]
+                    }
+                }
             }
         });
 
@@ -127,6 +133,13 @@ mod tests {
                         value
                     }
                 }
+
+                impl ::fabrique::UniqueBy<Anvil> for AnvilIdColumn {
+                    fn column_names() -> &'static [&'static str] {
+                        &["id"]
+                    }
+                }
+
                 impl ::fabrique::Column<Anvil> for AnvilNameColumn {
                     type Type = String;
                     type DbType = String;
@@ -136,6 +149,12 @@ mod tests {
 
                     fn into_db(value: Self::Type) -> Self::DbType {
                         value
+                    }
+                }
+
+                impl ::fabrique::UniqueBy<Anvil> for AnvilNameColumn {
+                    fn column_names() -> &'static [&'static str] {
+                        &["name"]
                     }
                 }
 
@@ -182,6 +201,13 @@ mod tests {
                         value
                     }
                 }
+
+                impl ::fabrique::UniqueBy<Account> for AccountIdColumn {
+                    fn column_names() -> &'static [&'static str] {
+                        &["id"]
+                    }
+                }
+
                 impl ::fabrique::Column<Account> for AccountStatusColumn {
                     type Type = Status;
                     type DbType = String;
@@ -191,6 +217,12 @@ mod tests {
 
                     fn into_db(value: Self::Type) -> Self::DbType {
                         value.into()
+                    }
+                }
+
+                impl ::fabrique::UniqueBy<Account> for AccountStatusColumn {
+                    fn column_names() -> &'static [&'static str] {
+                        &["status"]
                     }
                 }
 

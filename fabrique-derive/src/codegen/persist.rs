@@ -18,6 +18,7 @@ impl<'a> PersistCodegen<'a> {
         let base_struct_ident = &self.analysis.ident;
         let fn_create = self.generate_fn_create();
         let fn_save = self.generate_fn_save();
+        let fn_push_bind_values = self.generate_fn_push_bind_values();
 
         // Per-column-field Encode/Type bounds (using `as` type when present)
         let field_bounds = self.analysis.column_fields.iter().map(|f| {
@@ -38,6 +39,8 @@ impl<'a> PersistCodegen<'a> {
                 #fn_create
 
                 #fn_save
+
+                #fn_push_bind_values
             }
         }
     }
@@ -66,6 +69,29 @@ impl<'a> PersistCodegen<'a> {
                         .await
                         .map_err(Into::into)
                 }
+            }
+        }
+    }
+
+    /// Generates the `push_bind_values()` method.
+    fn generate_fn_push_bind_values(&self) -> TokenStream {
+        let base_struct_ident = &self.analysis.ident;
+        let bind_calls = self.analysis.column_fields.iter().map(|field| {
+            let ident = &field.ident;
+            let column_type = &field.column_type;
+            quote! {
+                separated.push_bind(
+                    <#column_type as ::fabrique::Column<#base_struct_ident>>::into_db(self.#ident)
+                );
+            }
+        });
+
+        quote! {
+            fn push_bind_values(
+                self,
+                mut separated: ::sqlx::query_builder::Separated<'_, DB, &'static str>,
+            ) {
+                #(#bind_calls)*
             }
         }
     }
@@ -161,6 +187,15 @@ mod tests {
                                 .await
                                 .map_err(Into::into)
                         }
+                    }
+
+                    fn push_bind_values(
+                        self,
+                        mut separated: ::sqlx::query_builder::Separated<'_, DB, &'static str>,
+                    ) {
+                        separated.push_bind(
+                            <AnvilIdColumn as ::fabrique::Column<Anvil>>::into_db(self.id)
+                        );
                     }
                 }
             }

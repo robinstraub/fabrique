@@ -43,6 +43,36 @@ assert_eq!(product.name, "Anvil 3000");
 
 Fields you don't set are filled with generated values automatically.
 
+## Building Without Persisting
+
+Use `make()` instead of `create()` to build a model instance
+in memory without hitting the database:
+
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+#
+# #[derive(Model, Factory)]
+# pub struct Product {
+#     id: Uuid,
+#     name: String,
+#     price_cents: i32,
+# }
+# fn main() {
+let product: Product = Product::factory::<sqlx::Sqlite>()
+    .name("Anvil 3000".to_string())
+    .make();
+
+assert_eq!(product.name, "Anvil 3000");
+# }
+```
+
+This is useful for preparing data for bulk operations like
+[`upsert()`](../cookbook/bulk-update-and-upsert.md#bulk-upsert-a-collection).
+
 ## Random Value Generation
 
 By default, factories generate random values for all fields using
