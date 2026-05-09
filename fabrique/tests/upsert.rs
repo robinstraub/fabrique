@@ -83,3 +83,28 @@ async fn test_upsert_empty_vec_is_noop<DB: Dialect>(pool: Pool<DB>) {
     let all = Product::all(&pool).await.unwrap();
     assert_eq!(all.len(), 0);
 }
+
+#[fabrique::test]
+async fn test_upsert_with_tuples<DB: Dialect>(pool: Pool<DB>) {
+    let products = vec![
+        Product::factory::<DB>()
+            .name("Anvil 3000".to_owned())
+            .make(),
+        Product::factory::<DB>()
+            .name("Rocket Skates".to_owned())
+            .make(),
+    ];
+
+    let result = products.clone().upsert(&pool, (Product::ID,)).await;
+    assert!(result.is_ok());
+
+    let result = products
+        .clone()
+        .upsert(&pool, (Product::ID, Product::NAME))
+        .await;
+    assert!(result.is_err());
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "database error: error returned from database: (code: 1) ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint"
+    );
+}

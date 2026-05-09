@@ -20,6 +20,7 @@ macro_rules! impl_unique_by {
         }
     };
 }
+impl_unique_by!(C0);
 impl_unique_by!(C0, C1);
 impl_unique_by!(C0, C1, C2);
 impl_unique_by!(C0, C1, C2, C3);
@@ -35,56 +36,6 @@ pub trait Upsert<DB: Dialect> {
     where
         A: sqlx::Acquire<'e, Database = DB> + Send + 'e,
         U: UniqueBy<Self::Model>;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct MockModel;
-    struct ColA;
-    struct ColB;
-    struct ColC;
-
-    impl Column<MockModel> for ColA {
-        type Type = i32;
-        type DbType = i32;
-        const NAME: &'static str = "a";
-        const QUALIFIED_NAME: &'static str = "mocks.a";
-        fn into_db(value: i32) -> i32 {
-            value
-        }
-    }
-    impl Column<MockModel> for ColB {
-        type Type = i32;
-        type DbType = i32;
-        const NAME: &'static str = "b";
-        const QUALIFIED_NAME: &'static str = "mocks.b";
-        fn into_db(value: i32) -> i32 {
-            value
-        }
-    }
-    impl Column<MockModel> for ColC {
-        type Type = i32;
-        type DbType = i32;
-        const NAME: &'static str = "c";
-        const QUALIFIED_NAME: &'static str = "mocks.c";
-        fn into_db(value: i32) -> i32 {
-            value
-        }
-    }
-
-    #[test]
-    fn test_unique_by_tuple_2() {
-        let names = <(ColA, ColB)>::column_names();
-        assert_eq!(names, &["a", "b"]);
-    }
-
-    #[test]
-    fn test_unique_by_tuple_3() {
-        let names = <(ColA, ColB, ColC)>::column_names();
-        assert_eq!(names, &["a", "b", "c"]);
-    }
 }
 
 impl<M, DB> Upsert<DB> for Vec<M>
