@@ -48,10 +48,6 @@ async fn test_upsert_updates_existing_records<DB: Dialect>(pool: Pool<DB>) {
     assert_eq!(all[0].price_cents, 4999);
 }
 
-// SQLite requires a UNIQUE index on the conflict target columns;
-// the test schema only has a PK on `id`, not a composite unique
-// on (name, price_cents).
-#[cfg(not(feature = "sqlite"))]
 #[fabrique::test]
 async fn test_upsert_with_composite_unique_by<DB: Dialect>(pool: Pool<DB>) {
     let products = vec![
@@ -89,18 +85,36 @@ async fn test_upsert_with_tuples<DB: Dialect>(pool: Pool<DB>) {
     let products = vec![
         Product::factory::<DB>()
             .name("Anvil 3000".to_owned())
+            .price_cents(100)
             .make(),
         Product::factory::<DB>()
             .name("Rocket Skates".to_owned())
+            .price_cents(200)
             .make(),
     ];
 
-    let result = products.clone().upsert(&pool, (Product::ID,)).await;
-    assert!(result.is_ok());
-
-    let result = products
+    // Arity 1: tuple with single column
+    products
         .clone()
-        .upsert(&pool, (Product::ID, Product::NAME))
-        .await;
-    assert!(result.is_err());
+        .upsert(&pool, (Product::ID,))
+        .await
+        .unwrap();
+
+    let all = Product::all(&pool).await.unwrap();
+    assert_eq!(all.len(), 2);
+
+    // Arity 2: tuple with composite unique (name, price_cents)
+    let updated = vec![Product {
+        in_stock: false,
+        ..products[0].clone()
+    }];
+    updated
+        .upsert(&pool, (Product::NAME, Product::PRICE_CENTS))
+        .await
+        .unwrap();
+
+    let all = Product::all(&pool).await.unwrap();
+    assert_eq!(all.len(), 2);
+    let anvil = all.iter().find(|p| p.name == "Anvil 3000").unwrap();
+    assert!(!anvil.in_stock);
 }
