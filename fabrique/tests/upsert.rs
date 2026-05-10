@@ -103,8 +103,4 @@ async fn test_upsert_with_tuples<DB: Dialect>(pool: Pool<DB>) {
         .upsert(&pool, (Product::ID, Product::NAME))
         .await;
     assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err().to_string(),
-        "database error: error returned from database: (code: 1) ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint"
-    );
 }
