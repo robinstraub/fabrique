@@ -214,8 +214,8 @@ them all in a single statement:
 # #[fabrique::doctest]
 # async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
 # let products = vec![
-#     Product::factory().name("Anvil 3000".to_string()).make(),
-#     Product::factory().name("Rocket Skates".to_string()).make(),
+#     Product::factory::<Sqlite>().name("Anvil 3000".to_string()).make(),
+#     Product::factory::<Sqlite>().name("Rocket Skates".to_string()).make(),
 # ];
 // Insert all products, or update on ID conflict
 products.upsert(&pool, Product::ID).await?;
