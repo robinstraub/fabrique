@@ -149,10 +149,10 @@ jobs:
           tool: mdbook,mdbook-mermaid
 
       - name: Build dependencies for doctests
-        run: cargo build --features sqlite,testing
+        run: cargo +1.93.0 build --features sqlite,testing
 
       - name: Build mdBook
         run: mdbook build docs
 
       - name: Test mdBook code examples
-        run: CARGO_MANIFEST_DIR=$PWD/docs mdbook test docs -L target/debug/deps
+        run: CARGO_MANIFEST_DIR=$PWD/docs rustup run 1.93.0 mdbook test docs -L target/debug/deps
