@@ -19,7 +19,8 @@ CREATE TABLE products (
     name VARCHAR(255) NOT NULL,
     price_cents INTEGER NOT NULL,
     in_stock BOOLEAN NOT NULL DEFAULT true,
-    deleted_at TIMESTAMPTZ
+    deleted_at TIMESTAMPTZ,
+    UNIQUE (name, price_cents)
 );
 
 CREATE TABLE orders (

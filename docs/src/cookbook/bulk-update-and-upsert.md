@@ -189,6 +189,73 @@ let saved: Product = Product::insert()
 values from the INSERT — the SQL equivalent of
 `SET col = EXCLUDED.col` for each column.
 
+## Bulk Upsert a Collection
+
+When you have a `Vec` of models to upsert — e.g. syncing an
+external data source — use `.upsert()` to insert or update
+them all in a single statement:
+
+```rust
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate tokio;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+#
+# #[derive(Clone, Debug, Factory, Model)]
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
+# }
+#
+# #[fabrique::doctest]
+# async fn main(pool: Pool<Sqlite>) -> Result<(), fabrique::Error> {
+# let products = vec![
+#     Product::factory::<Sqlite>().name("Anvil 3000".to_string()).make(),
+#     Product::factory::<Sqlite>().name("Rocket Skates".to_string()).make(),
+# ];
+// Insert all products, or update on ID conflict
+products.upsert(&pool, Product::ID).await?;
+# Ok(())
+# }
+```
+
+The second argument specifies the conflict target — the column
+(or columns) that identify a unique row. All other columns are
+updated when a conflict is detected.
+
+For a composite unique key, pass a tuple:
+
+```rust,no_run
+# extern crate fabrique;
+# extern crate sqlx;
+# extern crate uuid;
+# use fabrique::prelude::*;
+# use uuid::Uuid;
+# #[derive(Clone, Debug, Factory, Model)]
+# pub struct Product {
+#     pub id: Uuid,
+#     pub name: String,
+#     pub price_cents: i32,
+#     pub in_stock: bool,
+# }
+# async fn example(
+#     products: Vec<Product>,
+#     pool: Pool<Sqlite>,
+# ) -> Result<(), fabrique::Error> {
+products
+    .upsert(&pool, (Product::NAME, Product::PRICE_CENTS))
+    .await?;
+# Ok(())
+# }
+```
+
+> **Note:** The conflict target columns must have a UNIQUE
+> constraint or be the primary key in your database schema.
+
 If you only want to skip duplicates without updating, use
 `.do_nothing()`:
 

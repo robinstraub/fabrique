@@ -5,3 +5,4 @@ pub use crate::error::*;
 pub use crate::factory::*;
 pub use crate::model::*;
 pub use crate::relation::*;
+pub use crate::upsert::*;

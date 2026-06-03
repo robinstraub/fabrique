@@ -21,7 +21,8 @@ CREATE TABLE products (
     name TEXT NOT NULL,
     price_cents INTEGER NOT NULL,
     in_stock BOOLEAN NOT NULL DEFAULT 1,
-    deleted_at TEXT
+    deleted_at TEXT,
+    UNIQUE (name, price_cents)
 );
 
 CREATE TABLE orders (

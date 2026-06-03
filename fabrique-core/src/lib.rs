@@ -12,6 +12,7 @@ pub mod factory;
 pub mod model;
 pub mod relation;
 pub mod sql;
+pub mod upsert;
 
 // Re-export for use in generated code
 pub use database::Nil;
@@ -24,3 +25,5 @@ pub use factory::SetForeignKey;
 pub use relation::Alias;
 pub use relation::BelongsTo;
 pub use relation::Joinable;
+pub use upsert::UniqueBy;
+pub use upsert::Upsert;
