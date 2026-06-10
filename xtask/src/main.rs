@@ -1,6 +1,5 @@
 use std::env;
 use std::fs;
-use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -38,15 +37,19 @@ fn doctest_book(workspace: &Path) -> Result<(), Box<dyn std::error::Error>> {
     for entry in fs::read_dir(&target_deps)? {
         let path = entry?.path();
         if path.extension().is_some_and(|e| e == "rlib") {
-            symlink(path.canonicalize()?, doctests_deps.join(path.file_name().unwrap()))?;
+            link_or_copy(&path, &doctests_deps.join(path.file_name().unwrap()))?;
         }
     }
 
+    // Proc-macro artifacts: .so on Linux, .dylib on macOS, .dll on Windows.
     let host_deps = workspace.join("target/debug/deps");
     for entry in fs::read_dir(&host_deps)? {
         let path = entry?.path();
-        if path.extension().is_some_and(|e| e == "so") {
-            symlink(path.canonicalize()?, doctests_deps.join(path.file_name().unwrap()))?;
+        if path
+            .extension()
+            .is_some_and(|e| e == "so" || e == "dylib" || e == "dll")
+        {
+            link_or_copy(&path, &doctests_deps.join(path.file_name().unwrap()))?;
         }
     }
 
@@ -60,6 +63,12 @@ fn doctest_book(workspace: &Path) -> Result<(), Box<dyn std::error::Error>> {
         .args(["test", "docs", "-L", doctests_deps.to_str().unwrap()]))?;
 
     Ok(())
+}
+
+// Hard links need no privileges on any platform, unlike symlinks on Windows.
+// Fall back to copying when linking fails (e.g. across filesystems).
+fn link_or_copy(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::hard_link(src, dst).or_else(|_| fs::copy(src, dst).map(|_| ()))
 }
 
 fn host_triple() -> Result<String, Box<dyn std::error::Error>> {
