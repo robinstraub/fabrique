@@ -1,0 +1,2 @@
+[alias]
+doctest-book = "run --manifest-path xtask/Cargo.toml --"
