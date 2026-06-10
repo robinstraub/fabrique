@@ -138,21 +138,11 @@ jobs:
 
       - name: Install Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          # Pin to 1.93 to work around rustdoc E0464 with proc-macro
-          # duplicate rlibs in target/debug/deps (broken since 1.95+)
-          toolchain: 1.93.0
 
       - name: Install mdBook and preprocessors
         uses: taiki-e/install-action@v2
         with:
           tool: mdbook,mdbook-mermaid
 
-      - name: Build dependencies for doctests
-        run: cargo +1.93.0 build --features sqlite,testing
-
-      - name: Build mdBook
-        run: mdbook build docs
-
-      - name: Test mdBook code examples
-        run: CARGO_MANIFEST_DIR=$PWD/docs rustup run 1.93.0 mdbook test docs -L target/debug/deps
+      - name: Build and test documentation
+        run: cargo doctest-book
