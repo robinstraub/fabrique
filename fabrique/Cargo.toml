@@ -1,6 +1,6 @@
 [package]
 name = "fabrique"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 description = "SQL-first, type-safe, ergonomic database toolkit for Rust"
 license = "MIT"
@@ -19,8 +19,8 @@ mysql = ["fabrique-core/mysql", "fabrique-derive/mysql"]
 sqlite = ["fabrique-core/sqlite", "fabrique-derive/sqlite"]
 
 [dependencies]
-fabrique-core = { path = "../fabrique-core", version = "0.3.1" }
-fabrique-derive = { path = "../fabrique-derive", version = "0.3.1" }
+fabrique-core = { path = "../fabrique-core", version = "0.4.0" }
+fabrique-derive = { path = "../fabrique-derive", version = "0.4.0" }
 fake = { workspace = true, optional = true }
 
 [dev-dependencies]

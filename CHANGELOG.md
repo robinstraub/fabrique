@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/robinstraub/fabrique/compare/fabrique-v0.3.1...fabrique-v0.4.0) - 2026-06-10
+
+### Added
+
+- add upsert method ([#137](https://github.com/robinstraub/fabrique/pull/137))
+
 ## [0.3.1](https://github.com/robinstraub/fabrique/compare/fabrique-v0.2.2...fabrique-v0.3.1) - 2026-02-23
 
 ### Added
